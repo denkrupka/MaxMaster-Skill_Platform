@@ -806,6 +806,141 @@ export function parseXlsxFile(buffer: ArrayBuffer): KosztorysCostEstimateData {
 }
 
 // =====================================================
+// AI-ASSISTED XLSX PARSER — uses AI structure analysis
+// =====================================================
+
+export interface XlsxAiStructureEntry {
+  row: number;           // 0-based row index
+  type: 'dzial' | 'poddzial' | 'ignore';
+  name?: string;
+  reason?: string;       // for ignore rows
+}
+
+export interface XlsxAiAnalysis {
+  columns: {
+    lp: number;
+    base: number;
+    name: number;
+    unit: number;
+    qty: number;
+  };
+  headerRow: number;
+  structure: XlsxAiStructureEntry[];
+}
+
+/**
+ * Parse XLSX using AI-provided structure analysis.
+ * Sections/subsections/ignore rows come from AI, positions are everything else.
+ */
+export function parseXlsxWithAiStructure(
+  rows: any[][],
+  columns: XlsxAiAnalysis['columns'],
+  headerRow: number,
+  structure: XlsxAiStructureEntry[]
+): KosztorysCostEstimateData {
+  const { lp: colLp, base: colBase, name: colName, unit: colUnit, qty: colQty } = columns;
+
+  // Build lookup maps for row classification
+  const rowTypeMap = new Map<number, XlsxAiStructureEntry>();
+  for (const entry of structure) {
+    rowTypeMap.set(entry.row, entry);
+  }
+
+  const result: KosztorysCostEstimateData = {
+    root: {
+      sectionIds: [],
+      positionIds: [],
+      factors: createDefaultFactors(),
+      overheads: [
+        createDefaultIndirectCostsOverhead(65),
+        createDefaultProfitOverhead(10),
+        createDefaultPurchaseCostsOverhead(5),
+      ],
+    },
+    sections: {},
+    positions: {},
+  };
+
+  let currentSection: KosztorysSection | null = null;
+  let currentSubsection: KosztorysSection | null = null;
+  let sectionCounter = 0;
+  let subsectionCounter = 0;
+
+  for (let r = headerRow + 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row) continue;
+
+    const entry = rowTypeMap.get(r);
+
+    // Ignored rows — skip
+    if (entry?.type === 'ignore') continue;
+
+    const cellName = colName >= 0 ? String(row[colName] ?? '').trim() : '';
+
+    if (entry?.type === 'dzial') {
+      // Section header
+      sectionCounter++;
+      subsectionCounter = 0;
+      currentSubsection = null;
+      const lp = colLp >= 0 ? String(row[colLp] ?? '').trim() : String(sectionCounter);
+      const name = entry.name || cellName || `Dział ${sectionCounter}`;
+      const section = createNewSection(name, lp || String(sectionCounter));
+      result.sections[section.id] = section;
+      result.root.sectionIds.push(section.id);
+      currentSection = section;
+    } else if (entry?.type === 'poddzial') {
+      // Subsection header
+      subsectionCounter++;
+      if (!currentSection) {
+        sectionCounter++;
+        const section = createNewSection('Dział 1', '1');
+        result.sections[section.id] = section;
+        result.root.sectionIds.push(section.id);
+        currentSection = section;
+      }
+      const lp = colLp >= 0 ? String(row[colLp] ?? '').trim() : '';
+      const name = entry.name || cellName || `Poddział ${subsectionCounter}`;
+      const ordinal = lp || `${currentSection.ordinalNumber}.${subsectionCounter}`;
+      const subsection = createNewSection(name, ordinal);
+      result.sections[subsection.id] = subsection;
+      currentSection.subsectionIds.push(subsection.id);
+      currentSubsection = subsection;
+    } else {
+      // Position row — must have a name
+      if (!cellName) continue;
+
+      if (!currentSection) {
+        sectionCounter++;
+        const section = createNewSection('Dział 1', '1');
+        result.sections[section.id] = section;
+        result.root.sectionIds.push(section.id);
+        currentSection = section;
+      }
+
+      const base = colBase >= 0 ? String(row[colBase] ?? '').trim() : '';
+      const unit = colUnit >= 0 ? String(row[colUnit] ?? '').trim() : 'szt.';
+      const qtyRaw = colQty >= 0 ? row[colQty] : 0;
+      const qty = typeof qtyRaw === 'number' ? qtyRaw : parsePolishNumber(String(qtyRaw));
+
+      const position = createNewPosition(base, cellName, unit || 'szt.');
+      if (qty > 0) {
+        position.measurements = addMeasurementEntry(position.measurements, String(qty), null);
+      }
+
+      result.positions[position.id] = position;
+      const targetSection = currentSubsection || currentSection;
+      targetSection.positionIds.push(position.id);
+    }
+  }
+
+  if (Object.keys(result.positions).length === 0) {
+    throw new Error('Nie znaleziono pozycji w pliku XLSX');
+  }
+
+  return result;
+}
+
+// =====================================================
 // GEMINI RESPONSE CONVERTER
 // =====================================================
 

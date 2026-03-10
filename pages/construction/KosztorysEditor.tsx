@@ -44,9 +44,10 @@ import {
   parseXlsxFile,
   previewXlsxFile,
   parseXlsxWithMapping,
+  parseXlsxWithAiStructure,
   convertGeminiResponseToEstimate,
 } from '../../lib/kosztorysImportParsers';
-import type { XlsxPreview, XlsxColumnMapping } from '../../lib/kosztorysImportParsers';
+import type { XlsxPreview, XlsxColumnMapping, XlsxAiAnalysis, XlsxAiStructureEntry } from '../../lib/kosztorysImportParsers';
 import type {
   KosztorysCostEstimate,
   KosztorysCostEstimateData,
@@ -1048,6 +1049,10 @@ export const KosztorysEditorPage: React.FC = () => {
   const [importDragActive, setImportDragActive] = useState(false);
   const [xlsxPreview, setXlsxPreview] = useState<XlsxPreview | null>(null);
   const [xlsxMapping, setXlsxMapping] = useState<XlsxColumnMapping | null>(null);
+  const [xlsxAiAnalysis, setXlsxAiAnalysis] = useState<XlsxAiAnalysis | null>(null);
+  const [xlsxAiStructure, setXlsxAiStructure] = useState<XlsxAiStructureEntry[]>([]);
+  const [xlsxAiLoading, setXlsxAiLoading] = useState(false);
+  const [xlsxAiError, setXlsxAiError] = useState<string | null>(null);
 
   // KNR import flow state
   type KnrImportStep = 'choice' | 'ai-mode' | 'ai-scope' | 'processing' | 'review' | 'stats';
@@ -3208,12 +3213,53 @@ export const KosztorysEditorPage: React.FC = () => {
         setImportProgress('Wczytywanie pliku Excel...');
         const buffer = await file.arrayBuffer();
         const preview = previewXlsxFile(buffer);
-        // Show column mapping modal — don't parse yet
         setXlsxPreview(preview);
         setXlsxMapping({ ...preview.autoMapping });
+        setXlsxAiLoading(true);
+        setXlsxAiError(null);
+        setXlsxAiStructure([]);
+        setXlsxAiAnalysis(null);
         setImportLoading(false);
         setImportProgress('');
-        return; // Exit — parsing happens after user confirms mapping
+
+        // Launch AI analysis in background
+        (async () => {
+          try {
+            // Send all rows to AI for structure analysis (compact format)
+            const compactRows = preview.allRows.map(row =>
+              (row || []).slice(0, 10).map((c: any) => String(c ?? '').trim().substring(0, 60))
+            );
+            const { data: aiData, error: aiErr } = await supabase.functions.invoke('xlsx-ai-analyze', {
+              body: { rows: compactRows, sheetName: preview.activeSheet },
+            });
+            if (aiErr || !aiData?.success || !aiData.data) {
+              console.error('AI analysis error:', aiErr || aiData);
+              setXlsxAiError('AI nie mogło przeanalizować pliku. Użyj mapowania ręcznego.');
+              setXlsxAiLoading(false);
+              return;
+            }
+            const analysis: XlsxAiAnalysis = aiData.data;
+            setXlsxAiAnalysis(analysis);
+            setXlsxAiStructure(analysis.structure || []);
+            // Update mapping from AI
+            if (analysis.columns) {
+              setXlsxMapping({
+                colLp: analysis.columns.lp ?? -1,
+                colBase: analysis.columns.base ?? -1,
+                colName: analysis.columns.name ?? -1,
+                colUnit: analysis.columns.unit ?? -1,
+                colQty: analysis.columns.qty ?? -1,
+                headerRowIdx: analysis.headerRow ?? 0,
+              });
+            }
+          } catch (e: any) {
+            console.error('AI analysis failed:', e);
+            setXlsxAiError('Błąd analizy AI: ' + (e.message || 'nieznany'));
+          }
+          setXlsxAiLoading(false);
+        })();
+
+        return; // Exit — parsing happens after user confirms
       } else if (['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
         setImportProgress('Przesyłanie do AI (Gemini)...');
         const buffer = await file.arrayBuffer();
@@ -13640,136 +13686,236 @@ export const KosztorysEditorPage: React.FC = () => {
         </div>
       )}
 
-      {/* ===== XLSX COLUMN MAPPING MODAL ===== */}
+      {/* ===== XLSX AI ANALYSIS MODAL ===== */}
       {xlsxPreview && xlsxMapping && (() => {
           const hdrIdx = xlsxMapping.headerRowIdx;
-          const dynHeaderRow = xlsxPreview.allRows[hdrIdx]?.map((c: any) => String(c ?? '').trim()) || [];
-          const dynPreviewRows: string[][] = [];
-          for (let r = hdrIdx + 1; r < Math.min(xlsxPreview.allRows.length, hdrIdx + 16); r++) {
-            if (xlsxPreview.allRows[r]) dynPreviewRows.push(xlsxPreview.allRows[r].map((c: any) => String(c ?? '').trim()));
-          }
+          const maxCols = Math.min(xlsxPreview.totalCols, 10);
+          const dynHeaderRow = xlsxPreview.allRows[hdrIdx]?.map((c: any) => String(c ?? '').trim()).slice(0, maxCols) || [];
+          // Build row type lookup from AI structure
+          const structureMap = new Map<number, XlsxAiStructureEntry>();
+          for (const s of xlsxAiStructure) structureMap.set(s.row, s);
+          // Count sections
+          const sectionEntries = xlsxAiStructure.filter(s => s.type === 'dzial');
+          const subsectionEntries = xlsxAiStructure.filter(s => s.type === 'poddzial');
+          const ignoreEntries = xlsxAiStructure.filter(s => s.type === 'ignore');
+          // All data rows after header
+          const allDataRows = xlsxPreview.allRows.slice(hdrIdx + 1).map((row, i) => ({
+            rowIdx: hdrIdx + 1 + i,
+            cells: (row || []).slice(0, maxCols).map((c: any) => String(c ?? '').trim()),
+          }));
+
+          const closeModal = () => {
+            setXlsxPreview(null); setXlsxMapping(null); setXlsxAiAnalysis(null);
+            setXlsxAiStructure([]); setXlsxAiError(null); setXlsxAiLoading(false);
+          };
+
+          const doImport = () => {
+            if (!xlsxPreview || !xlsxMapping || xlsxMapping.colName < 0) return;
+            try {
+              // Use AI structure if available, otherwise fallback to heuristic
+              const importedData = xlsxAiStructure.length > 0
+                ? parseXlsxWithAiStructure(
+                    xlsxPreview.allRows,
+                    { lp: xlsxMapping.colLp, base: xlsxMapping.colBase, name: xlsxMapping.colName, unit: xlsxMapping.colUnit, qty: xlsxMapping.colQty },
+                    xlsxMapping.headerRowIdx,
+                    xlsxAiStructure
+                  )
+                : parseXlsxWithMapping(xlsxPreview.allRows, xlsxMapping);
+              const allPositions = Object.values(importedData.positions);
+              const withKnr = allPositions.filter(p => p.base && p.base.trim());
+              const withoutKnr = allPositions.filter(p => !p.base || !p.base.trim());
+              closeModal(); setShowImportModal(false);
+              if (withoutKnr.length > 0) {
+                setKnrPendingData(importedData);
+                setKnrImportStats({ totalPositions: allPositions.length, positionsWithKnr: withKnr.length, positionsWithoutKnr: withoutKnr.length, foundInPortal: 0, foundByAi: 0, accepted: 0, rejected: 0 });
+                setKnrImportStep('choice');
+              } else {
+                applyImportedData(importedData);
+              }
+            } catch (err: any) {
+              setImportError(err.message || 'Błąd parsowania pliku');
+              closeModal();
+            }
+          };
+
+          // Toggle row type
+          const cycleRowType = (rowIdx: number) => {
+            setXlsxAiStructure(prev => {
+              const existing = prev.find(s => s.row === rowIdx);
+              if (!existing) {
+                // Position → dział
+                const cellName = xlsxPreview.allRows[rowIdx]?.[xlsxMapping.colName >= 0 ? xlsxMapping.colName : 0];
+                return [...prev, { row: rowIdx, type: 'dzial' as const, name: String(cellName ?? '').trim() }];
+              }
+              if (existing.type === 'dzial') {
+                return prev.map(s => s.row === rowIdx ? { ...s, type: 'poddzial' as const } : s);
+              }
+              if (existing.type === 'poddzial') {
+                return prev.map(s => s.row === rowIdx ? { ...s, type: 'ignore' as const, reason: 'ręcznie' } : s);
+              }
+              // ignore → remove (back to position)
+              return prev.filter(s => s.row !== rowIdx);
+            });
+          };
+
           return (
-        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center" onClick={() => { setXlsxPreview(null); setXlsxMapping(null); }}>
-          <div className="bg-white rounded-xl shadow-2xl w-[900px] max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center" onClick={closeModal}>
+          <div className="bg-white rounded-xl shadow-2xl w-[1050px] max-w-[97vw] max-h-[92vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-3 border-b flex items-center justify-between flex-shrink-0">
               <div>
-                <h2 className="text-base font-bold text-gray-900">Mapowanie kolumn — {xlsxPreview.activeSheet}</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{xlsxPreview.totalRows} wierszy, {xlsxPreview.totalCols} kolumn</p>
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-500" />
+                  Analiza AI — {xlsxPreview.activeSheet}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {xlsxPreview.totalRows} wierszy • {sectionEntries.length} działów • {subsectionEntries.length} poddziałów • {ignoreEntries.length} ignorowanych
+                </p>
               </div>
-              <button onClick={() => { setXlsxPreview(null); setXlsxMapping(null); }} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={closeModal} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
-            <div className="p-4">
-              <p className="text-xs text-gray-600 mb-3">Wskaż, która kolumna odpowiada danym polom. Wiersz nagłówkowy: <b>{xlsxMapping.headerRowIdx + 1}</b></p>
-              <div className="grid grid-cols-6 gap-2 mb-4">
+
+            {/* AI loading indicator */}
+            {xlsxAiLoading && (
+              <div className="px-6 py-3 bg-purple-50 border-b flex items-center gap-3">
+                <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
+                <span className="text-sm text-purple-700">AI analizuje strukturę pliku...</span>
+              </div>
+            )}
+            {xlsxAiError && (
+              <div className="px-6 py-2 bg-amber-50 border-b flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500" />
+                <span className="text-xs text-amber-700">{xlsxAiError}</span>
+              </div>
+            )}
+
+            {/* Column mapping row */}
+            <div className="px-4 py-3 border-b bg-gray-50 flex-shrink-0">
+              <div className="grid grid-cols-7 gap-2">
+                {([
+                  { key: 'colLp', label: 'Lp / Nr', color: '' },
+                  { key: 'colBase', label: 'Podstawa (KNR)', color: '' },
+                  { key: 'colName', label: 'Opis / Nazwa ★', color: 'border-blue-400 bg-blue-50' },
+                  { key: 'colUnit', label: 'J.m.', color: '' },
+                  { key: 'colQty', label: 'Ilość', color: '' },
+                ] as const).map(col => (
+                  <div key={col.key}>
+                    <label className={`block text-[10px] font-medium mb-0.5 ${col.key === 'colName' ? 'text-blue-600 font-bold' : 'text-gray-500'}`}>{col.label}</label>
+                    <select value={(xlsxMapping as any)[col.key]} onChange={e => setXlsxMapping(prev => prev ? { ...prev, [col.key]: +e.target.value } : prev)}
+                      className={`w-full text-xs border rounded-lg px-2 py-1 ${col.color || 'border-gray-300'}`}>
+                      <option value={-1}>— brak —</option>
+                      {dynHeaderRow.map((h, i) => <option key={i} value={i}>{h || `Kol. ${i + 1}`}</option>)}
+                    </select>
+                  </div>
+                ))}
                 <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Lp / Nr</label>
-                  <select value={xlsxMapping.colLp} onChange={e => setXlsxMapping(prev => prev ? { ...prev, colLp: +e.target.value } : prev)}
-                    className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5">
-                    <option value={-1}>— brak —</option>
-                    {dynHeaderRow.map((h, i) => <option key={i} value={i}>{h || `Kol. ${i + 1}`}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Podstawa (KNR)</label>
-                  <select value={xlsxMapping.colBase} onChange={e => setXlsxMapping(prev => prev ? { ...prev, colBase: +e.target.value } : prev)}
-                    className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5">
-                    <option value={-1}>— brak —</option>
-                    {dynHeaderRow.map((h, i) => <option key={i} value={i}>{h || `Kol. ${i + 1}`}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-blue-600 mb-1 font-bold">Opis / Nazwa ★</label>
-                  <select value={xlsxMapping.colName} onChange={e => setXlsxMapping(prev => prev ? { ...prev, colName: +e.target.value } : prev)}
-                    className="w-full text-xs border-2 border-blue-400 rounded-lg px-2 py-1.5 bg-blue-50">
-                    <option value={-1}>— brak —</option>
-                    {dynHeaderRow.map((h, i) => <option key={i} value={i}>{h || `Kol. ${i + 1}`}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">J.m.</label>
-                  <select value={xlsxMapping.colUnit} onChange={e => setXlsxMapping(prev => prev ? { ...prev, colUnit: +e.target.value } : prev)}
-                    className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5">
-                    <option value={-1}>— brak —</option>
-                    {dynHeaderRow.map((h, i) => <option key={i} value={i}>{h || `Kol. ${i + 1}`}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Ilość</label>
-                  <select value={xlsxMapping.colQty} onChange={e => setXlsxMapping(prev => prev ? { ...prev, colQty: +e.target.value } : prev)}
-                    className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5">
-                    <option value={-1}>— brak —</option>
-                    {dynHeaderRow.map((h, i) => <option key={i} value={i}>{h || `Kol. ${i + 1}`}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Wiersz nagłówka</label>
-                  <input type="number" min={1} max={20} value={xlsxMapping.headerRowIdx + 1}
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Nagłówek (wiersz)</label>
+                  <input type="number" min={1} max={50} value={hdrIdx + 1}
                     onChange={e => setXlsxMapping(prev => prev ? { ...prev, headerRowIdx: Math.max(0, +e.target.value - 1) } : prev)}
-                    className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5" />
+                    className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1" />
+                </div>
+                <div className="flex items-end">
+                  <div className="text-[9px] text-gray-400 leading-tight">
+                    Kliknij typ wiersza<br/>aby go zmienić
+                  </div>
                 </div>
               </div>
-              {/* Preview table */}
-              <div className="border border-gray-200 rounded-lg overflow-auto max-h-[340px]">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-100 sticky top-0">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left text-gray-400 font-normal w-8">#</th>
-                      {dynHeaderRow.map((h, i) => {
-                        let highlight = '';
-                        let label = '';
-                        if (i === xlsxMapping.colName) { highlight = 'bg-blue-100 text-blue-800 font-bold'; label = ' [Nazwa]'; }
-                        else if (i === xlsxMapping.colBase) { highlight = 'bg-green-100 text-green-800 font-bold'; label = ' [KNR]'; }
-                        else if (i === xlsxMapping.colUnit) { highlight = 'bg-amber-100 text-amber-800 font-bold'; label = ' [J.m.]'; }
-                        else if (i === xlsxMapping.colQty) { highlight = 'bg-purple-100 text-purple-800 font-bold'; label = ' [Ilość]'; }
-                        else if (i === xlsxMapping.colLp) { highlight = 'bg-gray-200 text-gray-700 font-bold'; label = ' [Lp]'; }
-                        return <th key={i} className={`px-2 py-1.5 text-left whitespace-nowrap ${highlight}`}>{h || `Kol.${i + 1}`}{label}</th>;
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dynPreviewRows.map((row, rIdx) => (
-                      <tr key={rIdx} className="border-t border-gray-100 hover:bg-gray-50">
-                        <td className="px-2 py-1 text-gray-400">{xlsxMapping.headerRowIdx + 2 + rIdx}</td>
-                        {dynHeaderRow.map((_, cIdx) => {
-                          const val = row[cIdx] || '';
+            </div>
+
+            {/* Section structure summary */}
+            {xlsxAiStructure.length > 0 && (
+              <div className="px-4 py-2 border-b bg-white flex-shrink-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-[10px] font-medium text-gray-500">Struktura:</span>
+                  {sectionEntries.map((s, i) => {
+                    const subs = xlsxAiStructure.filter(sub => sub.type === 'poddzial' && sub.row > s.row && (i + 1 < sectionEntries.length ? sub.row < sectionEntries[i + 1].row : true));
+                    return (
+                      <div key={s.row} className="flex items-center gap-1">
+                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-medium truncate max-w-[150px]" title={s.name}>
+                          {s.name || `Dział (w.${s.row + 1})`}
+                        </span>
+                        {subs.length > 0 && <span className="text-[9px] text-gray-400">({subs.length} poddz.)</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Preview table with row types */}
+            <div className="flex-1 overflow-auto min-h-0">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-100 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-1.5 py-1.5 text-left text-gray-400 font-normal w-8 sticky left-0 bg-gray-100">#</th>
+                    <th className="px-1.5 py-1.5 text-left text-gray-500 font-medium w-[70px]">Typ</th>
+                    {dynHeaderRow.map((h, i) => {
+                      let highlight = '';
+                      let label = '';
+                      if (i === xlsxMapping.colName) { highlight = 'bg-blue-100 text-blue-800 font-bold'; label = ' ★'; }
+                      else if (i === xlsxMapping.colBase) { highlight = 'bg-green-100 text-green-800 font-bold'; label = ' [KNR]'; }
+                      else if (i === xlsxMapping.colUnit) { highlight = 'bg-amber-100 text-amber-800'; }
+                      else if (i === xlsxMapping.colQty) { highlight = 'bg-purple-100 text-purple-800'; }
+                      else if (i === xlsxMapping.colLp) { highlight = 'bg-gray-200 text-gray-700'; }
+                      return <th key={i} className={`px-1.5 py-1.5 text-left whitespace-nowrap ${highlight}`}>{h || `Kol.${i + 1}`}{label}</th>;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allDataRows.map(({ rowIdx, cells }) => {
+                    const entry = structureMap.get(rowIdx);
+                    const rowType = entry?.type || 'position';
+                    let rowBg = 'hover:bg-gray-50';
+                    let typeBadge = <span className="text-[9px] text-gray-400">Poz.</span>;
+                    if (rowType === 'dzial') {
+                      rowBg = 'bg-blue-50 hover:bg-blue-100 font-medium';
+                      typeBadge = <span className="text-[9px] px-1 py-0.5 bg-blue-200 text-blue-800 rounded font-bold">Dział</span>;
+                    } else if (rowType === 'poddzial') {
+                      rowBg = 'bg-sky-50 hover:bg-sky-100';
+                      typeBadge = <span className="text-[9px] px-1 py-0.5 bg-sky-200 text-sky-800 rounded font-bold">Poddz.</span>;
+                    } else if (rowType === 'ignore') {
+                      rowBg = 'bg-gray-100 hover:bg-gray-200 opacity-50';
+                      typeBadge = <span className="text-[9px] px-1 py-0.5 bg-red-100 text-red-600 rounded line-through">Ign.</span>;
+                    }
+                    // Skip empty rows
+                    const hasContent = cells.some(c => c.length > 0);
+                    if (!hasContent) return null;
+
+                    return (
+                      <tr key={rowIdx} className={`border-t border-gray-100 cursor-pointer transition-colors ${rowBg}`}>
+                        <td className="px-1.5 py-1 text-gray-400 sticky left-0 bg-inherit">{rowIdx + 1}</td>
+                        <td className="px-1.5 py-1" onClick={() => cycleRowType(rowIdx)}>{typeBadge}</td>
+                        {cells.map((val, cIdx) => {
                           let highlight = '';
-                          if (cIdx === xlsxMapping.colName) highlight = 'bg-blue-50 font-medium';
-                          else if (cIdx === xlsxMapping.colBase) highlight = 'bg-green-50';
-                          else if (cIdx === xlsxMapping.colUnit) highlight = 'bg-amber-50';
-                          else if (cIdx === xlsxMapping.colQty) highlight = 'bg-purple-50';
-                          return <td key={cIdx} className={`px-2 py-1 max-w-[200px] truncate ${highlight}`} title={val}>{val}</td>;
+                          if (cIdx === xlsxMapping.colName) highlight = rowType === 'position' ? 'bg-blue-50/50 font-medium' : '';
+                          else if (cIdx === xlsxMapping.colBase) highlight = 'bg-green-50/50';
+                          else if (cIdx === xlsxMapping.colUnit) highlight = 'bg-amber-50/50';
+                          else if (cIdx === xlsxMapping.colQty) highlight = 'bg-purple-50/50';
+                          return <td key={cIdx} className={`px-1.5 py-1 max-w-[180px] truncate ${highlight}`} title={val}>{val}</td>;
                         })}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <div className="flex justify-end gap-3 p-4 border-t">
-              <button onClick={() => { setXlsxPreview(null); setXlsxMapping(null); }} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Anuluj</button>
-              <button onClick={() => {
-                if (!xlsxPreview || !xlsxMapping || xlsxMapping.colName < 0) return;
-                try {
-                  const importedData = parseXlsxWithMapping(xlsxPreview.allRows, xlsxMapping);
-                  const allPositions = Object.values(importedData.positions);
-                  const withKnr = allPositions.filter(p => p.base && p.base.trim());
-                  const withoutKnr = allPositions.filter(p => !p.base || !p.base.trim());
-                  setXlsxPreview(null); setXlsxMapping(null); setShowImportModal(false);
-                  if (withoutKnr.length > 0) {
-                    setKnrPendingData(importedData);
-                    setKnrImportStats({ totalPositions: allPositions.length, positionsWithKnr: withKnr.length, positionsWithoutKnr: withoutKnr.length, foundInPortal: 0, foundByAi: 0, accepted: 0, rejected: 0 });
-                    setKnrImportStep('choice');
-                  } else {
-                    applyImportedData(importedData);
-                  }
-                } catch (err: any) {
-                  setImportError(err.message || 'Błąd parsowania pliku');
-                  setXlsxPreview(null); setXlsxMapping(null);
-                }
-              }} disabled={xlsxMapping.colName < 0}
-                className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
-                Importuj z tym mapowaniem
-              </button>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-4 border-t flex-shrink-0">
+              <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Dział</span>
+                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded">Poddział</span>
+                <span className="px-1.5 py-0.5 bg-red-50 text-red-500 rounded line-through">Ignoruj</span>
+                <span className="text-gray-400">Poz.</span>
+                <span className="text-gray-400 ml-2">← kliknij typ by zmienić</span>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">Anuluj</button>
+                <button onClick={doImport} disabled={xlsxMapping.colName < 0 || xlsxAiLoading}
+                  className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center gap-2">
+                  {xlsxAiLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Czekaj na AI...</> : 'Importuj'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
