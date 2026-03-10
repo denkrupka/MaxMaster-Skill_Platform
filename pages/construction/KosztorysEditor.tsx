@@ -3581,12 +3581,14 @@ export const KosztorysEditorPage: React.FC = () => {
           }
         }
 
-        // Save AI results to cache (fire-and-forget)
+        // Save AI results to cache (fire-and-forget, deduplicate first)
         if (aiResults.length > 0) {
+          const deduped = new Map<string, typeof aiResults[0]>();
+          for (const r of aiResults) deduped.set(`${r.name}\0${r.unit}`, r);
           supabase.from('knr_cache').upsert(
-            aiResults.map(r => ({ position_name: r.name, position_unit: r.unit, knr_code: r.code, knr_description: r.desc, confidence: r.conf })),
+            [...deduped.values()].map(r => ({ position_name: r.name, position_unit: r.unit, knr_code: r.code, knr_description: r.desc, confidence: r.conf })),
             { onConflict: 'position_name,position_unit' }
-          ).then(() => console.log(`Cached ${aiResults.length} KNR results`));
+          ).then(() => console.log(`Cached ${deduped.size} KNR results`));
         }
 
         // Add remaining positions not found by AI
