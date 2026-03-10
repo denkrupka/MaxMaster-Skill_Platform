@@ -3486,7 +3486,7 @@ export const KosztorysEditorPage: React.FC = () => {
       setKnrProcessingMsg(`Wysyłanie ${notFoundInPortal.length} pozycji do AI...`);
 
       try {
-        const BATCH_SIZE = 15;
+        const BATCH_SIZE = 5;
         const batches: { posId: string; name: string; unit: string }[][] = [];
         for (let i = 0; i < notFoundInPortal.length; i += BATCH_SIZE) {
           batches.push(notFoundInPortal.slice(i, i + BATCH_SIZE));
@@ -3514,12 +3514,11 @@ export const KosztorysEditorPage: React.FC = () => {
                 }
                 break;
               }
-              // Rate limit — wait and retry
               console.warn(`AI batch ${batchIdx} attempt ${attempt + 1} failed, retrying...`);
-              if (attempt < 2) await new Promise(r => setTimeout(r, 5000));
+              if (attempt < 2) await new Promise(r => setTimeout(r, 8000));
             } catch (e) {
               console.error(`AI batch ${batchIdx} attempt ${attempt + 1} error:`, e);
-              if (attempt < 2) await new Promise(r => setTimeout(r, 3000));
+              if (attempt < 2) await new Promise(r => setTimeout(r, 5000));
             }
           }
           completedBatches++;
@@ -3527,11 +3526,12 @@ export const KosztorysEditorPage: React.FC = () => {
           setKnrProcessingMsg(`AI: ${completedBatches}/${batches.length} partii...`);
         };
 
-        // 10 API keys = fire all batches in pools of 10 simultaneously
-        const PARALLEL = 10;
-        for (let i = 0; i < batches.length; i += PARALLEL) {
-          const pool = batches.slice(i, i + PARALLEL).map((batch, j) => processBatch(batch, i + j));
-          await Promise.all(pool);
+        // Sequential: 1 batch at a time, 8s pause to stay under 8K output tokens/min
+        for (let i = 0; i < batches.length; i++) {
+          await processBatch(batches[i], i);
+          if (i < batches.length - 1) {
+            await new Promise(r => setTimeout(r, 8000));
+          }
         }
 
         // Remaining not found by AI either
