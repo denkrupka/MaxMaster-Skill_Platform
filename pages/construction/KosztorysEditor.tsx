@@ -2690,8 +2690,8 @@ export const KosztorysEditorPage: React.FC = () => {
 
       const now = new Date();
       const q = `Q${Math.ceil((now.getMonth() + 1) / 3)} ${now.getFullYear()}`;
-      const BATCH = 30;
-      const CONCURRENT = 3;
+      const BATCH = 20;
+      const CONCURRENT = 5;
       const batches: KosztorysPosition[][] = [];
       for (let i = 0; i < toProcess.length; i += BATCH) batches.push(toProcess.slice(i, i + BATCH));
 
