@@ -4,6 +4,7 @@
  * into KosztorysCostEstimateData format.
  */
 
+import * as XLSX from 'xlsx';
 import type {
   KosztorysCostEstimateData,
   KosztorysSection,
@@ -517,9 +518,6 @@ function parseXmlPosition(el: Element): KosztorysPosition {
  * 4. Falls back: if no sections detected, creates one "Dział 1" and puts all rows as positions
  */
 export function parseXlsxFile(buffer: ArrayBuffer): KosztorysCostEstimateData {
-  // Dynamic import — xlsx is already in dependencies
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const XLSX = require('xlsx');
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) throw new Error('Plik XLSX nie zawiera żadnych arkuszy');
