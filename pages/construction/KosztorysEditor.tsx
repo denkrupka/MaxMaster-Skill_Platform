@@ -3323,34 +3323,6 @@ export const KosztorysEditorPage: React.FC = () => {
     return (2 * intersection) / (bgA.size + bgB.size);
   };
 
-  // Search KNR in portal by position name (>80% similarity)
-  const searchKnrByName = async (name: string): Promise<{ basis: string; similarity: number } | null> => {
-    // Extract key words for search (first 3 significant words)
-    const words = name.replace(/[^a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
-    const searchTerms = words.slice(0, 3);
-    if (searchTerms.length === 0) return null;
-
-    // Build ilike pattern
-    const pattern = `%${searchTerms.join('%')}%`;
-    const { data } = await supabase
-      .from('knr_positions')
-      .select('basis, name')
-      .ilike('name', pattern)
-      .limit(20);
-
-    if (!data || data.length === 0) return null;
-
-    // Find best match by similarity
-    let bestMatch: { basis: string; similarity: number } | null = null;
-    for (const row of data) {
-      const sim = textSimilarity(name, row.name);
-      if (sim >= 0.8 && (!bestMatch || sim > bestMatch.similarity)) {
-        bestMatch = { basis: row.basis, similarity: sim };
-      }
-    }
-    return bestMatch;
-  };
-
   // Process KNR lookup for positions without KNR
   const processKnrLookup = async (scope: 'all' | 'empty', manual: boolean) => {
     if (!knrPendingData) return;
@@ -3373,97 +3345,132 @@ export const KosztorysEditorPage: React.FC = () => {
       rejected: 0,
     };
 
-    // Phase 1: Search portal by name
-    setKnrProcessingMsg('Wyszukiwanie KNR w portalu...');
-    const notFoundInPortal: { posId: string; name: string; unit: string }[] = [];
+    // Phase 1: Bulk-load KNR catalog from portal, then match client-side
+    setKnrProcessingMsg('Pobieranie katalogu KNR z portalu...');
+    setKnrProcessingProgress(5);
 
+    // Load all KNR position names in one query (typically ~10-30k rows, basis+name only = small)
+    let knrCatalog: { basis: string; name: string }[] = [];
+    try {
+      // Paginate: Supabase returns max 1000 rows per request
+      let offset = 0;
+      const pageSize = 5000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('knr_positions')
+          .select('basis, name')
+          .range(offset, offset + pageSize - 1);
+        if (error || !data || data.length === 0) { hasMore = false; break; }
+        knrCatalog = knrCatalog.concat(data as any[]);
+        setKnrProcessingMsg(`Pobieranie katalogu KNR: ${knrCatalog.length} pozycji...`);
+        offset += pageSize;
+        if (data.length < pageSize) hasMore = false;
+      }
+    } catch {
+      // Continue even if catalog load fails — AI will handle
+    }
+
+    setKnrProcessingProgress(20);
+    setKnrProcessingMsg(`Porównywanie ${toProcess.length} pozycji z katalogiem (${knrCatalog.length} KNR)...`);
+
+    // Client-side similarity matching — fast, no network calls
+    const notFoundInPortal: { posId: string; name: string; unit: string }[] = [];
     for (let i = 0; i < toProcess.length; i++) {
       const pos = toProcess[i];
-      setKnrProcessingProgress(Math.round((i / toProcess.length) * 50));
-      setKnrProcessingMsg(`Wyszukiwanie w portalu: ${i + 1}/${toProcess.length}...`);
+      if (i % 50 === 0) {
+        setKnrProcessingProgress(20 + Math.round((i / toProcess.length) * 30));
+        setKnrProcessingMsg(`Porównywanie nazw: ${i + 1}/${toProcess.length}...`);
+        // Yield to UI every 50 items
+        await new Promise(r => setTimeout(r, 0));
+      }
 
-      const portalMatch = await searchKnrByName(pos.name);
-      if (portalMatch) {
+      const posUnit = typeof pos.unit === 'string' ? pos.unit : pos.unit?.label || 'szt.';
+
+      // Find best match in catalog
+      let bestMatch: { basis: string; similarity: number } | null = null;
+      for (const row of knrCatalog) {
+        const sim = textSimilarity(pos.name, row.name);
+        if (sim >= 0.8 && (!bestMatch || sim > bestMatch.similarity)) {
+          bestMatch = { basis: row.basis, similarity: sim };
+          if (sim > 0.95) break; // Good enough — stop early
+        }
+      }
+
+      if (bestMatch) {
         stats.foundInPortal++;
         reviewItems.push({
-          posId: pos.id,
-          posName: pos.name,
-          posUnit: typeof pos.unit === 'string' ? pos.unit : pos.unit?.label || 'szt.',
-          knrCode: portalMatch.basis,
-          source: 'portal',
-          confidence: portalMatch.similarity,
+          posId: pos.id, posName: pos.name, posUnit,
+          knrCode: bestMatch.basis, source: 'portal', confidence: bestMatch.similarity,
         });
       } else {
-        notFoundInPortal.push({
-          posId: pos.id,
-          name: pos.name,
-          unit: typeof pos.unit === 'string' ? pos.unit : pos.unit?.label || 'szt.',
-        });
+        notFoundInPortal.push({ posId: pos.id, name: pos.name, unit: posUnit });
       }
     }
 
-    // Phase 2: AI lookup for remaining
+    setKnrProcessingProgress(55);
+
+    // Phase 2: AI lookup for remaining — parallel batches
     if (notFoundInPortal.length > 0) {
-      setKnrProcessingMsg(`Wysyłanie ${notFoundInPortal.length} pozycji do AI...`);
-      setKnrProcessingProgress(55);
+      setKnrProcessingMsg(`Wysyłanie ${notFoundInPortal.length} pozycji do AI (równolegle)...`);
 
       try {
-        // Batch in groups of 20
-        for (let batch = 0; batch < notFoundInPortal.length; batch += 20) {
-          const chunk = notFoundInPortal.slice(batch, batch + 20);
-          setKnrProcessingMsg(`AI analizuje pozycje ${batch + 1}-${Math.min(batch + 20, notFoundInPortal.length)}/${notFoundInPortal.length}...`);
-          setKnrProcessingProgress(55 + Math.round((batch / notFoundInPortal.length) * 40));
+        // Create batches of 30, fire up to 4 in parallel
+        const BATCH_SIZE = 30;
+        const PARALLEL = 4;
+        const batches: { posId: string; name: string; unit: string }[][] = [];
+        for (let i = 0; i < notFoundInPortal.length; i += BATCH_SIZE) {
+          batches.push(notFoundInPortal.slice(i, i + BATCH_SIZE));
+        }
 
-          const { data: aiData, error: aiError } = await supabase.functions.invoke('knr-ai-lookup', {
-            body: {
-              positions: chunk.map(p => ({ id: p.posId, name: p.name, unit: p.unit })),
-            },
-          });
-
-          if (!aiError && aiData?.success && aiData.data?.results) {
-            for (const result of aiData.data.results) {
-              const idx = result.index;
-              if (idx >= 0 && idx < chunk.length && result.knr_code && result.knr_code.trim()) {
-                stats.foundByAi++;
-                reviewItems.push({
-                  posId: chunk[idx].posId,
-                  posName: chunk[idx].name,
-                  posUnit: chunk[idx].unit,
-                  knrCode: result.knr_code,
-                  source: 'ai',
-                  confidence: result.confidence || 0.5,
-                });
-                // Remove from notFound
-                notFoundInPortal[batch + idx] = null as any;
+        let completedBatches = 0;
+        const processBatch = async (chunk: typeof notFoundInPortal, batchIdx: number) => {
+          try {
+            const { data: aiData, error: aiError } = await supabase.functions.invoke('knr-ai-lookup', {
+              body: { positions: chunk.map(p => ({ id: p.posId, name: p.name, unit: p.unit })) },
+            });
+            if (!aiError && aiData?.success && aiData.data?.results) {
+              for (const result of aiData.data.results) {
+                const idx = result.index;
+                if (idx >= 0 && idx < chunk.length && result.knr_code && result.knr_code.trim()) {
+                  stats.foundByAi++;
+                  reviewItems.push({
+                    posId: chunk[idx].posId, posName: chunk[idx].name, posUnit: chunk[idx].unit,
+                    knrCode: result.knr_code, source: 'ai', confidence: result.confidence || 0.5,
+                  });
+                  chunk[idx] = null as any; // mark as matched
+                }
               }
-            }
           }
+          } catch (e) {
+            console.error(`AI batch ${batchIdx} error:`, e);
+          }
+          completedBatches++;
+          setKnrProcessingProgress(55 + Math.round((completedBatches / batches.length) * 40));
+          setKnrProcessingMsg(`AI: ${completedBatches}/${batches.length} partii...`);
+        };
+
+        // Run batches in parallel pools of PARALLEL
+        for (let i = 0; i < batches.length; i += PARALLEL) {
+          const pool = batches.slice(i, i + PARALLEL).map((batch, j) => processBatch(batch, i + j));
+          await Promise.all(pool);
         }
 
         // Remaining not found by AI either
         for (const item of notFoundInPortal) {
-          if (!item) continue; // already matched by AI
+          if (!item) continue;
           reviewItems.push({
-            posId: item.posId,
-            posName: item.name,
-            posUnit: item.unit,
-            knrCode: '',
-            source: 'ai',
-            confidence: 0,
+            posId: item.posId, posName: item.name, posUnit: item.unit,
+            knrCode: '', source: 'ai', confidence: 0,
           });
         }
       } catch (err) {
         console.error('AI KNR lookup error:', err);
-        // Add remaining as unmatched
         for (const item of notFoundInPortal) {
           if (!item) continue;
           reviewItems.push({
-            posId: item.posId,
-            posName: item.name,
-            posUnit: item.unit,
-            knrCode: '',
-            source: 'ai',
-            confidence: 0,
+            posId: item.posId, posName: item.name, posUnit: item.unit,
+            knrCode: '', source: 'ai', confidence: 0,
           });
         }
       }
