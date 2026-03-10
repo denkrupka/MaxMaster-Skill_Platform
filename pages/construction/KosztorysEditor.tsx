@@ -1261,6 +1261,8 @@ export const KosztorysEditorPage: React.FC = () => {
     });
   }, [estimate, estimateData]);
 
+  const positionCount = useMemo(() => Object.keys(estimateData.positions).length, [estimateData.positions]);
+
   // Selected item
   const selectedItem = useMemo(() => {
     if (!editorState.selectedItemId || !editorState.selectedItemType) return null;
@@ -6928,9 +6930,9 @@ export const KosztorysEditorPage: React.FC = () => {
             <button
               onClick={() => setShowUzupelnijDropdown(!showUzupelnijDropdown)}
               className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-                Object.keys(estimateData.positions).length > 0 ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
+                positionCount > 0 ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
               }`}
-              disabled={Object.keys(estimateData.positions).length === 0}
+              disabled={positionCount === 0}
             >
               Uzupełnij
               <ChevronDown className="w-3 h-3" />
@@ -6957,11 +6959,11 @@ export const KosztorysEditorPage: React.FC = () => {
           <div className="relative">
             <button
               onClick={() => {
-                if (Object.keys(estimateData.positions).length === 0) return;
+                if (positionCount === 0) return;
                 setShowAiFillDropdown(!showAiFillDropdown);
               }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded border ${
-                Object.keys(estimateData.positions).length > 0
+                positionCount > 0
                   ? 'text-purple-600 hover:bg-purple-50 border-purple-200 cursor-pointer'
                   : 'text-gray-300 border-gray-200 cursor-not-allowed'
               }`}
@@ -13948,7 +13950,7 @@ export const KosztorysEditorPage: React.FC = () => {
             </p>
             <ul className="text-sm text-gray-700 mb-4 ml-4 list-disc">
               <li><strong>{estimateData.root.sectionIds.length}</strong> działów</li>
-              <li><strong>{Object.keys(estimateData.positions).length}</strong> pozycji</li>
+              <li><strong>{positionCount}</strong> pozycji</li>
             </ul>
             <p className="text-sm text-red-600 font-medium mb-6">
               Import zastąpi wszystkie istniejące dane. Tej operacji nie można cofnąć.
