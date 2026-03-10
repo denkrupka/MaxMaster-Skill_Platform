@@ -1055,6 +1055,9 @@ export const KosztorysEditorPage: React.FC = () => {
   const [xlsxAiError, setXlsxAiError] = useState<string | null>(null);
   const [xlsxCollapsedSections, setXlsxCollapsedSections] = useState<Set<number>>(new Set());
   const [xlsxTreeOpen, setXlsxTreeOpen] = useState(true);
+  const [xlsxHighlightedRow, setXlsxHighlightedRow] = useState<number | null>(null);
+  const [xlsxColWidths, setXlsxColWidths] = useState<Record<number, number>>({});
+  const xlsxTableRef = React.useRef<HTMLDivElement>(null);
 
   // KNR import flow state
   type KnrImportStep = 'choice' | 'ai-mode' | 'ai-scope' | 'processing' | 'review' | 'stats';
@@ -13852,58 +13855,95 @@ export const KosztorysEditorPage: React.FC = () => {
 
             {/* Main content: tree sidebar + table */}
             <div className="flex-1 flex min-h-0">
-              {/* Left: Tree navigation */}
-              {xlsxTreeOpen && sectionEntries.length > 0 && (
-                <div className="w-[220px] border-r bg-gray-50/50 overflow-y-auto flex-shrink-0">
-                  <div className="p-2">
-                    <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-1.5 px-1">Struktura</div>
-                    {tree.map(sec => {
-                      const isCollapsed = xlsxCollapsedSections.has(sec.row);
-                      return (
-                        <div key={sec.row} className="mb-0.5">
-                          <button
-                            className="w-full flex items-center gap-1 px-1.5 py-1 rounded hover:bg-blue-50 text-left group"
-                            onClick={() => toggleCollapse(sec.row)}
-                          >
-                            {sec.subs.length > 0 ? (
-                              isCollapsed ? <ChevronRight className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />
-                            ) : <div className="w-3" />}
-                            <span className="text-[10px] px-1 py-0.5 bg-blue-100 text-blue-700 rounded font-bold flex-shrink-0">D</span>
-                            <span className="text-[11px] text-gray-800 font-medium truncate flex-1" title={sec.name}>{sec.name || `Dział (w.${sec.row + 1})`}</span>
-                            <span className="text-[9px] text-gray-400 flex-shrink-0">{sec.totalPosCount}</span>
-                          </button>
-                          {!isCollapsed && sec.subs.map(sub => (
-                            <button
-                              key={sub.row}
-                              className="w-full flex items-center gap-1 pl-5 pr-1.5 py-0.5 rounded hover:bg-sky-50 text-left"
-                              onClick={() => toggleCollapse(sub.row)}
-                            >
-                              {xlsxCollapsedSections.has(sub.row) ? <ChevronRight className="w-2.5 h-2.5 text-gray-400" /> : <ChevronDown className="w-2.5 h-2.5 text-gray-400" />}
-                              <span className="text-[9px] px-1 py-0.5 bg-sky-100 text-sky-700 rounded font-bold flex-shrink-0">P</span>
-                              <span className="text-[10px] text-gray-700 truncate flex-1" title={sub.name}>{sub.name || `Poddział (w.${sub.row + 1})`}</span>
-                              <span className="text-[9px] text-gray-400 flex-shrink-0">{sub.posCount}</span>
-                            </button>
-                          ))}
+              {/* Left: Tree navigation with collapse toggle */}
+              <div className={`border-r flex flex-col flex-shrink-0 transition-all ${xlsxTreeOpen && sectionEntries.length > 0 ? 'w-[220px]' : 'w-7'}`}>
+                {xlsxTreeOpen && sectionEntries.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between px-2 pt-2 pb-1 flex-shrink-0">
+                      <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Struktura</span>
+                      <button onClick={() => setXlsxTreeOpen(false)} className="p-0.5 hover:bg-gray-200 rounded" title="Zwiń panel">
+                        <ChevronLeft className="w-3.5 h-3.5 text-gray-400" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-1 pb-2">
+                      {tree.map(sec => {
+                        const isCollapsed = xlsxCollapsedSections.has(sec.row);
+                        const isHighlighted = xlsxHighlightedRow === sec.row;
+                        return (
+                          <div key={sec.row} className="mb-0.5">
+                            <div className="flex items-center gap-0.5">
+                              <button className="p-0.5 hover:bg-gray-200 rounded flex-shrink-0" onClick={() => toggleCollapse(sec.row)}>
+                                {sec.subs.length > 0 ? (
+                                  isCollapsed ? <ChevronRight className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />
+                                ) : <div className="w-3 h-3" />}
+                              </button>
+                              <button
+                                className={`flex-1 flex items-center gap-1 px-1 py-0.5 rounded text-left min-w-0 ${isHighlighted ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-blue-50'}`}
+                                onClick={() => {
+                                  setXlsxHighlightedRow(sec.row);
+                                  // Expand if collapsed
+                                  if (xlsxCollapsedSections.has(sec.row)) toggleCollapse(sec.row);
+                                  // Scroll to row in table
+                                  const el = xlsxTableRef.current?.querySelector(`[data-row="${sec.row}"]`);
+                                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }}
+                              >
+                                <span className="text-[10px] px-1 py-0.5 bg-blue-100 text-blue-700 rounded font-bold flex-shrink-0">D</span>
+                                <span className="text-[11px] text-gray-800 font-medium truncate flex-1" title={sec.name}>{sec.name || `Dział (w.${sec.row + 1})`}</span>
+                                <span className="text-[9px] text-gray-400 flex-shrink-0">{sec.totalPosCount}</span>
+                              </button>
+                            </div>
+                            {!isCollapsed && sec.subs.map(sub => {
+                              const subHighlighted = xlsxHighlightedRow === sub.row;
+                              return (
+                                <div key={sub.row} className="flex items-center gap-0.5 pl-3.5">
+                                  <button className="p-0.5 hover:bg-gray-200 rounded flex-shrink-0" onClick={() => toggleCollapse(sub.row)}>
+                                    {xlsxCollapsedSections.has(sub.row) ? <ChevronRight className="w-2.5 h-2.5 text-gray-400" /> : <ChevronDown className="w-2.5 h-2.5 text-gray-400" />}
+                                  </button>
+                                  <button
+                                    className={`flex-1 flex items-center gap-1 px-1 py-0.5 rounded text-left min-w-0 ${subHighlighted ? 'bg-sky-100 ring-1 ring-sky-300' : 'hover:bg-sky-50'}`}
+                                    onClick={() => {
+                                      setXlsxHighlightedRow(sub.row);
+                                      if (xlsxCollapsedSections.has(sub.row)) toggleCollapse(sub.row);
+                                      const el = xlsxTableRef.current?.querySelector(`[data-row="${sub.row}"]`);
+                                      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }}
+                                  >
+                                    <span className="text-[9px] px-1 py-0.5 bg-sky-100 text-sky-700 rounded font-bold flex-shrink-0">P</span>
+                                    <span className="text-[10px] text-gray-700 truncate flex-1" title={sub.name}>{sub.name || `Poddział (w.${sub.row + 1})`}</span>
+                                    <span className="text-[9px] text-gray-400 flex-shrink-0">{sub.posCount}</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                      {allDataRows.length > 0 && (sectionEntries.length === 0 || allDataRows[0].rowIdx < sectionEntries[0].row) && (
+                        <div className="text-[10px] text-gray-400 px-1.5 py-1 italic">
+                          Bez działu: {allDataRows.filter(r => r.rowIdx < (sectionEntries[0]?.row ?? Infinity) && !structureMap.has(r.rowIdx)).length}
                         </div>
-                      );
-                    })}
-                    {/* Orphan positions (before first section) */}
-                    {allDataRows.length > 0 && (sectionEntries.length === 0 || allDataRows[0].rowIdx < sectionEntries[0].row) && (
-                      <div className="text-[10px] text-gray-400 px-1.5 py-1 italic">
-                        Pozycje bez działu: {allDataRows.filter(r => r.rowIdx < (sectionEntries[0]?.row ?? Infinity) && !structureMap.has(r.rowIdx)).length}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setXlsxTreeOpen(true)}
+                    className="w-full h-full flex items-center justify-center hover:bg-gray-100 transition"
+                    title="Rozwiń panel struktury"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </button>
+                )}
+              </div>
 
               {/* Right: Table */}
-              <div className="flex-1 overflow-auto min-h-0">
-                <table className="w-full text-xs">
+              <div ref={xlsxTableRef} className="flex-1 overflow-auto min-h-0">
+                <table className="text-xs" style={{ minWidth: '100%' }}>
                   <thead className="bg-gray-100 sticky top-0 z-10">
                     <tr>
-                      <th className="px-1.5 py-1.5 text-left text-gray-400 font-normal w-8">#</th>
-                      <th className="px-1.5 py-1.5 text-left text-gray-500 font-medium w-[60px]">Typ</th>
+                      <th className="px-1.5 py-1.5 text-left text-gray-400 font-normal" style={{ width: 32, minWidth: 32 }}>#</th>
+                      <th className="px-1.5 py-1.5 text-left text-gray-500 font-medium" style={{ width: 56, minWidth: 56 }}>Typ</th>
                       {dynHeaderRow.map((h, i) => {
                         let hl = '';
                         if (i === xlsxMapping.colName) hl = 'bg-blue-100 text-blue-800 font-bold';
@@ -13911,7 +13951,29 @@ export const KosztorysEditorPage: React.FC = () => {
                         else if (i === xlsxMapping.colUnit) hl = 'bg-amber-100 text-amber-800';
                         else if (i === xlsxMapping.colQty) hl = 'bg-purple-100 text-purple-800';
                         else if (i === xlsxMapping.colLp) hl = 'bg-gray-200 text-gray-700';
-                        return <th key={i} className={`px-1.5 py-1.5 text-left whitespace-nowrap ${hl}`}>{h || `Kol.${i + 1}`}</th>;
+                        const w = xlsxColWidths[i] || (i === xlsxMapping.colName ? 300 : 120);
+                        return (
+                          <th key={i} className={`px-1.5 py-1.5 text-left whitespace-nowrap relative group ${hl}`} style={{ width: w, minWidth: 50 }}>
+                            {h || `Kol.${i + 1}`}
+                            {/* Resize handle */}
+                            <div
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400/40 group-hover:bg-gray-300/40"
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                const startX = e.clientX;
+                                const startW = w;
+                                const colIdx = i;
+                                const onMove = (ev: MouseEvent) => {
+                                  const delta = ev.clientX - startX;
+                                  setXlsxColWidths(prev => ({ ...prev, [colIdx]: Math.max(50, startW + delta) }));
+                                };
+                                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                                document.addEventListener('mousemove', onMove);
+                                document.addEventListener('mouseup', onUp);
+                              }}
+                            />
+                          </th>
+                        );
                       })}
                     </tr>
                   </thead>
@@ -13922,6 +13984,7 @@ export const KosztorysEditorPage: React.FC = () => {
                       const rowType = entry?.type || 'position';
                       const isCollapsible = (rowType === 'dzial' || rowType === 'poddzial');
                       const isCollapsed = xlsxCollapsedSections.has(rowIdx);
+                      const isHighlighted = xlsxHighlightedRow === rowIdx;
 
                       let rowBg = 'hover:bg-gray-50';
                       let typeBadge = <span className="text-[9px] text-gray-400">Poz.</span>;
@@ -13935,24 +13998,28 @@ export const KosztorysEditorPage: React.FC = () => {
                         rowBg = 'bg-gray-100 hover:bg-gray-200 opacity-50';
                         typeBadge = <span className="text-[9px] px-1 py-0.5 bg-red-100 text-red-600 rounded line-through cursor-pointer">Ign.</span>;
                       }
+                      if (isHighlighted) rowBg += ' ring-2 ring-inset ring-blue-400';
 
                       return (
-                        <tr key={rowIdx} className={`border-t border-gray-100 transition-colors ${rowBg}`}>
-                          <td className="px-1.5 py-1 text-gray-400">
+                        <tr key={rowIdx} data-row={rowIdx} className={`border-t border-gray-100 transition-colors ${rowBg}`}>
+                          <td className="px-1.5 py-1 text-gray-400" style={{ width: 32 }}>
                             {isCollapsible ? (
                               <button onClick={() => toggleCollapse(rowIdx)} className="p-0 text-gray-400 hover:text-gray-600">
                                 {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                               </button>
                             ) : <span className="pl-0.5">{rowIdx + 1}</span>}
                           </td>
-                          <td className="px-1.5 py-1" onClick={() => cycleRowType(rowIdx)}>{typeBadge}</td>
+                          <td className="px-1.5 py-1" style={{ width: 56 }} onClick={() => cycleRowType(rowIdx)}>{typeBadge}</td>
                           {cells.map((val, cIdx) => {
                             let hl = '';
                             if (cIdx === xlsxMapping.colName && rowType === 'position') hl = 'bg-blue-50/50 font-medium';
                             else if (cIdx === xlsxMapping.colBase) hl = 'bg-green-50/50';
                             else if (cIdx === xlsxMapping.colUnit) hl = 'bg-amber-50/50';
                             else if (cIdx === xlsxMapping.colQty) hl = 'bg-purple-50/50';
-                            return <td key={cIdx} className={`px-1.5 py-1 max-w-[180px] truncate ${hl}`} title={val}>{val}</td>;
+                            const w = xlsxColWidths[cIdx] || (cIdx === xlsxMapping.colName ? 300 : 120);
+                            return (
+                              <td key={cIdx} className={`px-1.5 py-1 truncate ${hl}`} style={{ maxWidth: w, width: w }} title={val}>{val}</td>
+                            );
                           })}
                         </tr>
                       );
