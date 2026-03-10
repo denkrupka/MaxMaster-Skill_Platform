@@ -6958,7 +6958,11 @@ export const KosztorysEditorPage: React.FC = () => {
                 if (Object.keys(estimateData.positions).length === 0) return;
                 setShowAiFillDropdown(!showAiFillDropdown);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded text-purple-600 hover:bg-purple-50 border border-purple-200"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded border ${
+                Object.keys(estimateData.positions).length > 0
+                  ? 'text-purple-600 hover:bg-purple-50 border-purple-200 cursor-pointer'
+                  : 'text-gray-300 border-gray-200 cursor-not-allowed'
+              }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
               AI
