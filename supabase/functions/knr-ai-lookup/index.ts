@@ -50,23 +50,21 @@ serve(async (req) => {
       `${i}. ${p.name}${p.unit ? ` [${p.unit}]` : ''}`
     ).join('\n');
 
-    // Compact prompt — minimal output format to save tokens
-    const prompt = `Ekspert KNR/KNNR. Dla każdej pozycji podaj numer KNR.
+    const count = positions.length;
+    const prompt = `Ekspert KNR/KNNR. Masz ${count} pozycji. Musisz zwrócić wynik dla KAŻDEJ z ${count} pozycji.
 
 Pozycje:
 ${positionsList}
 
-Zwróć TYLKO JSON (bez markdown):
-{"r":[[index,"KNR kod","opis z katalogu",confidence],...]}
+WAŻNE: Jest ${count} pozycji (indeksy 0-${count - 1}). Zwróć wynik dla WSZYSTKICH ${count}. Nie pomijaj żadnej!
 
+Zwróć TYLKO JSON: {"r":[[idx,"kod","opis",conf],...]}
 Przykład: {"r":[[0,"KNR 4-03 0313-10","Montaż rur PE",0.8],[1,"KNNR 5 0407-01","Układanie kabli",0.7]]}
 
-Zasady:
-- "KNR kod" w formacie "TYP KATALOG TABELA-WARIANT" (np. "KNR 2-02 0803-02")
-- "opis" — krótki oficjalny opis z katalogu (max 60 znaków)
-- confidence 0.0-1.0
-- Jeśli nie pewny (confidence<0.3) — pomiń tę pozycję
-- Katalogi: KNR, KNNR, KNR-W, KNNR-W, KSNR, KNP, NNRNKB`;
+- "kod" = "TYP KATALOG TABELA-WARIANT" (KNR, KNNR, KNR-W, KNNR-W, KSNR)
+- "opis" = krótki opis z katalogu (max 50 znaków)
+- conf = 0.0-1.0. Jeśli conf<0.3, kod=""
+- MUSISZ zwrócić ${count} elementów w tablicy "r"`;
 
     let lastError = '';
     for (let attempt = 0; attempt < API_KEYS.length; attempt++) {
