@@ -1056,6 +1056,7 @@ export const KosztorysEditorPage: React.FC = () => {
     posName: string;
     posUnit: string;
     knrCode: string;
+    knrDescription: string;
     source: 'portal' | 'ai' | 'original';
     confidence: number;
     accepted?: boolean;
@@ -1078,6 +1079,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [knrProcessingMsg, setKnrProcessingMsg] = useState('');
   const [knrProcessingProgress, setKnrProcessingProgress] = useState(0);
   const [knrScope, setKnrScope] = useState<'all' | 'empty'>('empty');
+  const [knrReviewSelectedId, setKnrReviewSelectedId] = useState<string | null>(null);
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -3415,9 +3417,11 @@ export const KosztorysEditorPage: React.FC = () => {
 
       if (bestMatch) {
         stats.foundInPortal++;
+        // Find the matching catalog entry name for description
+        const matchedEntry = knrCatalog.find(r => r.basis === bestMatch!.basis);
         reviewItems.push({
           posId: pos.id, posName: pos.name, posUnit,
-          knrCode: bestMatch.basis, source: 'portal', confidence: bestMatch.similarity,
+          knrCode: bestMatch.basis, knrDescription: matchedEntry?.name || '', source: 'portal', confidence: bestMatch.similarity,
         });
       } else {
         notFoundInPortal.push({ posId: pos.id, name: pos.name, unit: posUnit });
@@ -3431,8 +3435,7 @@ export const KosztorysEditorPage: React.FC = () => {
       setKnrProcessingMsg(`Wysyłanie ${notFoundInPortal.length} pozycji do AI (równolegle)...`);
 
       try {
-        // Create batches of 30, fire up to 4 in parallel
-        const BATCH_SIZE = 25;
+        const BATCH_SIZE = 15;
         const PARALLEL = 2;
         const batches: { posId: string; name: string; unit: string }[][] = [];
         for (let i = 0; i < notFoundInPortal.length; i += BATCH_SIZE) {
@@ -3441,25 +3444,35 @@ export const KosztorysEditorPage: React.FC = () => {
 
         let completedBatches = 0;
         const processBatch = async (chunk: typeof notFoundInPortal, batchIdx: number) => {
-          try {
-            const { data: aiData, error: aiError } = await supabase.functions.invoke('knr-ai-lookup', {
-              body: { positions: chunk.map(p => ({ id: p.posId, name: p.name, unit: p.unit })) },
-            });
-            if (!aiError && aiData?.success && aiData.data?.results) {
-              for (const result of aiData.data.results) {
-                const idx = result.index;
-                if (idx >= 0 && idx < chunk.length && result.knr_code && result.knr_code.trim()) {
-                  stats.foundByAi++;
-                  reviewItems.push({
-                    posId: chunk[idx].posId, posName: chunk[idx].name, posUnit: chunk[idx].unit,
-                    knrCode: result.knr_code, source: 'ai', confidence: result.confidence || 0.5,
-                  });
-                  chunk[idx] = null as any; // mark as matched
+          // Retry up to 2 times on failure
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const { data: aiData, error: aiError } = await supabase.functions.invoke('knr-ai-lookup', {
+                body: { positions: chunk.map(p => ({ id: p.posId, name: p.name, unit: p.unit })) },
+              });
+              if (!aiError && aiData?.success && aiData.data?.results) {
+                for (const result of aiData.data.results) {
+                  const idx = result.index;
+                  if (idx >= 0 && idx < chunk.length && result.knr_code && result.knr_code.trim()) {
+                    stats.foundByAi++;
+                    reviewItems.push({
+                      posId: chunk[idx].posId, posName: chunk[idx].name, posUnit: chunk[idx].unit,
+                      knrCode: result.knr_code, knrDescription: result.knr_description || result.reasoning || '',
+                      source: 'ai', confidence: result.confidence || 0.5,
+                    });
+                    chunk[idx] = null as any; // mark as matched
+                  }
                 }
+                break; // success — no retry needed
               }
-          }
-          } catch (e) {
-            console.error(`AI batch ${batchIdx} error:`, e);
+              if (attempt === 0) {
+                console.warn(`AI batch ${batchIdx} returned error, retrying...`);
+                await new Promise(r => setTimeout(r, 2000)); // wait before retry
+              }
+            } catch (e) {
+              console.error(`AI batch ${batchIdx} attempt ${attempt + 1} error:`, e);
+              if (attempt === 0) await new Promise(r => setTimeout(r, 2000));
+            }
           }
           completedBatches++;
           setKnrProcessingProgress(55 + Math.round((completedBatches / batches.length) * 40));
@@ -3477,7 +3490,7 @@ export const KosztorysEditorPage: React.FC = () => {
           if (!item) continue;
           reviewItems.push({
             posId: item.posId, posName: item.name, posUnit: item.unit,
-            knrCode: '', source: 'ai', confidence: 0,
+            knrCode: '', knrDescription: '', source: 'ai', confidence: 0,
           });
         }
       } catch (err) {
@@ -3486,7 +3499,7 @@ export const KosztorysEditorPage: React.FC = () => {
           if (!item) continue;
           reviewItems.push({
             posId: item.posId, posName: item.name, posUnit: item.unit,
-            knrCode: '', source: 'ai', confidence: 0,
+            knrCode: '', knrDescription: '', source: 'ai', confidence: 0,
           });
         }
       }
@@ -13895,37 +13908,36 @@ export const KosztorysEditorPage: React.FC = () => {
             )}
 
             {/* Step 5: Review table (manual mode) */}
-            {knrImportStep === 'review' && (
-              <div className="w-[800px]">
+            {knrImportStep === 'review' && (() => {
+              const pendingItems = knrReviewItems.filter(i => !i.accepted && !i.removed);
+              const selectedId = knrReviewSelectedId && pendingItems.some(i => i.posId === knrReviewSelectedId) ? knrReviewSelectedId : pendingItems[0]?.posId || null;
+              return (
+              <div className="w-[950px]">
                 <div className="px-6 py-4 border-b flex items-center justify-between">
                   <div>
                     <h2 className="text-base font-bold text-gray-900">Weryfikacja KNR</h2>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Pozostało: {knrReviewItems.filter(i => !i.accepted && !i.removed).length} pozycji
+                      Pozostało: {pendingItems.length} pozycji
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => {
-                      // Accept current and move to next
-                      const pending = knrReviewItems.filter(i => !i.accepted && !i.removed);
-                      if (pending.length === 0) return;
-                      const current = pending[0];
-                      setKnrReviewItems(prev => prev.map(i => i.posId === current.posId ? { ...i, accepted: true } : i));
+                      if (!selectedId) return;
+                      setKnrReviewItems(prev => prev.map(i => i.posId === selectedId ? { ...i, accepted: true } : i));
+                      setKnrReviewSelectedId(null);
                     }} className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1.5">
                       <Check className="w-3.5 h-3.5" /> Przyjmij pozycję
                     </button>
                     <button onClick={() => {
-                      const pending = knrReviewItems.filter(i => !i.accepted && !i.removed);
-                      if (pending.length === 0) return;
-                      const current = pending[0];
-                      // Accept position without KNR (clear the suggested code)
-                      setKnrReviewItems(prev => prev.map(i => i.posId === current.posId ? { ...i, accepted: true, knrCode: '' } : i));
+                      if (!selectedId) return;
+                      setKnrReviewItems(prev => prev.map(i => i.posId === selectedId ? { ...i, accepted: true, knrCode: '', knrDescription: '' } : i));
+                      setKnrReviewSelectedId(null);
                     }} className="px-3 py-1.5 text-xs border border-red-300 text-red-600 rounded-lg hover:bg-red-50 flex items-center gap-1.5">
                       <X className="w-3.5 h-3.5" /> Odrzuć KNR
                     </button>
                     <button onClick={() => {
-                      // Accept all remaining
                       setKnrReviewItems(prev => prev.map(i => (!i.accepted && !i.removed) ? { ...i, accepted: true } : i));
+                      setKnrReviewSelectedId(null);
                     }} className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                       Przyjmij wszystkie
                     </button>
@@ -13933,32 +13945,32 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
                         <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-8">#</th>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">KNR</th>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-20">Źródło</th>
+                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-[130px]">KNR</th>
+                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">Opis KNR</th>
+                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-16">Źródło</th>
                         <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">Nazwa pozycji</th>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-16">Pewność</th>
+                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-14">Pewność</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {knrReviewItems.filter(i => !i.accepted && !i.removed).map((item, idx) => (
+                      {pendingItems.map((item, idx) => (
                         <tr key={item.posId}
-                          className={`border-b border-gray-100 ${idx === 0 ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'} transition cursor-pointer`}
-                          onClick={() => {
-                            // Move to front if clicked
-                            const pending = knrReviewItems.filter(i => !i.accepted && !i.removed);
-                            if (pending[0]?.posId !== item.posId) {
-                              // Just highlight — the first pending is always active
-                            }
-                          }}
+                          className={`border-b border-gray-100 cursor-pointer transition-colors ${
+                            item.posId === selectedId ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-gray-50'
+                          }`}
+                          onClick={() => setKnrReviewSelectedId(item.posId)}
                         >
                           <td className="py-2 px-3 text-xs text-gray-400">{idx + 1}</td>
                           <td className="py-2 px-3">
                             <span className={`text-xs font-mono font-medium ${item.knrCode ? 'text-blue-700' : 'text-gray-400 italic'}`}>
                               {item.knrCode || 'brak'}
                             </span>
+                          </td>
+                          <td className="py-2 px-3 text-xs text-gray-500 max-w-[200px] truncate" title={item.knrDescription}>
+                            {item.knrDescription || '—'}
                           </td>
                           <td className="py-2 px-3">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
@@ -13967,7 +13979,7 @@ export const KosztorysEditorPage: React.FC = () => {
                               {item.source === 'portal' ? 'Portal' : 'AI'}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-xs text-gray-700 max-w-[350px] truncate" title={item.posName}>{item.posName}</td>
+                          <td className="py-2 px-3 text-xs text-gray-700 max-w-[250px] truncate" title={item.posName}>{item.posName}</td>
                           <td className="py-2 px-3">
                             <span className={`text-[10px] font-medium ${
                               item.confidence >= 0.8 ? 'text-green-600' : item.confidence >= 0.5 ? 'text-amber-600' : 'text-red-500'
@@ -13977,7 +13989,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           </td>
                         </tr>
                       ))}
-                      {knrReviewItems.filter(i => !i.accepted && !i.removed).length === 0 && (() => {
+                      {pendingItems.length === 0 && (() => {
                         // All reviewed — auto-advance to stats
                         setTimeout(() => {
                           if (knrPendingData && knrImportStats) {
@@ -13991,13 +14003,14 @@ export const KosztorysEditorPage: React.FC = () => {
                             applyKnrResults(finalItems, knrPendingData, finalStats, 'empty');
                           }
                         }, 300);
-                        return <tr><td colSpan={5} className="py-8 text-center text-sm text-gray-400">Wszystkie pozycje zostały sprawdzone</td></tr>;
+                        return <tr><td colSpan={6} className="py-8 text-center text-sm text-gray-400">Wszystkie pozycje zostały sprawdzone</td></tr>;
                       })()}
                     </tbody>
                   </table>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Step 6: Stats summary */}
             {knrImportStep === 'stats' && (

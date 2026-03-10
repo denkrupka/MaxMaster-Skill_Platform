@@ -58,6 +58,7 @@ Zwróć TYLKO czysty JSON (bez markdown, bez komentarzy) w formacie:
     {
       "index": 0,
       "knr_code": "KNR X-XX XXXX-XX",
+      "knr_description": "oficjalna nazwa pozycji z katalogu KNR",
       "confidence": 0.85,
       "reasoning": "krótkie uzasadnienie"
     }
@@ -65,6 +66,7 @@ Zwróć TYLKO czysty JSON (bez markdown, bez komentarzy) w formacie:
 }
 
 Pole "index" odpowiada numerowi pozycji (0-based).
+Pole "knr_description" to oficjalny opis pozycji z katalogu KNR (jak ta pozycja nazywa się w katalogu).
 Pole "confidence" to pewność dopasowania od 0.0 do 1.0.
 Jeśli nie jesteś pewny danej pozycji (confidence < 0.3), ustaw knr_code na pusty string "".`;
 
