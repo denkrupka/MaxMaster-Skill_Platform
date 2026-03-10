@@ -3275,20 +3275,33 @@ export const KosztorysEditorPage: React.FC = () => {
   };
 
   // Apply imported data to editor
+  const [applyingImport, setApplyingImport] = useState(false);
+
   const applyImportedData = (data: KosztorysCostEstimateData) => {
-    setEstimateData(data);
-    const allSectionIds = Object.keys(data.sections);
-    setEditorState(prev => ({
-      ...prev,
-      expandedSections: new Set(allSectionIds),
-      isDirty: true,
-    }));
-    setViewMode('przedmiar');
-    setActiveNavItem('przedmiar');
-    setLeftPanelMode('overview');
     const sc = Object.keys(data.sections).length;
     const pc = Object.keys(data.positions).length;
-    showNotificationMessage(`Zaimportowano ${sc} działów i ${pc} pozycji`, 'success');
+
+    // Show loading immediately, defer heavy state update to next frame
+    setApplyingImport(true);
+    setKnrImportStep(null);
+    setKnrPendingData(null);
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        setEstimateData(data);
+        const allSectionIds = Object.keys(data.sections);
+        setEditorState(prev => ({
+          ...prev,
+          expandedSections: new Set(allSectionIds),
+          isDirty: true,
+        }));
+        setViewMode('przedmiar');
+        setActiveNavItem('przedmiar');
+        setLeftPanelMode('overview');
+        setApplyingImport(false);
+        showNotificationMessage(`Zaimportowano ${sc} działów i ${pc} pozycji`, 'success');
+      }, 50);
+    });
   };
 
   // Compute text similarity (Sørensen–Dice coefficient) — fast fuzzy match
@@ -13619,7 +13632,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   </div>
                   <div className="space-y-3">
                     <button onClick={() => {
-                      if (knrPendingData) { applyImportedData(knrPendingData); setKnrImportStep(null); setKnrPendingData(null); }
+                      if (knrPendingData) applyImportedData(knrPendingData);
                     }} className="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/50 transition group">
                       <div className="font-medium text-sm text-gray-900 group-hover:text-blue-700">Importuj wszystkie pozycje</div>
                       <p className="text-xs text-gray-500 mt-1">Importuj wszystkie pozycje, nawet bez KNR</p>
@@ -13636,7 +13649,6 @@ export const KosztorysEditorPage: React.FC = () => {
                         }
                         filtered.root.positionIds = (filtered.root.positionIds || []).filter(pid => !withoutKnrIds.has(pid));
                         applyImportedData(filtered);
-                        setKnrImportStep(null); setKnrPendingData(null);
                       }
                     }} className="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/50 transition group">
                       <div className="font-medium text-sm text-gray-900 group-hover:text-blue-700">Importuj tylko pozycje z KNR</div>
@@ -13863,6 +13875,17 @@ export const KosztorysEditorPage: React.FC = () => {
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Import loading overlay */}
+      {applyingImport && (
+        <div className="fixed inset-0 bg-black/40 z-[80] flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            <p className="text-sm font-medium text-gray-700">Importowanie pozycji do kosztorysu...</p>
+            <p className="text-xs text-gray-400">Proszę czekać</p>
           </div>
         </div>
       )}
