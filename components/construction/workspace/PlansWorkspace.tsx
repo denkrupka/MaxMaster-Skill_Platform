@@ -757,20 +757,53 @@ export const PlansWorkspace: React.FC = () => {
       try {
         const page = await pdfDoc.getPage(pdfPage);
         const baseVp = page.getViewport({ scale: 1 });
-        // Limit output to max 1800px on longest side — Gemini max ~4MB
-        const MAX_SIDE = 1800;
-        const longest = Math.max(baseVp.width, baseVp.height);
-        const renderScale = Math.min(3, MAX_SIDE / longest);
-        const viewport = page.getViewport({ scale: renderScale });
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d')!;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        // quality 0.75 keeps size under 2MB for typical A1 drawings
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-        const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-        setPdfPageBase64(base64);
+
+        // Render full page at 2x for legend detection
+        const detectScale = Math.min(2, 2000 / Math.max(baseVp.width, baseVp.height));
+        const detectVp = page.getViewport({ scale: detectScale });
+        const fullCanvas = document.createElement('canvas');
+        fullCanvas.width = detectVp.width;
+        fullCanvas.height = detectVp.height;
+        const fullCtx = fullCanvas.getContext('2d')!;
+        await page.render({ canvasContext: fullCtx, viewport: detectVp }).promise;
+
+        // Try to find legend region via text scan (look for "LEGENDA" text block)
+        // Use pdfjs to get text content and find legend bounding box
+        const textContent = await page.getTextContent();
+        let legendBox: { x: number; y: number; w: number; h: number } | null = null;
+        const legendItem = textContent.items.find((item: any) =>
+          /LEGENDA|legenda|LEGEND/i.test(item.str?.trim() || '')
+        );
+        if (legendItem) {
+          // Legend usually occupies bottom-right quadrant — use heuristic crop
+          const tx = (legendItem as any).transform[4] * detectScale;
+          const ty = detectVp.height - (legendItem as any).transform[5] * detectScale;
+          // Crop: from legend text to bottom-right corner with 20px padding
+          legendBox = {
+            x: Math.max(0, tx - 20),
+            y: Math.max(0, ty - 20),
+            w: fullCanvas.width - Math.max(0, tx - 20),
+            h: fullCanvas.height - Math.max(0, ty - 20),
+          };
+        }
+
+        let finalBase64: string;
+        if (legendBox && legendBox.w > 100 && legendBox.h > 100) {
+          // Crop legend region and render at full quality
+          const cropCanvas = document.createElement('canvas');
+          cropCanvas.width = legendBox.w;
+          cropCanvas.height = legendBox.h;
+          const cropCtx = cropCanvas.getContext('2d')!;
+          cropCtx.drawImage(fullCanvas,
+            legendBox.x, legendBox.y, legendBox.w, legendBox.h,
+            0, 0, legendBox.w, legendBox.h
+          );
+          finalBase64 = cropCanvas.toDataURL('image/jpeg', 0.92).replace(/^data:image\/jpeg;base64,/, '');
+        } else {
+          // No legend found — send full page at reduced quality
+          finalBase64 = fullCanvas.toDataURL('image/jpeg', 0.80).replace(/^data:image\/jpeg;base64,/, '');
+        }
+        setPdfPageBase64(finalBase64);
       } catch {
         setPdfPageBase64('');
       }
