@@ -1,6 +1,7 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload, Ruler, Sparkles, PanelLeftOpen } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
 import type { Project, ProjectStatus, ProjectBillingType, ProjectNameMode } from '../../../types';
@@ -177,6 +178,7 @@ export const PlansWorkspace: React.FC = () => {
   const [calibrationPoints, setCalibrationPoints] = useState<DrawPoint[]>([]);
   const [calibrationInput, setCalibrationInput] = useState<{ pixelDist: number; show: boolean }>({ pixelDist: 0, show: false });
   const [calibrationUnit, setCalibrationUnit] = useState<'mm' | 'cm' | 'm'>('mm');
+  const navigate = useNavigate();
   const [showScaleSettings, setShowScaleSettings] = useState(false);
   const [aiScaleLoading, setAiScaleLoading] = useState(false);
 
@@ -1417,11 +1419,83 @@ export const PlansWorkspace: React.FC = () => {
     notify(`Analiza PDF zakonczona: ${analysis.totalBlocks} blokow, ${analysis.totalEntities} elementow`);
   }, [notify]);
 
-  const handleTakeoffPositionsReady = useCallback((positions: any[]) => {
-    // Show summary notification - positions are already saved to drawing_takeoff_results
-    const withCount = positions.filter((p: any) => p.count > 0);
-    notify(`Przedmiar AI: ${withCount.length} pozycji z ilościami, ${positions.length - withCount.length} do weryfikacji. Dane zapisane w Supabase.`);
-  }, [notify]);
+  const handleTakeoffPositionsReady = useCallback(async (positions: any[]) => {
+    if (!currentUser || !activeFile) return;
+    try {
+      // Count offer number
+      const { count: offerCount } = await supabase
+        .from('offers')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', currentUser.company_id);
+      const nextNum = (offerCount || 0) + 1;
+      const offerNumber = `OFR-${new Date().getFullYear()}-${String(nextNum).padStart(4, '0')}`;
+
+      // Create offer
+      const { data: newOffer, error: offerError } = await supabase
+        .from('offers')
+        .insert({
+          company_id: currentUser.company_id,
+          created_by_id: currentUser.id,
+          number: offerNumber,
+          name: `Przedmiar AI — ${activeFile.name || 'Rysunek'}`,
+          status: 'draft',
+          currency_id: 'PLN',
+          object_name: activeFile.name || '',
+        })
+        .select()
+        .single();
+
+      if (offerError || !newOffer) {
+        notify('Błąd tworzenia oferty z przedmiaru', 'error');
+        return;
+      }
+
+      // Group positions by category → sections
+      const byCategory = positions.reduce((acc: any, p: any) => {
+        const cat = p.category || 'Inne';
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(p);
+        return acc;
+      }, {});
+
+      for (const [catIdx, [catName, items]] of Object.entries(byCategory).entries()) {
+        const { data: section } = await supabase
+          .from('offer_sections')
+          .insert({
+            offer_id: newOffer.id,
+            name: catName,
+            sort_order: catIdx as number,
+          })
+          .select()
+          .single();
+
+        if (!section) continue;
+
+        const itemsToInsert = (items as any[]).map((p: any, pIdx: number) => ({
+          offer_id: newOffer.id,
+          section_id: section.id,
+          name: p.name,
+          description: p.description || '',
+          quantity: p.count || 0,
+          unit: p.unit || 'szt.',
+          unit_price: 0,
+          total_price: 0,
+          sort_order: pIdx,
+          is_optional: false,
+        }));
+
+        if (itemsToInsert.length > 0) {
+          await supabase.from('offer_items').insert(itemsToInsert);
+        }
+      }
+
+      notify(`Przedmiar AI gotowy: ${positions.length} pozycji → oferta ${offerNumber}`);
+      // Navigate to the new offer
+      navigate(`/construction/offers?offerId=${newOffer.id}`);
+    } catch (err: any) {
+      notify('Błąd: ' + (err.message || 'Nieznany błąd'), 'error');
+    }
+  }, [currentUser, activeFile, navigate, notify]);
 
   const handleDxfAnalysisComplete = useCallback((analysis: DxfAnalysis) => {
     setShowDxfAnalysis(false);
@@ -3683,8 +3757,22 @@ export const PlansWorkspace: React.FC = () => {
           companyId={currentUser.company_id || ''}
           drawingId={activeFile.id}
           scaleRatio={activeFile.scale_ratio}
+          currentScaleRatio={selectedPlan?.scale_ratio}
           onAnalysisComplete={handlePdfAnalysisComplete}
           onTakeoffPositionsReady={handleTakeoffPositionsReady}
+          onScaleChange={(scaleRatio: number) => {
+            supabase.from('plans').update({ scale_ratio: scaleRatio }).eq('id', activeFile.id)
+              .then(() => {
+                setSelectedPlan(prev => prev ? { ...prev, scale_ratio: scaleRatio } : prev);
+                notify(`Skala ustawiona: 1px = ${scaleRatio.toFixed(3)} mm`);
+              });
+          }}
+          onCalibrateScale={() => {
+            setShowPdfAnalysis(false);
+            handleCalibrateScale();
+          }}
+          onAiScaleDetect={handleAiScaleDetect}
+          aiScaleLoading={aiScaleLoading}
           onClose={() => setShowPdfAnalysis(false)}
         />
       )}
