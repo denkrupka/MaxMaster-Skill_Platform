@@ -507,9 +507,21 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
   let sections: any[] = [];
 
   if (dataJson && dataJson.sections && dataJson.positions && dataJson.root) {
-    console.log('[offer-import] dataJson.root.sectionIds:', dataJson.root.sectionIds);
-    console.log('[offer-import] Total sections in dataJson:', Object.keys(dataJson.sections).length);
-    console.log('[offer-import] Total positions in dataJson:', Object.keys(dataJson.positions).length);
+    // Debug: dump section structure
+    const _dbgLines: string[] = [];
+    _dbgLines.push(`Root sectionIds: ${(dataJson.root.sectionIds||[]).length}, Total sections: ${Object.keys(dataJson.sections).length}, Total positions: ${Object.keys(dataJson.positions).length}`);
+    for (const _sId of (dataJson.root.sectionIds || [])) {
+      const _s = dataJson.sections[_sId];
+      if (!_s) { _dbgLines.push(`  [!] Section ${_sId} NOT FOUND`); continue; }
+      const _sKeys = Object.keys(_s).filter(k => k.includes('ub') || k.includes('hild') || k.includes('ection'));
+      _dbgLines.push(`  "${_s.name}": posIds=${(_s.positionIds||[]).length}, subIds=${(_s.subsectionIds||[]).length}, relevant_keys=[${_sKeys.join(',')}]`);
+      for (const _subId of (_s.subsectionIds || [])) {
+        const _sub = dataJson.sections[_subId];
+        if (!_sub) { _dbgLines.push(`    [!] Sub ${_subId} NOT FOUND`); continue; }
+        _dbgLines.push(`    "${_sub.name}": posIds=${(_sub.positionIds||[]).length}, subIds=${(_sub.subsectionIds||[]).length}`);
+      }
+    }
+    console.log('[offer-import]\n' + _dbgLines.join('\n'));
     // Collect all overheads (root + section level)
     const rootOverheads = dataJson.root.overheads || [];
 
