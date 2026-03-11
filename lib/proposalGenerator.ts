@@ -616,7 +616,35 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
         }
       });
 
-      const quantity = pos.measurements?.finalQuantity || pos.measurements?.expressionResult || 1;
+      // Compute quantity from measurements structure:
+      // { entries: { uuid: { expression: "3925*2", type: "expression" } }, rootIds: [uuid] }
+      let quantity = 1;
+      const meas = pos.measurements;
+      if (meas) {
+        if (typeof meas.finalQuantity === 'number' && meas.finalQuantity > 0) {
+          quantity = meas.finalQuantity;
+        } else if (typeof meas.expressionResult === 'number' && meas.expressionResult > 0) {
+          quantity = meas.expressionResult;
+        } else if (meas.rootIds && meas.entries) {
+          // Sum all root measurement entries
+          let total = 0;
+          for (const rid of (meas.rootIds as string[])) {
+            const entry = (meas.entries as any)[rid];
+            if (!entry) continue;
+            if (typeof entry.result === 'number') { total += entry.result; }
+            else if (typeof entry.value === 'number') { total += entry.value; }
+            else if (typeof entry.expression === 'string') {
+              // Try to eval simple numeric expression (e.g. "3925" or "12*3")
+              try {
+                const val = Function('"use strict"; return (' + entry.expression.replace(/[^0-9+\-*/.()\s]/g, '') + ')')();
+                if (typeof val === 'number' && isFinite(val) && val > 0) total += val;
+              } catch {}
+            }
+          }
+          if (total > 0) quantity = total;
+        }
+      }
+      quantity = Math.round(quantity * 1000) / 1000; // round to 3 decimal places
       const unitPrice = pos.unitPrice?.value || 0;
       return {
         id: `kosztorys-item-${sIndex}-${iIndex}`,
