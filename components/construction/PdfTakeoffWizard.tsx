@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Sparkles, Loader2, CheckCircle, AlertTriangle, Play, X, Scale, Eye } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, AlertTriangle, Play, X, Scale } from 'lucide-react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { supabase } from '../../lib/supabase';
 import type { PdfAnalysisExtra } from '../../lib/pdfAnalyzer';
@@ -36,9 +36,7 @@ interface ComparedRow {
   claude: boolean;
   geminiColor?: string;
   claudeColor?: string;
-  /** 0–1 */
   confidence: number;
-  /** needs manual review */
   needsReview: boolean;
   reviewReason?: string;
   status: 'ok' | 'mismatch' | 'single';
@@ -58,34 +56,28 @@ async function renderPageToBase64(page: PDFPageProxy): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.82).replace(/^data:image\/jpeg;base64,/, '');
 }
 
-function normalize(s: string) {
-  return s.toLowerCase().trim().replace(/\s+/g, ' ');
-}
+function normalize(s: string) { return s.toLowerCase().trim().replace(/\s+/g, ' '); }
 
 function labelSimilarity(a: string, b: string): number {
-  const na = normalize(a);
-  const nb = normalize(b);
+  const na = normalize(a); const nb = normalize(b);
   if (na === nb) return 1;
   if (na.includes(nb) || nb.includes(na)) return 0.8;
-  const wordsA = na.split(' ');
-  const wordsB = nb.split(' ');
-  const shared = wordsA.filter(w => wordsB.includes(w)).length;
-  return shared / Math.max(wordsA.length, wordsB.length);
+  const wa = na.split(' '); const wb = nb.split(' ');
+  return wa.filter(w => wb.includes(w)).length / Math.max(wa.length, wb.length);
 }
 
-function computeConfidence(row: Pick<ComparedRow, 'gemini' | 'claude' | 'status'>): number {
-  if (row.gemini && row.claude && row.status === 'ok') return 0.92;
-  if (row.gemini && row.claude && row.status === 'mismatch') return 0.55;
-  if (row.gemini && !row.claude) return 0.65;
-  if (!row.gemini && row.claude) return 0.60;
+function computeConfidence(gemini: boolean, claude: boolean, status: string): number {
+  if (gemini && claude && status === 'ok') return 0.92;
+  if (gemini && claude && status === 'mismatch') return 0.55;
+  if (gemini && !claude) return 0.65;
+  if (!gemini && claude) return 0.60;
   return 0.50;
 }
 
 function buildStyleGroupsSummary(extra: PdfAnalysisExtra): string {
-  return (extra.styleGroups || [])
-    .slice(0, 20)
-    .map(g => `color:${g.strokeColor} width:${g.lineWidth} dash:${(g.dashPattern || []).join(',') || 'solid'} paths:${g.pathCount} length:${g.totalLengthM?.toFixed(1) ?? '?'}m`)
-    .join('\n');
+  return (extra.styleGroups || []).slice(0, 20).map(g =>
+    `color:${g.strokeColor} width:${g.lineWidth} dash:${(g.dashPattern || []).join(',') || 'solid'} paths:${g.pathCount} length:${g.totalLengthM?.toFixed(1) ?? '?'}m`
+  ).join('\n');
 }
 
 function compareResults(
@@ -97,77 +89,40 @@ function compareResults(
     ...claudeBlocks.map(b => ({ name: b.name || '', category: b.category, color: b.color, entryType: 'symbol' })),
     ...claudeLines.map(l => ({ name: l.label || '', category: l.category, color: l.color, entryType: 'line' })),
   ];
-
   const matched = new Set<number>();
   const rows: ComparedRow[] = [];
 
   for (const ge of geminiEntries) {
-    let bestIdx = -1;
-    let bestScore = 0;
+    let bestIdx = -1; let bestScore = 0;
     claudeItems.forEach((ci, i) => {
       if (matched.has(i)) return;
-      const score = labelSimilarity(ge.label, ci.name);
-      if (score > bestScore) { bestScore = score; bestIdx = i; }
+      const s = labelSimilarity(ge.label, ci.name);
+      if (s > bestScore) { bestScore = s; bestIdx = i; }
     });
-
     if (bestIdx >= 0 && bestScore >= 0.5) {
       matched.add(bestIdx);
       const ci = claudeItems[bestIdx];
       const colorMismatch = !!(ge.color && ci.color && normalize(ge.color) !== normalize(ci.color));
       const status: ComparedRow['status'] = colorMismatch ? 'mismatch' : 'ok';
-      const partial: Pick<ComparedRow, 'gemini' | 'claude' | 'status'> = { gemini: true, claude: true, status };
-      const confidence = computeConfidence(partial);
-      const needsReview = status === 'mismatch' || confidence < 0.70;
-      rows.push({
-        label: ge.label,
-        category: ge.category || ci.category,
-        entryType: ge.entryType || ci.entryType,
-        color: ge.color || ci.color,
-        gemini: true, claude: true,
-        geminiColor: ge.color,
-        claudeColor: ci.color,
-        confidence,
-        needsReview,
-        reviewReason: colorMismatch ? `Kolor: Gemini=${ge.color}, Claude=${ci.color}` : undefined,
-        status,
-      });
+      const conf = computeConfidence(true, true, status);
+      rows.push({ label: ge.label, category: ge.category || ci.category, entryType: ge.entryType || ci.entryType,
+        color: ge.color || ci.color, gemini: true, claude: true, geminiColor: ge.color, claudeColor: ci.color,
+        confidence: conf, needsReview: conf < 0.70, reviewReason: colorMismatch ? `Kolor: Gemini=${ge.color}, Claude=${ci.color}` : undefined, status });
     } else {
-      const partial: Pick<ComparedRow, 'gemini' | 'claude' | 'status'> = { gemini: true, claude: false, status: 'single' };
-      const confidence = computeConfidence(partial);
-      rows.push({
-        label: ge.label,
-        category: ge.category,
-        entryType: ge.entryType,
-        color: ge.color,
-        gemini: true, claude: false,
-        geminiColor: ge.color,
-        confidence,
-        needsReview: confidence < 0.70,
-        reviewReason: 'Tylko Gemini — Claude nie wykryło',
-        status: 'single',
-      });
+      const conf = computeConfidence(true, false, 'single');
+      rows.push({ label: ge.label, category: ge.category, entryType: ge.entryType, color: ge.color,
+        gemini: true, claude: false, geminiColor: ge.color, confidence: conf,
+        needsReview: true, reviewReason: 'Tylko Gemini — Claude nie wykryło', status: 'single' });
     }
   }
-
   claudeItems.forEach((ci, i) => {
     if (!matched.has(i) && ci.name) {
-      const partial: Pick<ComparedRow, 'gemini' | 'claude' | 'status'> = { gemini: false, claude: true, status: 'single' };
-      const confidence = computeConfidence(partial);
-      rows.push({
-        label: ci.name,
-        category: ci.category,
-        entryType: ci.entryType,
-        color: ci.color,
-        gemini: false, claude: true,
-        claudeColor: ci.color,
-        confidence,
-        needsReview: confidence < 0.70,
-        reviewReason: 'Tylko Claude — Gemini nie wykryło',
-        status: 'single',
-      });
+      const conf = computeConfidence(false, true, 'single');
+      rows.push({ label: ci.name, category: ci.category, entryType: ci.entryType, color: ci.color,
+        gemini: false, claude: true, claudeColor: ci.color, confidence: conf,
+        needsReview: true, reviewReason: 'Tylko Claude — Gemini nie wykryło', status: 'single' });
     }
   });
-
   return rows;
 }
 
@@ -188,14 +143,6 @@ function buildRules(rows: ComparedRow[]): TakeoffRule[] {
   });
 }
 
-// ─── UI helpers ───────────────────────────────────────────────────────────────
-
-function ConfidenceBadge({ value }: { value: number }) {
-  const pct = Math.round(value * 100);
-  const cls = pct >= 85 ? 'bg-green-900/40 text-green-400' : pct >= 65 ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400';
-  return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono ${cls}`}>{pct}%</span>;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PdfTakeoffWizard({
@@ -207,7 +154,6 @@ export default function PdfTakeoffWizard({
   const [pendingRules, setPendingRules] = useState<TakeoffRule[]>([]);
   const [error, setError] = useState('');
 
-  // ── PROTECTION 1: Scale confirmation ──────────────────────────────────────
   const detectedScale = analysisExtra.scaleInfo?.scaleText || null;
   const [scaleConfirmed, setScaleConfirmed] = useState(false);
   const [customScale, setCustomScale] = useState(detectedScale || '1:100');
@@ -221,7 +167,6 @@ export default function PdfTakeoffWizard({
     setError('');
     setStep('rendering');
     setStatusMsg('Renderowanie strony…');
-
     let pageBase64: string;
     try {
       const page = await pdfDoc.getPage(pageNumber);
@@ -231,12 +176,9 @@ export default function PdfTakeoffWizard({
       setStep('scale');
       return;
     }
-
     setStep('analyzing');
     setStatusMsg('Gemini + Claude analizują równolegle…');
-
     const styleGroupsSummary = buildStyleGroupsSummary(analysisExtra);
-
     const [legendRes, rasterRes] = await Promise.allSettled([
       supabase.functions.invoke('pdf-analyze-legend', {
         body: { legendImageBase64: pageBase64, mimeType: 'image/jpeg', styleGroupsSummary },
@@ -245,24 +187,18 @@ export default function PdfTakeoffWizard({
         body: { imageBase64: pageBase64, mimeType: 'image/jpeg', pageNumber },
       }),
     ]);
-
     const geminiEntries: LegendEntry[] =
       legendRes.status === 'fulfilled'
         ? (legendRes.value.data?.data?.entries || legendRes.value.data?.entries || [])
         : [];
-
-    const rasterData =
-      rasterRes.status === 'fulfilled' && rasterRes.value.data ? rasterRes.value.data : {};
-
+    const rasterData = rasterRes.status === 'fulfilled' && rasterRes.value.data ? rasterRes.value.data : {};
     const claudeBlocks = (rasterData as any).blocks || [];
     const claudeLines = (rasterData as any).lineGroups || [];
-
     if (!geminiEntries.length && !claudeBlocks.length && !claudeLines.length) {
       setError('Żadna analiza AI nie zwróciła wyników. Spróbuj ponownie lub sprawdź jakość rysunku.');
       setStep('scale');
       return;
     }
-
     const rows = compareResults(geminiEntries, claudeBlocks, claudeLines);
     setComparedRows(rows);
     setPendingRules(buildRules(rows));
@@ -275,24 +211,13 @@ export default function PdfTakeoffWizard({
     setStep('creating');
     setStatusMsg('Zapisuję reguły…');
     try {
-      const dbRows = pendingRules.map(r => ({
-        plan_id: planId,
-        company_id: companyId,
-        name: r.name,
-        category: r.category,
-        match_type: r.matchType,
-        match_pattern: r.matchPattern,
-        quantity_source: r.quantitySource,
-        unit: r.unit,
-        multiplier: r.multiplier,
-        is_default: false,
-        is_ai_generated: true,
-        enabled: true,
-      }));
-      const { error: dbErr } = await supabase.from('drawing_takeoff_rules').insert(dbRows);
-      if (dbErr) throw new Error(dbErr.message);
+      await supabase.from('drawing_takeoff_rules').insert(pendingRules.map(r => ({
+        plan_id: planId, company_id: companyId, name: r.name, category: r.category,
+        match_type: r.matchType, match_pattern: r.matchPattern, quantity_source: r.quantitySource,
+        unit: r.unit, multiplier: r.multiplier, is_default: false, is_ai_generated: true, enabled: true,
+      })));
       setStep('done');
-      setStatusMsg(`Zapisano ${pendingRules.length} reguł. Pozycje do weryfikacji: ${reviewCount}`);
+      setStatusMsg(`Zapisano ${pendingRules.length} reguł. Do weryfikacji: ${reviewCount}`);
       onTakeoffCreated(pendingRules);
     } catch (e) {
       setError(`Błąd zapisu: ${e instanceof Error ? e.message : String(e)}`);
@@ -301,181 +226,175 @@ export default function PdfTakeoffWizard({
   }, [pendingRules, planId, companyId, onTakeoffCreated, reviewCount]);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700">
+        {/* Header — matches PdfAnalysisModal */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
           <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-violet-400" />
-            <span className="text-white font-semibold text-sm">Wizard AI Przedmiarowania</span>
+            <Sparkles size={16} className="text-violet-600" />
+            <h3 className="font-semibold text-sm">Wizard AI Przedmiarowania</h3>
+            {step === 'done' && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">
+                Gotowe
+              </span>
+            )}
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={16} /></button>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={16} /></button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="p-4 flex-1 overflow-y-auto space-y-3">
 
-          {/* ── PROTECTION 1: Scale confirmation ── */}
-          {(step === 'scale' || step === 'comparing' || step === 'done') && (
-            <div className={`rounded-lg border px-4 py-3 ${scaleConfirmed ? 'border-green-700 bg-green-900/20' : 'border-yellow-600 bg-yellow-900/20'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <Scale size={14} className={scaleConfirmed ? 'text-green-400' : 'text-yellow-400'} />
-                <span className={`text-xs font-semibold ${scaleConfirmed ? 'text-green-300' : 'text-yellow-300'}`}>
-                  Ochrona 1: Potwierdzenie skali rysunku
-                </span>
-                {scaleConfirmed && <CheckCircle size={12} className="text-green-400" />}
-              </div>
-              {detectedScale && (
-                <p className="text-xs text-gray-400 mb-2">
-                  Wykryta skala: <strong className="text-white">{detectedScale}</strong>
-                  <span className="text-gray-500"> (z tekstu rysunku)</span>
-                </p>
-              )}
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                  <input type="radio" checked={scaleSource === 'detected'} onChange={() => setScaleSource('detected')}
-                    disabled={!detectedScale} className="accent-green-500" />
-                  Wykryta: {detectedScale || '—'}
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                  <input type="radio" checked={scaleSource === 'custom'} onChange={() => setScaleSource('custom')} className="accent-yellow-500" />
-                  Inna:
-                  <input
-                    type="text"
-                    value={customScale}
-                    onChange={e => setCustomScale(e.target.value)}
-                    disabled={scaleSource !== 'custom'}
-                    placeholder="np. 1:50"
-                    className="ml-1 w-20 bg-gray-800 border border-gray-600 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-yellow-500 disabled:opacity-40"
-                  />
-                </label>
-                {!scaleConfirmed && (
-                  <button
-                    onClick={() => setScaleConfirmed(true)}
-                    className="ml-auto px-3 py-1 bg-yellow-600 hover:bg-yellow-500 text-white text-xs rounded font-medium"
-                  >
-                    Potwierdzam skalę
-                  </button>
-                )}
-              </div>
+          {/* PROTECTION 1: Scale confirmation */}
+          <div className={`rounded-lg border p-3 ${scaleConfirmed ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Scale size={13} className={scaleConfirmed ? 'text-green-600' : 'text-amber-600'} />
+              <span className={`text-xs font-semibold ${scaleConfirmed ? 'text-green-700' : 'text-amber-700'}`}>
+                Ochrona 1: Potwierdź skalę rysunku
+              </span>
+              {scaleConfirmed && <CheckCircle size={12} className="text-green-600" />}
             </div>
-          )}
+            {detectedScale && (
+              <p className="text-xs text-gray-500 mb-2">
+                Wykryta skala: <strong className="text-gray-800">{detectedScale}</strong>
+                <span className="text-gray-400"> (z tekstu rysunku)</span>
+              </p>
+            )}
+            <div className="flex items-center gap-4 flex-wrap">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                <input type="radio" checked={scaleSource === 'detected'} onChange={() => setScaleSource('detected')}
+                  disabled={!detectedScale} className="accent-green-600" />
+                Wykryta: {detectedScale || '—'}
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                <input type="radio" checked={scaleSource === 'custom'} onChange={() => setScaleSource('custom')} className="accent-amber-600" />
+                Inna:
+                <input type="text" value={customScale} onChange={e => setCustomScale(e.target.value)}
+                  disabled={scaleSource !== 'custom'} placeholder="1:50"
+                  className="ml-1 w-20 border border-gray-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40" />
+              </label>
+              {!scaleConfirmed && (
+                <button onClick={() => setScaleConfirmed(true)}
+                  className="ml-auto px-3 py-1 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded font-medium">
+                  Potwierdzam skalę
+                </button>
+              )}
+            </div>
+          </div>
 
-          {/* Status message */}
+          {/* Status */}
           {statusMsg && (
-            <div className="flex items-center gap-2 text-gray-300 text-xs">
-              {isLoading && <Loader2 size={12} className="animate-spin text-violet-400" />}
-              {step === 'done' && <CheckCircle size={12} className="text-green-400" />}
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              {isLoading && <Loader2 size={12} className="text-blue-600 animate-spin" />}
+              {step === 'done' && <CheckCircle size={12} className="text-green-600" />}
               <span>{statusMsg}</span>
             </div>
           )}
 
           {error && (
-            <div className="flex items-center gap-2 bg-red-900/30 border border-red-700 rounded-lg px-3 py-2 text-red-300 text-xs">
-              <AlertTriangle size={12} className="shrink-0" />
-              <span>{error}</span>
+            <div className="text-xs text-red-600 bg-red-50 border border-red-100 p-2 rounded flex items-center gap-1.5">
+              <AlertTriangle size={12} className="shrink-0" />{error}
             </div>
           )}
 
-          {/* ── Comparison table ── */}
+          {/* PROTECTION 2+3: Comparison table */}
           {comparedRows.length > 0 && (
             <div>
-              {/* ── PROTECTION 2+3: Summary bar ── */}
-              <div className="flex items-center gap-3 mb-2 text-xs">
-                <span className="text-gray-400">Razem: <strong className="text-white">{comparedRows.length}</strong></span>
-                <span className="text-green-400">✓ OK: {okCount}</span>
+              {/* Summary bar */}
+              <div className="text-xs text-gray-500 bg-gray-50 rounded p-2 mb-2 flex items-center gap-3">
+                <span>Razem: <strong className="text-gray-800">{comparedRows.length}</strong></span>
+                <span className="text-green-700">✓ OK: {okCount}</span>
                 {reviewCount > 0 && (
-                  <span className="flex items-center gap-1 text-yellow-400">
-                    <Eye size={11} /> Do weryfikacji: {reviewCount}
+                  <span className="flex items-center gap-1 text-amber-700">
+                    <AlertTriangle size={11} /> Do weryfikacji: {reviewCount}
                   </span>
                 )}
               </div>
-              <div className="overflow-x-auto rounded-lg border border-gray-700">
+
+              <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-xs text-left">
-                  <thead className="bg-gray-800 text-gray-500 uppercase text-[10px]">
+                  <thead className="bg-gray-50 text-gray-500 border-b">
                     <tr>
-                      <th className="px-3 py-2">Element</th>
-                      <th className="px-3 py-2">Gemini</th>
-                      <th className="px-3 py-2">Claude</th>
-                      <th className="px-3 py-2 text-center">Pewność</th>
-                      <th className="px-3 py-2">Weryfikacja</th>
+                      <th className="px-3 py-2 font-medium">Element</th>
+                      <th className="px-3 py-2 font-medium text-violet-700">Gemini</th>
+                      <th className="px-3 py-2 font-medium text-blue-700">Claude</th>
+                      <th className="px-3 py-2 font-medium text-center">Pewność</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y">
                     {comparedRows.map((row, i) => (
-                      <tr key={i} className={`hover:bg-gray-800/50 ${row.needsReview ? 'bg-yellow-950/20' : ''}`}>
-                        <td className="px-3 py-2 text-white font-medium max-w-[180px] truncate" title={row.label}>
+                      <tr key={i} className={`hover:bg-gray-50 ${row.needsReview ? 'bg-amber-50/50' : ''}`}>
+                        <td className="px-3 py-2 text-gray-800 font-medium max-w-[180px] truncate" title={row.label}>
                           {row.label}
                         </td>
                         <td className="px-3 py-2">
                           {row.gemini
-                            ? <span className="text-green-400">✓{row.geminiColor ? <span className="text-gray-500 ml-1">{row.geminiColor}</span> : null}</span>
-                            : <span className="text-gray-600">—</span>}
+                            ? <span className="text-violet-700 font-bold bg-violet-50 px-1.5 py-0.5 rounded">✓{row.geminiColor ? <span className="text-gray-400 font-normal ml-1">{row.geminiColor}</span> : null}</span>
+                            : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2">
                           {row.claude
-                            ? <span className="text-blue-400">✓{row.claudeColor ? <span className="text-gray-500 ml-1">{row.claudeColor}</span> : null}</span>
-                            : <span className="text-gray-600">—</span>}
+                            ? <span className="text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded">✓{row.claudeColor ? <span className="text-gray-400 font-normal ml-1">{row.claudeColor}</span> : null}</span>
+                            : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <ConfidenceBadge value={row.confidence} />
+                          {(() => {
+                            const pct = Math.round(row.confidence * 100);
+                            const cls = pct >= 85 ? 'text-green-700 bg-green-50' : pct >= 65 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50';
+                            return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono ${cls}`}>{pct}%</span>;
+                          })()}
                         </td>
                         <td className="px-3 py-2">
                           {row.needsReview
-                            ? <span className="flex items-center gap-1 text-yellow-400"><AlertTriangle size={11} /><span className="text-[10px]">{row.reviewReason}</span></span>
-                            : <span className="text-green-500 text-[10px]">✓ Akceptuj</span>}
+                            ? <span className="flex items-center gap-1 text-amber-700"><AlertTriangle size={11} /><span className="text-[10px]">{row.reviewReason}</span></span>
+                            : <span className="text-green-700 text-[10px]">✓ OK</span>}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
               {reviewCount > 0 && (
-                <p className="mt-2 text-xs text-yellow-500 flex items-center gap-1">
+                <p className="mt-1.5 text-xs text-amber-700 flex items-center gap-1">
                   <AlertTriangle size={11} />
-                  {reviewCount} pozycji wymaga ręcznej weryfikacji — zostaną uwzględnione w przedmiarze, ale zaznaczone do sprawdzenia.
+                  {reviewCount} pozycji wymaga ręcznej weryfikacji — zostaną uwzględnione, ale zaznaczone.
                 </p>
               )}
             </div>
           )}
 
           {step === 'done' && (
-            <div className="flex items-center gap-2 bg-green-900/30 border border-green-700 rounded-lg px-3 py-3 text-green-300 text-sm">
-              <CheckCircle size={16} />
+            <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2">
+              <CheckCircle size={14} />
               <span>Przedmiar gotowy! Reguły zapisane i aktywowane w przestrzeni roboczej.</span>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-700">
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-xs">
+        {/* Footer — matches existing modal style */}
+        <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm border rounded hover:bg-gray-100">
             {step === 'done' ? 'Zamknij' : 'Anuluj'}
           </button>
-          <div className="flex items-center gap-3">
-            {(step === 'scale') && (
-              <button
-                onClick={run}
-                disabled={!scaleConfirmed || isLoading}
-                className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium px-4 py-2 rounded-lg"
-              >
-                <Play size={13} />
-                {scaleConfirmed ? 'Uruchom analizę AI' : 'Najpierw potwierdź skalę'}
+          <div className="flex items-center gap-2">
+            {step === 'scale' && (
+              <button onClick={run} disabled={!scaleConfirmed || isLoading}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                <Play size={14} /> {scaleConfirmed ? 'Uruchom analizę AI' : 'Najpierw potwierdź skalę'}
               </button>
             )}
             {step === 'comparing' && pendingRules.length > 0 && (
-              <button
-                onClick={createTakeoff}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white text-xs font-medium px-4 py-2 rounded-lg"
-              >
-                <Sparkles size={13} />
-                Utwórz przedmiar ({pendingRules.length})
+              <button onClick={createTakeoff}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">
+                <Sparkles size={14} /> Utwórz przedmiar ({pendingRules.length})
               </button>
             )}
             {isLoading && (
-              <div className="flex items-center gap-2 text-gray-400 text-xs">
-                <Loader2 size={12} className="animate-spin" />
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Loader2 size={12} className="animate-spin text-blue-600" />
                 {step === 'rendering' ? 'Renderowanie…' : step === 'analyzing' ? 'AI analizuje…' : 'Zapisywanie…'}
               </div>
             )}
