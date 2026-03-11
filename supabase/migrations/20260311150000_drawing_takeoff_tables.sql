@@ -25,18 +25,18 @@ CREATE INDEX IF NOT EXISTS idx_dtr_company_id ON drawing_takeoff_rules(company_i
 
 -- 2. drawing_legends
 CREATE TABLE IF NOT EXISTS drawing_legends (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  plan_id        uuid NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-  label          text NOT NULL,
-  description    text,
-  entry_type     text NOT NULL DEFAULT 'symbol',
-  category       text NOT NULL DEFAULT 'Inne',
-  color          text,
-  line_style     text,
-  line_width     text,
-  is_ai_detected boolean NOT NULL DEFAULT false,
-  drawing_type   text,
-  created_at     timestamptz NOT NULL DEFAULT now()
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id         uuid NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  label           text NOT NULL,
+  description     text,
+  entry_type      text NOT NULL DEFAULT 'symbol',
+  category        text NOT NULL DEFAULT 'Inne',
+  color           text,
+  line_style      text,
+  line_width      text,
+  is_ai_detected  boolean NOT NULL DEFAULT false,
+  drawing_type    text,
+  created_at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_dl_plan_id ON drawing_legends(plan_id);
 
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS drawing_takeoff_results (
   created_by   uuid REFERENCES users(id),
   created_at   timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_dtres_plan_id ON drawing_takeoff_results(plan_id);
+CREATE INDEX IF NOT EXISTS idx_dtr2_plan_id ON drawing_takeoff_results(plan_id);
 
 -- 4. drawing_analyses
 CREATE TABLE IF NOT EXISTS drawing_analyses (
@@ -75,15 +75,15 @@ CREATE TABLE IF NOT EXISTS drawing_analyses (
 CREATE INDEX IF NOT EXISTS idx_da_plan_id ON drawing_analyses(plan_id);
 
 -- 5. RLS
-ALTER TABLE drawing_takeoff_rules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE drawing_legends ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drawing_takeoff_rules  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drawing_legends         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE drawing_takeoff_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE drawing_analyses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drawing_analyses        ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "service_all_dtr"  ON drawing_takeoff_rules  FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_all_dl"   ON drawing_legends        FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_all_dtres" ON drawing_takeoff_results FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_all_da"   ON drawing_analyses       FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "service_all_dl"   ON drawing_legends         FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "service_all_dtr2" ON drawing_takeoff_results FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "service_all_da"   ON drawing_analyses        FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 CREATE POLICY "auth_dtr" ON drawing_takeoff_rules FOR ALL TO authenticated
   USING (company_id IN (SELECT company_id FROM users WHERE id = auth.uid()))
@@ -92,15 +92,16 @@ CREATE POLICY "auth_dtr" ON drawing_takeoff_rules FOR ALL TO authenticated
 CREATE POLICY "auth_dl" ON drawing_legends FOR ALL TO authenticated
   USING (plan_id IN (SELECT p.id FROM plans p JOIN projects proj ON proj.id=p.project_id JOIN users u ON u.company_id=proj.company_id WHERE u.id=auth.uid()));
 
-CREATE POLICY "auth_dtres" ON drawing_takeoff_results FOR ALL TO authenticated
+CREATE POLICY "auth_dtr2" ON drawing_takeoff_results FOR ALL TO authenticated
   USING (plan_id IN (SELECT p.id FROM plans p JOIN projects proj ON proj.id=p.project_id JOIN users u ON u.company_id=proj.company_id WHERE u.id=auth.uid()));
 
 CREATE POLICY "auth_da" ON drawing_analyses FOR ALL TO authenticated
   USING (plan_id IN (SELECT p.id FROM plans p JOIN projects proj ON proj.id=p.project_id JOIN users u ON u.company_id=proj.company_id WHERE u.id=auth.uid()));
 
 -- 6. updated_at trigger
-CREATE OR REPLACE FUNCTION trigger_set_updated_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ language plpgsql;
 
-DROP TRIGGER IF EXISTS set_dtr_updated_at ON drawing_takeoff_rules;
-CREATE TRIGGER set_dtr_updated_at BEFORE UPDATE ON drawing_takeoff_rules FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+DROP TRIGGER IF EXISTS trg_dtr_updated_at ON drawing_takeoff_rules;
+CREATE TRIGGER trg_dtr_updated_at BEFORE UPDATE ON drawing_takeoff_rules
+  FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
