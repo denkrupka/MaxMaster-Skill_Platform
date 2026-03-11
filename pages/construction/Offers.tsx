@@ -1736,75 +1736,85 @@ export const OffersPage: React.FC = () => {
 
       if (error) throw error;
 
-      // Create sections and items from imported kosztorys data
-      if (sections.length > 0) {
-        for (const section of sections.filter(s => s.id !== 'unsectioned')) {
-          // Ensure every item has a valid name string
-          const safeItems = section.items
-            .map((item, idx) => ({
-              ...item,
-              name: String(item.name || item.description || '').trim() || `Pozycja ${idx + 1}`
-            }))
-            .filter(item => item.name.length > 0);
+      // Create sections and items from imported kosztorys data (with hierarchy)
+      const insertSectionRecursive = async (sec: any, offerId: string, parentId: string | null) => {
+        const sectionName = String(sec.name || '').trim() || 'Sekcja';
+        const { data: newSection } = await supabase
+          .from('offer_sections')
+          .insert({
+            offer_id: offerId,
+            name: sectionName,
+            description: sec.description || null,
+            sort_order: sec.sort_order || 0,
+            parent_id: parentId,
+          })
+          .select()
+          .single();
+        if (!newSection) return;
 
-          const sectionName = String(section.name || '').trim() || 'Sekcja';
+        // Insert direct items of this section
+        const safeItems = (sec.items || [])
+          .map((item: any, idx: number) => ({
+            ...item,
+            name: String(item.name || item.description || '').trim() || `Pozycja ${idx + 1}`
+          }))
+          .filter((item: any) => item.name.length > 0);
 
-          try {
-            const { data: newSection } = await supabase
-              .from('offer_sections')
-              .insert({
-                offer_id: newOffer.id,
-                name: sectionName,
-                description: section.description || null,
-                sort_order: section.sort_order || 0
-              })
-              .select()
-              .single();
+        if (safeItems.length > 0) {
+          const { data: insertedItems } = await supabase
+            .from('offer_items')
+            .insert(safeItems.map((item: any, idx: number) => ({
+              offer_id: offerId,
+              section_id: newSection.id,
+              name: item.name,
+              description: item.description || null,
+              unit: item.unit || 'szt.',
+              quantity: item.quantity || 1,
+              unit_price: item.unit_price || 0,
+              discount_percent: item.discount_percent || 0,
+              vat_rate: item.vat_rate ?? 23,
+              sort_order: item.sort_order ?? idx,
+              is_optional: item.is_optional || false,
+            })))
+            .select();
 
-            if (newSection && safeItems.length > 0) {
-              const { data: insertedItems } = await supabase
-                .from('offer_items')
-                .insert(safeItems.map((item, idx) => ({
-                  offer_id: newOffer.id,
-                  section_id: newSection.id,
-                  name: item.name,
-                  description: item.description || null,
-                  unit: item.unit || 'szt.',
-                  quantity: item.quantity || 1,
-                  unit_price: item.unit_price || 0,
-                  discount_percent: item.discount_percent || 0,
-                  vat_rate: item.vat_rate ?? 23,
-                  sort_order: item.sort_order ?? idx,
-                  is_optional: item.is_optional || false
-                })))
-                .select();
-
-              // Save R/M/S components for each item
-              if (insertedItems && insertedItems.length > 0) {
-                const allComponents: any[] = [];
-                insertedItems.forEach((newItem: any, idx: number) => {
-                  const srcItem = safeItems[idx];
-                  if (srcItem?.components && srcItem.components.length > 0) {
-                    srcItem.components.forEach((comp: any, ci: number) => {
-                      allComponents.push({
-                        offer_item_id: newItem.id,
-                        type: comp.type || 'material',
-                        name: comp.name || '',
-                        code: comp.code || '',
-                        unit: comp.unit || 'szt.',
-                        quantity: comp.quantity || 0,
-                        unit_price: comp.unit_price || 0,
-                        total_price: comp.total_price || 0,
-                        sort_order: ci
-                      });
-                    });
-                  }
+          // Save R/M/S components (nakłady)
+          if (insertedItems && insertedItems.length > 0) {
+            const allComponents: any[] = [];
+            insertedItems.forEach((newItem: any, idx: number) => {
+              const srcItem = safeItems[idx];
+              if (srcItem?.components && srcItem.components.length > 0) {
+                srcItem.components.forEach((comp: any, ci: number) => {
+                  allComponents.push({
+                    offer_item_id: newItem.id,
+                    type: comp.type || 'material',
+                    name: comp.name || '',
+                    code: comp.code || '',
+                    unit: comp.unit || 'szt.',
+                    quantity: comp.quantity || 0,
+                    unit_price: comp.unit_price || 0,
+                    total_price: comp.total_price || 0,
+                    sort_order: ci,
+                  });
                 });
-                if (allComponents.length > 0) {
-                  await supabase.from('offer_item_components').insert(allComponents);
-                }
               }
+            });
+            if (allComponents.length > 0) {
+              await supabase.from('offer_item_components').insert(allComponents);
             }
+          }
+        }
+
+        // Recurse into children (poddziały)
+        for (const child of (sec.children || [])) {
+          await insertSectionRecursive(child, offerId, newSection.id);
+        }
+      };
+
+      if (sections.length > 0) {
+        for (const section of sections.filter((s: any) => s.id !== 'unsectioned')) {
+          try {
+            await insertSectionRecursive(section, newOffer.id, null);
           } catch (sectionErr) {
             console.warn('Error inserting section/items, skipping:', sectionErr);
           }

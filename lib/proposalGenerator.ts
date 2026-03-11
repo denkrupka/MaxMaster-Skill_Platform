@@ -665,50 +665,44 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
       };
     };
 
-    // Recursively collect ALL position IDs from section and its subsections
-    const collectAllPositions = (sectionId: string, depth = 0): string[] => {
-      const sec = dataJson.sections[sectionId];
-      if (!sec) { console.warn(`[offer-import] Section ${sectionId} not found in dataJson.sections`); return []; }
-      let posIds = [...(sec.positionIds || [])];
-      const subIds = sec.subsectionIds || sec.subSectionIds || sec.childIds || [];
-      console.log(`[offer-import] ${'  '.repeat(depth)}Section "${sec.name}" (${sectionId}): ${posIds.length} direct positions, ${subIds.length} subsections, keys: ${Object.keys(sec).join(',')}`);
-      for (const subId of subIds) {
-        posIds = posIds.concat(collectAllPositions(subId, depth + 1));
-      }
-      return posIds;
-    };
-
-    // Build flat sections — collect ALL positions from section + all subsections into one flat list
-    const buildSection = (sectionId: string, sIndex: number): any => {
+    // Build section with real hierarchy: dział → poddziały as children sections
+    let sectionCounter = 0;
+    const buildSectionHierarchy = (sectionId: string, sortOrder: number): any => {
       const sec = dataJson.sections[sectionId];
       if (!sec) return null;
+      const idx = sectionCounter++;
       const sectionOverheads = sec.overheads || [];
+      const subIds: string[] = sec.subsectionIds || sec.subSectionIds || sec.childIds || [];
 
-      // Collect ALL positions from this section and all nested subsections
-      const allPosIds = collectAllPositions(sectionId);
-      console.log(`[offer-import] Section "${sec.name}": total ${allPosIds.length} positions collected`);
-      const items = allPosIds.map((posId: string, iIndex: number) => {
+      // Direct positions of this section
+      const directPosIds: string[] = sec.positionIds || [];
+      const directItems = directPosIds.map((posId: string, iIndex: number) => {
         const pos = dataJson.positions[posId];
         if (!pos) return null;
-        return buildItemFromPosition(pos, sIndex, iIndex, sectionOverheads);
+        return buildItemFromPosition(pos, idx, iIndex, sectionOverheads);
       }).filter(Boolean);
 
+      // Subsections become children
+      const children = subIds.map((subId: string, subIdx: number) =>
+        buildSectionHierarchy(subId, subIdx)
+      ).filter(Boolean);
+
       return {
-        id: `kosztorys-section-${sIndex}`,
+        id: `kosztorys-section-${idx}`,
         offer_id: '',
-        name: sec.name || `Sekcja ${sIndex + 1}`,
+        name: sec.name || `Sekcja ${sortOrder + 1}`,
         description: sec.description || '',
-        sort_order: sIndex,
+        sort_order: sortOrder,
         created_at: '',
         updated_at: '',
-        isExpanded: items.length <= 50,
-        items,
-        children: [],
+        isExpanded: true,
+        items: directItems,
+        children,
       };
     };
 
     sections = (dataJson.root.sectionIds || []).map((sId: string, idx: number) =>
-      buildSection(sId, idx)
+      buildSectionHierarchy(sId, idx)
     ).filter(Boolean);
 
     // Also add root-level positions (if any)
