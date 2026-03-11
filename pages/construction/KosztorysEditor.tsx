@@ -1323,118 +1323,109 @@ export const KosztorysEditorPage: React.FC = () => {
   }, [treeSearchQuery, estimateData]);
 
   // Auto-validate when data changes
+  const alertsTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!calculationResult || Object.keys(estimateData.positions).length === 0) {
+    if (!calculationResult || positionCount === 0) {
       setAlerts([]);
       setAlertsCount({ current: 0, total: 0 });
       return;
     }
 
-    const newAlerts: typeof alerts = [];
-    let posIndex = 0;
+    // Debounce alert calculation — don't block UI on every keystroke
+    if (alertsTimerRef.current) clearTimeout(alertsTimerRef.current);
+    alertsTimerRef.current = setTimeout(() => {
+      const newAlerts: typeof alerts = [];
+      let posIndex = 0;
 
-    // Helper function to get positions from a section (including subsections)
-    const getPositionsFromSection = (sectionId: string): string[] => {
-      const section = estimateData.sections[sectionId];
-      if (!section) return [];
-      let posIds = [...section.positionIds];
-      for (const subId of section.subsectionIds || []) {
-        posIds = posIds.concat(getPositionsFromSection(subId));
-      }
-      return posIds;
-    };
-
-    // Helper: build path string showing section names (e.g. "Roboty ziemne \ Wykopy")
-    const buildPositionPath = (positionId: string): string => {
-      const pathParts: string[] = [];
-      const findInSection = (sectionId: string, ancestors: string[]): boolean => {
+      // Build positionId → path mapping in ONE pass (O(n) instead of O(n²))
+      const posPathMap = new Map<string, string>();
+      const walkSection = (sectionId: string, ancestors: string[]) => {
         const section = estimateData.sections[sectionId];
-        if (!section) return false;
+        if (!section) return;
         const current = [...ancestors, section.name];
-        if (section.positionIds.includes(positionId)) {
-          pathParts.push(...current);
-          return true;
+        const pathStr = current.join(' \\ ');
+        for (const posId of section.positionIds) {
+          posPathMap.set(posId, pathStr);
         }
         for (const subId of section.subsectionIds || []) {
-          if (findInSection(subId, current)) return true;
+          walkSection(subId, current);
         }
-        return false;
       };
       for (const sectionId of estimateData.root.sectionIds) {
-        if (findInSection(sectionId, [])) break;
+        walkSection(sectionId, []);
       }
-      return pathParts.join(' \\ ') || '';
-    };
 
-    const resourceTypeLabel = (type: string) => {
-      switch (type) {
-        case 'labor': return 'Robocizna';
-        case 'material': return 'Materiał';
-        case 'equipment': return 'Sprzęt';
-        default: return type;
+      // Collect visible position IDs
+      const getPositionsFromSection = (sectionId: string): string[] => {
+        const section = estimateData.sections[sectionId];
+        if (!section) return [];
+        let posIds = [...section.positionIds];
+        for (const subId of section.subsectionIds || []) {
+          posIds = posIds.concat(getPositionsFromSection(subId));
+        }
+        return posIds;
+      };
+
+      let visiblePositionIds: string[] = [...(estimateData.root.positionIds || [])];
+      for (const sectionId of estimateData.root.sectionIds) {
+        visiblePositionIds = visiblePositionIds.concat(getPositionsFromSection(sectionId));
       }
-    };
+      visiblePositionIds = visiblePositionIds.filter(id => estimateData.positions[id]);
 
-    // Get all visible position IDs in order (through sections)
-    let visiblePositionIds: string[] = [];
-    // First add positions from root (if any direct positions)
-    const rootPosIds = estimateData.root.positionIds || [];
-    visiblePositionIds = visiblePositionIds.concat(rootPosIds);
-    // Then add positions from sections
-    for (const sectionId of estimateData.root.sectionIds) {
-      visiblePositionIds = visiblePositionIds.concat(getPositionsFromSection(sectionId));
-    }
+      const resourceTypeLabel = (type: string) => {
+        switch (type) {
+          case 'labor': return 'Robocizna';
+          case 'material': return 'Materiał';
+          case 'equipment': return 'Sprzęt';
+          default: return type;
+        }
+      };
 
-    // Filter out orphan position IDs (IDs that don't exist in positions object)
-    visiblePositionIds = visiblePositionIds.filter(id => estimateData.positions[id]);
+      for (const positionId of visiblePositionIds) {
+        const position = estimateData.positions[positionId];
+        posIndex++;
+        const posPath = posPathMap.get(positionId) || '';
+        const posName = position.name || `Pozycja ${posIndex}`;
 
-    // Validate only visible positions
-    visiblePositionIds.forEach((positionId) => {
-      const position = estimateData.positions[positionId];
-
-      posIndex++;
-
-      const posPath = buildPositionPath(positionId);
-      const posName = position.name || `Pozycja ${posIndex}`;
-
-      // Check for zero unit price (total cost = 0 but has resources)
-      if (position.resources.length > 0) {
-        position.resources.forEach((resource) => {
-          if (resource.unitPrice.value === 0) {
-            newAlerts.push({
-              id: `${resource.id}-price`,
-              type: 'warning',
-              message: posName,
-              reason: 'Cena zerowa',
-              path: posPath,
-              itemType: `Nakład (${resourceTypeLabel(resource.type)})`,
-              itemName: resource.name || '-',
-              positionId: position.id,
-              resourceId: resource.id,
-              positionName: position.name,
-            });
+        if (position.resources.length > 0) {
+          for (const resource of position.resources) {
+            if (resource.unitPrice.value === 0) {
+              newAlerts.push({
+                id: `${resource.id}-price`,
+                type: 'warning',
+                message: posName,
+                reason: 'Cena zerowa',
+                path: posPath,
+                itemType: `Nakład (${resourceTypeLabel(resource.type)})`,
+                itemName: resource.name || '-',
+                positionId: position.id,
+                resourceId: resource.id,
+                positionName: position.name,
+              });
+            }
           }
-        });
+        }
+
+        if (position.resources.length === 0) {
+          newAlerts.push({
+            id: `${position.id}-nores`,
+            type: 'warning',
+            message: posName,
+            reason: 'Brak nakładów',
+            path: posPath,
+            itemType: 'Pozycja',
+            itemName: '-',
+            positionId: position.id,
+            positionName: position.name,
+          });
+        }
       }
 
-      // Check if position has no resources
-      if (position.resources.length === 0) {
-        newAlerts.push({
-          id: `${position.id}-nores`,
-          type: 'warning',
-          message: posName,
-          reason: 'Brak nakładów',
-          path: posPath,
-          itemType: 'Pozycja',
-          itemName: '-',
-          positionId: position.id,
-          positionName: position.name,
-        });
-      }
-    });
+      setAlerts(newAlerts);
+      setAlertsCount({ current: 0, total: newAlerts.length });
+    }, 500);
 
-    setAlerts(newAlerts);
-    setAlertsCount({ current: 0, total: newAlerts.length });
+    return () => { if (alertsTimerRef.current) clearTimeout(alertsTimerRef.current); };
   }, [calculationResult, estimateData.positions, estimateData.sections, estimateData.root.sectionIds, estimateData.root.positionIds]);
 
   // Load estimate

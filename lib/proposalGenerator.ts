@@ -622,11 +622,25 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
       };
     };
 
-    // Recursively build sections from data_json hierarchy
+    // Recursively collect ALL position IDs from section and its subsections
+    const collectAllPositions = (sectionId: string): string[] => {
+      const sec = dataJson.sections[sectionId];
+      if (!sec) return [];
+      let posIds = [...(sec.positionIds || [])];
+      for (const subId of (sec.subsectionIds || [])) {
+        posIds = posIds.concat(collectAllPositions(subId));
+      }
+      return posIds;
+    };
+
+    // Build sections — flatten subsection positions into parent for offer view,
+    // but also keep children for hierarchical display
     const buildSection = (sectionId: string, sIndex: number): any => {
       const sec = dataJson.sections[sectionId];
       if (!sec) return null;
       const sectionOverheads = sec.overheads || [];
+
+      // Direct items from this section
       const items = (sec.positionIds || []).map((posId: string, iIndex: number) => {
         const pos = dataJson.positions[posId];
         if (!pos) return null;
@@ -636,6 +650,23 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
       const children = (sec.subsectionIds || []).map((subId: string, subIdx: number) =>
         buildSection(subId, sIndex * 100 + subIdx + 1)
       ).filter(Boolean);
+
+      // If this section has no direct items but has children with items,
+      // pull children's items up so the section isn't empty in flat view
+      if (items.length === 0 && children.length > 0) {
+        let flatIdx = 0;
+        for (const child of children) {
+          for (const item of (child.items || [])) {
+            items.push({ ...item, sort_order: flatIdx++ });
+          }
+          // Also pull up grandchildren items
+          for (const grandchild of (child.children || [])) {
+            for (const item of (grandchild.items || [])) {
+              items.push({ ...item, sort_order: flatIdx++ });
+            }
+          }
+        }
+      }
 
       return {
         id: `kosztorys-section-${sIndex}`,
