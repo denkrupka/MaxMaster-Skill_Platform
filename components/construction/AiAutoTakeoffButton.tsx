@@ -52,6 +52,7 @@ export default function AiAutoTakeoffButton({
       if (error) throw new Error(error.message || 'Błąd funkcji AI');
       if (data?.error) throw new Error(data.error);
 
+      // Response: { success: true, data: { entries: [...], drawingType: "..." } }
       const entries: Array<{
         label: string;
         description?: string;
@@ -60,7 +61,7 @@ export default function AiAutoTakeoffButton({
         lineStyle?: string;
         lineWidth?: string;
         category?: string;
-      }> = data?.entries || data?.legend?.entries || [];
+      }> = data?.data?.entries || data?.entries || data?.legend?.entries || [];
 
       if (!entries.length) throw new Error('AI nie wykryło żadnych wpisów legendy');
 
