@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Play, Loader2, CheckCircle, AlertTriangle, BookOpen, FileImage, Save, Sparkles } from 'lucide-react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { classifyFromOpList } from '../../lib/pdfGeometryExtractor';
@@ -79,6 +79,8 @@ export default function PdfAnalysisModal({
   const [analysisSubStep, setAnalysisSubStep] = useState('');
   const [aiUsed, setAiUsed] = useState(false);
   const [showTakeoffWizard, setShowTakeoffWizard] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(true);
+  const [existingAnalysisId, setExistingAnalysisId] = useState<string | null>(null);
 
   const runAnalysis = async () => {
     setStep('classifying');
@@ -313,6 +315,71 @@ export default function PdfAnalysisModal({
     }
   };
 
+  // ── Load existing analysis on mount ──────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExisting() {
+      setLoadingExisting(true);
+      try {
+        const { data: rows } = await supabase
+          .from('pdf_analyses')
+          .select('id, detected_scale, scale_factor, analysis_result, created_at')
+          .eq('drawing_id', drawingId)
+          .eq('page_number', pageNumber)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (cancelled || !rows || rows.length === 0) return;
+        const row = rows[0];
+        setExistingAnalysisId(row.id);
+
+        // Load legend entries
+        const { data: legendRows } = await supabase
+          .from('pdf_legends')
+          .select('entries, bounding_box')
+          .eq('analysis_id', row.id)
+          .limit(1);
+
+        if (cancelled) return;
+
+        if (legendRows && legendRows.length > 0) {
+          // Reconstruct minimal DxfAnalysis + PdfAnalysisExtra from saved data
+          const ar = row.analysis_result || {};
+          const restoredAnalysis: any = {
+            totalLayers: ar.totalLayers || 0,
+            totalBlocks: ar.totalBlocks || 0,
+            totalEntities: ar.totalEntities || 0,
+            blocks: ar.blocks || [],
+            lineGroups: Array(ar.lineGroupCount || 0).fill(null).map((_, i) => ({ id: `lg-${i}` })),
+          };
+          const restoredExtra: any = {
+            styleGroups: [],
+            symbols: [],
+            rooms: [],
+            legend: { boundingBox: legendRows[0].bounding_box, entries: legendRows[0].entries },
+            scaleInfo: {
+              scaleText: row.detected_scale,
+              scaleFactor: row.scale_factor,
+              source: 'text_detection',
+            },
+            extraction: { paths: [], texts: [], pageWidth: 0, pageHeight: 0 },
+          };
+          setAnalysis(restoredAnalysis);
+          setExtra(restoredExtra);
+          setStep('done');
+          setAiUsed(true);
+        }
+      } catch (_e) {
+        // silently ignore — user can re-run analysis
+      } finally {
+        if (!cancelled) setLoadingExisting(false);
+      }
+    }
+    loadExisting();
+    return () => { cancelled = true; };
+  }, [drawingId, pageNumber]);
+
   const isRunning = ['classifying', 'extracting', 'analyzing', 'saving'].includes(step);
   const hasLegend = extra?.legend && extra.legend.entries.length > 0;
   const legendMatches = extra?.legend?.entries.filter(e => (e.matchCount || 0) > 0) || [];
@@ -378,7 +445,14 @@ export default function PdfAnalysisModal({
           {step === 'done' && (
             <div className="flex items-center gap-2 text-green-700">
               <CheckCircle size={16} />
-              <span className="text-sm font-medium">Zapisano!</span>
+              <span className="text-sm font-medium">
+                {existingAnalysisId ? 'Wczytano z pamięci' : 'Zapisano!'}
+              </span>
+              {existingAnalysisId && (
+                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                  📂 Poprzedni wynik
+                </span>
+              )}
             </div>
           )}
 
@@ -453,8 +527,16 @@ export default function PdfAnalysisModal({
             </>
           )}
 
+          {/* Loading existing */}
+          {loadingExisting && step === 'idle' && (
+            <div className="text-center py-6 text-gray-400">
+              <Loader2 size={24} className="mx-auto mb-2 animate-spin text-blue-400" />
+              <p className="text-xs">Sprawdzam zapisany wynik…</p>
+            </div>
+          )}
+
           {/* Idle state */}
-          {step === 'idle' && (
+          {step === 'idle' && !loadingExisting && (
             <div className="text-center py-6 text-gray-500">
               <FileImage size={32} className="mx-auto mb-2 text-gray-300" />
               <p className="text-sm">Kliknij aby rozpocząć analizę rysunku.</p>
@@ -481,7 +563,14 @@ export default function PdfAnalysisModal({
             )}
             {step === 'done' && (
               <>
-                <button onClick={onClose} className="px-4 py-1.5 text-sm border rounded hover:bg-gray-100 text-sm">
+                <button
+                  onClick={() => { setStep('idle'); setAnalysis(null); setExtra(null); setError(''); }}
+                  className="px-3 py-1.5 text-xs border rounded hover:bg-gray-100 text-gray-500"
+                  title="Ponowna analiza"
+                >
+                  🔄 Analizuj ponownie
+                </button>
+                <button onClick={onClose} className="px-4 py-1.5 text-sm border rounded hover:bg-gray-100">
                   Gotowe
                 </button>
                 {extra && (
