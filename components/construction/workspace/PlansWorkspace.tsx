@@ -20,7 +20,6 @@ import ViewerBottomToolbar from './ViewerBottomToolbar';
 import RuleEditorDrawer from './RuleEditorDrawer';
 import AutodeskViewer, { type SelectedObjectInfo } from '../AutodeskViewer';
 import PdfAnalysisModal from '../PdfAnalysisModal';
-import AiAutoTakeoffButton from '../AiAutoTakeoffButton';
 import DxfAnalysisModal from '../DxfAnalysisModal';
 import { parseDxf, renderDxfToBlobUrl, type IDxf, type DxfViewBoxInfo, screenToDxfCoords, findNearestEntity } from '../../../lib/dxfRenderer';
 import type { DxfAnalysis } from '../../../lib/dxfAnalyzer';
@@ -172,7 +171,6 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Analysis modals ----
   const [showPdfAnalysis, setShowPdfAnalysis] = useState(false);
   const [showDxfAnalysis, setShowDxfAnalysis] = useState(false);
-  const [pdfPageBase64, setPdfPageBase64] = useState<string>('');
 
   // ---- Scale calibration ----
   const [isCalibrating, setIsCalibrating] = useState(false);
@@ -752,61 +750,8 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Analyze ----
 
   const handleAnalyze = useCallback(async () => {
-    // For PDF files — render current page and open PDF analysis (AI auto-takeoff)
+    // For PDF files — open PDF analysis modal directly
     if (activeFile && getFileFormat(activeFile.original_filename || activeFile.name, activeFile.mime_type) === 'pdf' && pdfDoc) {
-      try {
-        const page = await pdfDoc.getPage(pdfPage);
-        const baseVp = page.getViewport({ scale: 1 });
-
-        // Render full page at 2x for legend detection
-        const detectScale = Math.min(2, 2000 / Math.max(baseVp.width, baseVp.height));
-        const detectVp = page.getViewport({ scale: detectScale });
-        const fullCanvas = document.createElement('canvas');
-        fullCanvas.width = detectVp.width;
-        fullCanvas.height = detectVp.height;
-        const fullCtx = fullCanvas.getContext('2d')!;
-        await page.render({ canvasContext: fullCtx, viewport: detectVp }).promise;
-
-        // Try to find legend region via text scan (look for "LEGENDA" text block)
-        // Use pdfjs to get text content and find legend bounding box
-        const textContent = await page.getTextContent();
-        let legendBox: { x: number; y: number; w: number; h: number } | null = null;
-        const legendItem = textContent.items.find((item: any) =>
-          /LEGENDA|legenda|LEGEND/i.test(item.str?.trim() || '')
-        );
-        if (legendItem) {
-          // Legend usually occupies bottom-right quadrant — use heuristic crop
-          const tx = (legendItem as any).transform[4] * detectScale;
-          const ty = detectVp.height - (legendItem as any).transform[5] * detectScale;
-          // Crop: from legend text to bottom-right corner with 20px padding
-          legendBox = {
-            x: Math.max(0, tx - 20),
-            y: Math.max(0, ty - 20),
-            w: fullCanvas.width - Math.max(0, tx - 20),
-            h: fullCanvas.height - Math.max(0, ty - 20),
-          };
-        }
-
-        let finalBase64: string;
-        if (legendBox && legendBox.w > 100 && legendBox.h > 100) {
-          // Crop legend region and render at full quality
-          const cropCanvas = document.createElement('canvas');
-          cropCanvas.width = legendBox.w;
-          cropCanvas.height = legendBox.h;
-          const cropCtx = cropCanvas.getContext('2d')!;
-          cropCtx.drawImage(fullCanvas,
-            legendBox.x, legendBox.y, legendBox.w, legendBox.h,
-            0, 0, legendBox.w, legendBox.h
-          );
-          finalBase64 = cropCanvas.toDataURL('image/jpeg', 0.92).replace(/^data:image\/jpeg;base64,/, '');
-        } else {
-          // No legend found — send full page at reduced quality
-          finalBase64 = fullCanvas.toDataURL('image/jpeg', 0.80).replace(/^data:image\/jpeg;base64,/, '');
-        }
-        setPdfPageBase64(finalBase64);
-      } catch {
-        setPdfPageBase64('');
-      }
       setShowPdfAnalysis(true);
       return;
     }
@@ -3737,28 +3682,6 @@ export const PlansWorkspace: React.FC = () => {
         />
       )}
 
-      {/* AI Auto-Takeoff Button — floating over PDF modal when analysis is open */}
-      {showPdfAnalysis && pdfPageBase64 && (
-        <div className="fixed bottom-6 right-6 z-[9999]">
-          <AiAutoTakeoffButton
-            pageImageBase64={pdfPageBase64}
-            styleGroups={[]}
-            onRulesGenerated={(newRules) => {
-              setRules(prev => [...prev, ...newRules.map(r => ({
-                id: r.id, name: r.name, category: r.category,
-                matchType: r.matchType as any, matchPattern: r.matchPattern,
-                quantitySource: r.quantitySource as any, unit: r.unit,
-                multiplier: r.multiplier, isDefault: r.isDefault, enabled: true,
-              }))]);
-              dispatch({ type: 'SET_RIGHT_TAB', tab: 'takeoff' });
-              setShowPdfAnalysis(false);
-              notify('Reguły AI dodane — uruchom przedmiar');
-            }}
-            onLegendDetected={() => {}}
-            className="shadow-2xl text-sm px-4 py-2"
-          />
-        </div>
-      )}
 
       {/* DXF Analysis Modal */}
       {showDxfAnalysis && dxfData && activeFile && currentUser && (

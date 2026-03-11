@@ -7,6 +7,7 @@ import { groupPathsByStyle, detectScale, detectSymbols, matchAiResultToGeometry 
 import type { PdfClassification, PdfAnalysisStep, PdfRasterAiResult } from '../../lib/pdfTypes';
 import type { DxfAnalysis } from '../../lib/dxfAnalyzer';
 import type { PdfAnalysisExtra } from '../../lib/pdfAnalyzer';
+import PdfTakeoffWizard from './PdfTakeoffWizard';
 import { supabase } from '../../lib/supabase';
 
 /** Render a PDF page to base64 JPEG for AI analysis.
@@ -77,6 +78,7 @@ export default function PdfAnalysisModal({
   const [extractionProgress, setExtractionProgress] = useState(0);
   const [analysisSubStep, setAnalysisSubStep] = useState('');
   const [aiUsed, setAiUsed] = useState(false);
+  const [showTakeoffWizard, setShowTakeoffWizard] = useState(false);
 
   const runAnalysis = async () => {
     setStep('classifying');
@@ -477,13 +479,38 @@ export default function PdfAnalysisModal({
               </button>
             )}
             {step === 'done' && (
-              <button onClick={onClose} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">
-                Gotowe
-              </button>
+              <>
+                <button onClick={onClose} className="px-4 py-1.5 text-sm border rounded hover:bg-gray-100 text-sm">
+                  Gotowe
+                </button>
+                {extra && (
+                  <button
+                    onClick={() => setShowTakeoffWizard(true)}
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-violet-600 text-white rounded hover:bg-violet-700 font-medium"
+                  >
+                    <Sparkles size={14} /> Utwórz przedmiar AI
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
     </div>
+
+      {showTakeoffWizard && extra && (
+        <PdfTakeoffWizard
+          pdfDoc={pdfDoc}
+          pageNumber={pageNumber}
+          planId={drawingId}
+          companyId={companyId}
+          analysisExtra={extra}
+          onTakeoffCreated={(rules) => {
+            setShowTakeoffWizard(false);
+            onClose();
+          }}
+          onClose={() => setShowTakeoffWizard(false)}
+        />
+      )}
   );
 }
