@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Sparkles, Loader2, CheckCircle, AlertTriangle, Play, X, Scale } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle, AlertTriangle, Play, X, Scale, Ruler, Settings2 } from 'lucide-react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { supabase } from '../../lib/supabase';
 import type { PdfAnalysisExtra } from '../../lib/pdfAnalyzer';
@@ -25,6 +25,11 @@ interface PdfTakeoffWizardProps {
   planId: string;
   companyId: string;
   analysisExtra: PdfAnalysisExtra;
+  currentScaleRatio?: number;
+  onScaleChange?: (scaleRatio: number) => void;
+  onCalibrateScale?: () => void;
+  onAiScaleDetect?: () => void;
+  aiScaleLoading?: boolean;
   onTakeoffCreated: (positions: TakeoffPosition[]) => void;
   onClose: () => void;
 }
@@ -45,10 +50,127 @@ async function renderPageToBase64(page: PDFPageProxy): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.82).replace(/^data:image\/jpeg;base64,/, '');
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── ScaleSettingsModal — 1:1 с PlansWorkspace ────────────────────────────────
+
+interface ScaleSettingsModalProps {
+  currentScaleRatio?: number;
+  aiScaleLoading?: boolean;
+  onScaleChange?: (scaleRatio: number) => void;
+  onCalibrateScale?: () => void;
+  onAiScaleDetect?: () => void;
+  onClose: () => void;
+}
+
+function ScaleSettingsModal({ currentScaleRatio, aiScaleLoading, onScaleChange, onCalibrateScale, onAiScaleDetect, onClose }: ScaleSettingsModalProps) {
+  const [manualValue, setManualValue] = useState('');
+
+  const handleSetManual = () => {
+    const val = parseInt(manualValue);
+    if (val > 0 && onScaleChange) {
+      const scaleRatio = 0.3528 * val; // PDF points to mm
+      onScaleChange(scaleRatio);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-800">Ustawienia skali</h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {/* Current scale info */}
+          {currentScaleRatio ? (
+            <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl">
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                <Ruler className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-green-800">Skala skalibrowana</p>
+                <p className="text-[11px] text-green-600">1 px = {currentScaleRatio.toFixed(3)} mm</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl">
+              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                <Ruler className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-amber-800">Skala nie jest skalibrowana</p>
+                <p className="text-[11px] text-amber-600">Pomiary beda w pikselach</p>
+              </div>
+            </div>
+          )}
+
+          {/* Manual calibration */}
+          {onCalibrateScale && (
+            <button
+              onClick={() => { onClose(); onCalibrateScale(); }}
+              className="w-full flex items-center gap-3 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+                <Ruler className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Kalibracja reczna</p>
+                <p className="text-[11px] text-slate-500">Kliknij dwa punkty o znanej odleglosci i wpisz wymiar</p>
+              </div>
+            </button>
+          )}
+
+          {/* AI scale detection */}
+          {onAiScaleDetect && (
+            <button
+              onClick={() => { onAiScaleDetect(); }}
+              disabled={aiScaleLoading}
+              className="w-full flex items-center gap-3 p-3 border border-purple-200 rounded-xl hover:bg-purple-50 transition text-left disabled:opacity-50"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 flex-shrink-0">
+                {aiScaleLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Wykryj skale AI</p>
+                <p className="text-[11px] text-slate-500">
+                  {aiScaleLoading ? 'Analizowanie rysunku...' : 'Automatyczne wykrycie z legendy lub wymiarow'}
+                </p>
+              </div>
+            </button>
+          )}
+
+          {/* Manual input */}
+          <div className="border-t border-slate-100 pt-3">
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-2">Lub wpisz skale recznie</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-600">1 :</span>
+              <input
+                type="number"
+                min="1"
+                placeholder="np. 50, 100, 200"
+                value={manualValue}
+                onChange={e => setManualValue(e.target.value)}
+                className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                onKeyDown={e => { if (e.key === 'Enter') handleSetManual(); }}
+              />
+              <button
+                onClick={handleSetManual}
+                className="px-3 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >Ustaw</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function PdfTakeoffWizard({
-  pdfDoc, pageNumber, planId, companyId, analysisExtra, onTakeoffCreated, onClose,
+  pdfDoc, pageNumber, planId, companyId, analysisExtra,
+  currentScaleRatio, onScaleChange, onCalibrateScale, onAiScaleDetect, aiScaleLoading,
+  onTakeoffCreated, onClose,
 }: PdfTakeoffWizardProps) {
   const [step, setStep] = useState<WizardStep>('scale');
   const [statusMsg, setStatusMsg] = useState('');
@@ -56,11 +178,15 @@ export default function PdfTakeoffWizard({
   const [error, setError] = useState('');
   const [claudeRaw, setClaudeRaw] = useState<any>(null);
   const [geminiRaw, setGeminiRaw] = useState<any>(null);
+  const [showScaleModal, setShowScaleModal] = useState(false);
 
   const detectedScale = analysisExtra.scaleInfo?.scaleText || null;
   const [scaleConfirmed, setScaleConfirmed] = useState(false);
-  const [customScale, setCustomScale] = useState(detectedScale || '1:100');
-  const [scaleSource, setScaleSource] = useState<'detected' | 'custom'>(detectedScale ? 'detected' : 'custom');
+  const [scaleLabel, setScaleLabel] = useState(
+    currentScaleRatio
+      ? `1 px = ${currentScaleRatio.toFixed(3)} mm`
+      : detectedScale || ''
+  );
 
   const isLoading = step === 'rendering' || step === 'analyzing' || step === 'saving';
   const reviewCount = positions.filter(p => p.needsReview).length;
@@ -83,7 +209,6 @@ export default function PdfTakeoffWizard({
     setStep('analyzing');
     setStatusMsg('Claude analizuje rysunek i liczy elementy…');
 
-    // Run Claude raster analysis (primary - gives count per symbol)
     const [claudeRes, geminiRes] = await Promise.allSettled([
       supabase.functions.invoke('pdf-analyze-raster', {
         body: { imageBase64: pageBase64, mimeType: 'image/jpeg', pageNumber },
@@ -105,10 +230,8 @@ export default function PdfTakeoffWizard({
     setClaudeRaw(claudeData);
     setGeminiRaw(geminiData);
 
-    // Claude primary: symbols (with count) + routes
     const claudeSymbols: any[] = claudeData.symbols || [];
     const claudeRoutes: any[] = claudeData.routes || [];
-    // Gemini: legend entries (no count, but more detailed labels)
     const geminiEntries: any[] = geminiData.entries || [];
 
     if (!claudeSymbols.length && !geminiEntries.length) {
@@ -117,7 +240,6 @@ export default function PdfTakeoffWizard({
       return;
     }
 
-    // Build positions from Claude (has count), enrich with Gemini descriptions
     const geminiMap = new Map<string, any>();
     for (const ge of geminiEntries) {
       geminiMap.set((ge.label || '').toLowerCase().trim(), ge);
@@ -126,35 +248,27 @@ export default function PdfTakeoffWizard({
     const result: TakeoffPosition[] = [];
     const usedGemini = new Set<string>();
 
-    // Claude symbols → positions
     for (const sym of claudeSymbols) {
       const name = sym.type || sym.name || '';
       if (!name) continue;
-
-      // Try to find matching Gemini entry for enrichment
       const geminiMatch = geminiMap.get(name.toLowerCase().trim())
         || [...geminiMap.entries()].find(([k]) => k.includes(name.toLowerCase().slice(0, 10)))?.[1];
-
       const count = typeof sym.count === 'number' ? sym.count : 1;
-      const confidence = count > 0 ? 0.88 : 0.60;
-
       result.push({
-        name: name,
+        name,
         legendRef: sym.legendRef || '',
         category: sym.category || geminiMatch?.category || 'Inne',
         count,
         unit: 'szt.',
         description: sym.description || geminiMatch?.description || '',
         source: geminiMatch ? 'both' : 'claude',
-        confidence,
+        confidence: count > 0 ? 0.88 : 0.60,
         needsReview: count === 0 || !sym.legendRef,
         reviewReason: count === 0 ? 'Brak na rysunku (count=0)' : undefined,
       });
-
-      if (geminiMatch) usedGemini.add((sym.type || '').toLowerCase().trim());
+      if (geminiMatch) usedGemini.add(name.toLowerCase().trim());
     }
 
-    // Claude routes → positions with length
     for (const route of claudeRoutes) {
       const name = route.type || route.name || '';
       if (!name) continue;
@@ -171,16 +285,11 @@ export default function PdfTakeoffWizard({
       });
     }
 
-    // Gemini-only entries not matched by Claude
+    const skipPatterns = ['wartość', 'natężenie', 'oświetlenie', 'poziom', 'klasa', 'współczynnik', 'moc', 'wymagania'];
     for (const ge of geminiEntries) {
       const key = (ge.label || '').toLowerCase().trim();
       if (!key || usedGemini.has(key)) continue;
-
-      // Skip non-element entries (parameters, descriptions, values)
-      const skipPatterns = ['wartość', 'natężenie', 'oświetlenie', 'poziom', 'klasa', 'współczynnik', 'moc', 'wymagania'];
-      const isParam = skipPatterns.some(p => key.includes(p));
-      if (isParam) continue;
-
+      if (skipPatterns.some(p => key.includes(p))) continue;
       result.push({
         name: ge.label || '',
         category: ge.category || 'Inne',
@@ -202,14 +311,12 @@ export default function PdfTakeoffWizard({
 
     setPositions(result);
     setStep('result');
-    setStatusMsg('');
   }, [pdfDoc, pageNumber, analysisExtra]);
 
   const saveAndCreate = useCallback(async () => {
     setStep('saving');
     setStatusMsg('Zapisuję…');
     try {
-      // Save raw analysis to drawing_analyses
       await supabase.from('drawing_analyses').upsert({
         plan_id: planId,
         page_number: pageNumber,
@@ -218,7 +325,6 @@ export default function PdfTakeoffWizard({
         updated_at: new Date().toISOString(),
       }, { onConflict: 'plan_id,page_number' });
 
-      // Save positions as takeoff results
       if (positions.length > 0) {
         await supabase.from('drawing_takeoff_results').insert(
           positions.map((p, i) => ({
@@ -247,179 +353,235 @@ export default function PdfTakeoffWizard({
   }, [positions, planId, companyId, claudeRaw, geminiRaw, onTakeoffCreated, pageNumber]);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col">
+    <>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-violet-600" />
-            <h3 className="font-semibold text-sm">AI Przedmiarowanie</h3>
-            {step === 'done' && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">
-                Gotowe
-              </span>
-            )}
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={16} /></button>
-        </div>
-
-        {/* Body */}
-        <div className="p-4 flex-1 overflow-y-auto space-y-3">
-
-          {/* PROTECTION 1: Scale — only show if not yet confirmed */}
-          {!scaleConfirmed && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Scale size={13} className="text-amber-600" />
-                <span className="text-xs font-semibold text-amber-700">Potwierdź skalę rysunku</span>
-              </div>
-              {detectedScale && (
-                <p className="text-xs text-gray-500 mb-2">
-                  Wykryta: <strong className="text-gray-800">{detectedScale}</strong>
-                </p>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-violet-600" />
+              <h3 className="font-semibold text-sm">AI Przedmiarowanie</h3>
+              {step === 'done' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">Gotowe</span>
               )}
-              <div className="flex items-center gap-4 flex-wrap">
-                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-                  <input type="radio" checked={scaleSource === 'detected'} onChange={() => setScaleSource('detected')}
-                    disabled={!detectedScale} className="accent-green-600" />
-                  Wykryta: {detectedScale || '—'}
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-                  <input type="radio" checked={scaleSource === 'custom'} onChange={() => setScaleSource('custom')} className="accent-amber-600" />
-                  Inna:
-                  <input type="text" value={customScale} onChange={e => setCustomScale(e.target.value)}
-                    disabled={scaleSource !== 'custom'} placeholder="1:50"
-                    className="ml-1 w-20 border border-gray-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40" />
-                </label>
-                <button onClick={() => setScaleConfirmed(true)}
-                  className="ml-auto px-3 py-1 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded font-medium">
-                  Potwierdzam
-                </button>
-              </div>
             </div>
-          )}
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={16} /></button>
+          </div>
 
-          {/* Scale confirmed banner */}
-          {scaleConfirmed && step === 'scale' && (
-            <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
-              <CheckCircle size={12} />
-              <span>Skala: <strong>{scaleSource === 'detected' ? detectedScale : customScale}</strong> — potwierdzona</span>
-            </div>
-          )}
+          {/* Body */}
+          <div className="p-4 flex-1 overflow-y-auto space-y-3">
 
-          {/* Loading state */}
-          {isLoading && (
-            <div className="flex items-center gap-2 py-6 justify-center">
-              <Loader2 size={16} className="text-blue-600 animate-spin" />
-              <span className="text-sm text-gray-600">{statusMsg}</span>
-            </div>
-          )}
+            {/* Scale block — only before confirm */}
+            {!scaleConfirmed && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Scale size={13} className="text-amber-600" />
+                  <span className="text-xs font-semibold text-amber-700">Potwierdź skalę rysunku</span>
+                </div>
 
-          {error && (
-            <div className="text-xs text-red-600 bg-red-50 border border-red-100 p-2 rounded flex items-center gap-1.5">
-              <AlertTriangle size={12} className="shrink-0" />{error}
-            </div>
-          )}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Detected scale option */}
+                  {(detectedScale || currentScaleRatio) && (
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="scaleChoice"
+                        defaultChecked
+                        onChange={() => setScaleLabel(currentScaleRatio
+                          ? `1 px = ${currentScaleRatio.toFixed(3)} mm`
+                          : detectedScale || ''
+                        )}
+                        className="accent-green-600"
+                      />
+                      {currentScaleRatio
+                        ? `Skalibrowana: 1 px = ${currentScaleRatio.toFixed(3)} mm`
+                        : `Wykryta: ${detectedScale}`}
+                    </label>
+                  )}
 
-          {/* Results table */}
-          {(step === 'result' || step === 'done') && positions.length > 0 && (
-            <div>
-              {/* Summary */}
-              <div className="text-xs text-gray-500 bg-gray-50 rounded p-2 mb-2 flex items-center gap-3">
-                <span>Pozycji: <strong className="text-gray-800">{positions.length}</strong></span>
-                <span className="text-green-700">✓ OK: {positions.filter(p => !p.needsReview).length}</span>
-                {reviewCount > 0 && (
-                  <span className="flex items-center gap-1 text-amber-700">
-                    <AlertTriangle size={11} /> Do weryfikacji: {reviewCount}
-                  </span>
+                  {/* Inna — opens ScaleSettingsModal */}
+                  <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="scaleChoice"
+                      defaultChecked={!detectedScale && !currentScaleRatio}
+                      onChange={() => setShowScaleModal(true)}
+                      className="accent-amber-600"
+                    />
+                    Inna skala…
+                  </label>
+
+                  <button
+                    onClick={() => setScaleConfirmed(true)}
+                    className="ml-auto px-3 py-1 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded font-medium"
+                  >
+                    Potwierdzam
+                  </button>
+                </div>
+
+                {scaleLabel && (
+                  <p className="mt-2 text-[11px] text-gray-500">Aktualna skala: <strong>{scaleLabel}</strong></p>
                 )}
               </div>
+            )}
 
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-gray-50 text-gray-500 border-b">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Pozycja</th>
-                      <th className="px-3 py-2 font-medium">Kategoria</th>
-                      <th className="px-3 py-2 font-medium text-right">Ilość</th>
-                      <th className="px-3 py-2 font-medium">Jm</th>
-                      <th className="px-3 py-2 font-medium text-center">Pewność</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {positions.map((pos, i) => (
-                      <tr key={i} className={`hover:bg-gray-50 ${pos.needsReview ? 'bg-amber-50/40' : ''}`}>
-                        <td className="px-3 py-2 text-gray-800 font-medium max-w-[200px]">
-                          <div className="truncate" title={pos.name}>{pos.name}</div>
-                          {pos.legendRef && <div className="text-[10px] text-gray-400">{pos.legendRef}</div>}
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[120px]">
-                          <div className="truncate" title={pos.category}>{pos.category}</div>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono text-gray-800">
-                          {pos.count > 0 ? pos.count : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-gray-500">{pos.unit}</td>
-                        <td className="px-3 py-2 text-center">
-                          {(() => {
-                            const pct = Math.round(pos.confidence * 100);
-                            const cls = pct >= 80 ? 'text-green-700 bg-green-50' : pct >= 60 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50';
-                            return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono ${cls}`}>{pct}%</span>;
-                          })()}
-                        </td>
-                        <td className="px-3 py-2">
-                          {pos.needsReview
-                            ? <span className="flex items-center gap-1 text-amber-700 text-[10px]"><AlertTriangle size={10} />{pos.reviewReason}</span>
-                            : <span className="text-green-700 text-[10px]">✓</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Scale confirmed banner */}
+            {scaleConfirmed && step === 'scale' && (
+              <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
+                <CheckCircle size={12} />
+                <span>Skala potwierdzona: <strong>{scaleLabel || 'ustawiona'}</strong></span>
+                <button
+                  onClick={() => setScaleConfirmed(false)}
+                  className="ml-auto text-[10px] text-gray-400 hover:text-gray-600 underline"
+                >
+                  Zmień
+                </button>
               </div>
+            )}
 
-              {reviewCount > 0 && (
-                <p className="mt-1.5 text-xs text-amber-700 flex items-center gap-1">
-                  <AlertTriangle size={11} />
-                  {reviewCount} pozycji do ręcznej weryfikacji — zostaną uwzględnione w przedmiarze.
-                </p>
+            {/* Loading */}
+            {isLoading && (
+              <div className="flex items-center gap-2 py-6 justify-center">
+                <Loader2 size={16} className="text-blue-600 animate-spin" />
+                <span className="text-sm text-gray-600">{statusMsg}</span>
+              </div>
+            )}
+
+            {error && (
+              <div className="text-xs text-red-600 bg-red-50 border border-red-100 p-2 rounded flex items-center gap-1.5">
+                <AlertTriangle size={12} className="shrink-0" />{error}
+              </div>
+            )}
+
+            {/* Results table */}
+            {(step === 'result' || step === 'done') && positions.length > 0 && (
+              <div>
+                <div className="text-xs text-gray-500 bg-gray-50 rounded p-2 mb-2 flex items-center gap-3">
+                  <span>Pozycji: <strong className="text-gray-800">{positions.length}</strong></span>
+                  <span className="text-green-700">✓ OK: {positions.filter(p => !p.needsReview).length}</span>
+                  {reviewCount > 0 && (
+                    <span className="flex items-center gap-1 text-amber-700">
+                      <AlertTriangle size={11} /> Do weryfikacji: {reviewCount}
+                    </span>
+                  )}
+                </div>
+
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-50 text-gray-500 border-b">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Pozycja</th>
+                        <th className="px-3 py-2 font-medium">Kategoria</th>
+                        <th className="px-3 py-2 font-medium text-right">Ilość</th>
+                        <th className="px-3 py-2 font-medium">Jm</th>
+                        <th className="px-3 py-2 font-medium text-center">Pewność</th>
+                        <th className="px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {positions.map((pos, i) => (
+                        <tr key={i} className={`hover:bg-gray-50 ${pos.needsReview ? 'bg-amber-50/40' : ''}`}>
+                          <td className="px-3 py-2 text-gray-800 font-medium max-w-[200px]">
+                            <div className="truncate" title={pos.name}>{pos.name}</div>
+                            {pos.legendRef && <div className="text-[10px] text-gray-400">{pos.legendRef}</div>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500 max-w-[120px]">
+                            <div className="truncate" title={pos.category}>{pos.category}</div>
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono text-gray-800">
+                            {pos.count > 0 ? pos.count : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500">{pos.unit}</td>
+                          <td className="px-3 py-2 text-center">
+                            {(() => {
+                              const pct = Math.round(pos.confidence * 100);
+                              const cls = pct >= 80 ? 'text-green-700 bg-green-50' : pct >= 60 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50';
+                              return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono ${cls}`}>{pct}%</span>;
+                            })()}
+                          </td>
+                          <td className="px-3 py-2">
+                            {pos.needsReview
+                              ? <span className="flex items-center gap-1 text-amber-700 text-[10px]"><AlertTriangle size={10} />{pos.reviewReason}</span>
+                              : <span className="text-green-700 text-[10px]">✓</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {reviewCount > 0 && (
+                  <p className="mt-1.5 text-xs text-amber-700 flex items-center gap-1">
+                    <AlertTriangle size={11} />
+                    {reviewCount} pozycji do ręcznej weryfikacji — zostaną uwzględnione.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {step === 'done' && (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                <CheckCircle size={14} />
+                <span>Zapisano {positions.length} pozycji.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+            <button onClick={onClose} className="px-3 py-1.5 text-sm border rounded hover:bg-gray-100">
+              {step === 'done' ? 'Zamknij' : 'Anuluj'}
+            </button>
+            <div className="flex items-center gap-2">
+              {step === 'scale' && (
+                <>
+                  <button
+                    onClick={() => setShowScaleModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded hover:bg-gray-100 text-gray-600"
+                  >
+                    <Settings2 size={13} /> Ustawienia skali
+                  </button>
+                  <button
+                    onClick={run}
+                    disabled={!scaleConfirmed}
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Play size={13} />
+                    {scaleConfirmed ? 'Analizuj rysunek' : 'Najpierw potwierdź skalę'}
+                  </button>
+                </>
+              )}
+              {step === 'result' && positions.length > 0 && (
+                <button
+                  onClick={saveAndCreate}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  <Sparkles size={13} />
+                  Utwórz przedmiar ({positions.filter(p => p.count > 0).length} pozycji)
+                </button>
               )}
             </div>
-          )}
-
-          {step === 'done' && (
-            <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2">
-              <CheckCircle size={14} />
-              <span>Zapisano {positions.length} pozycji. Możesz teraz tworzyć ofertę lub kosztorys z tych danych.</span>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm border rounded hover:bg-gray-100">
-            {step === 'done' ? 'Zamknij' : 'Anuluj'}
-          </button>
-          <div className="flex items-center gap-2">
-            {step === 'scale' && (
-              <button onClick={run} disabled={!scaleConfirmed}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
-                <Play size={13} />
-                {scaleConfirmed ? 'Analizuj rysunek' : 'Najpierw potwierdź skalę'}
-              </button>
-            )}
-            {step === 'result' && positions.length > 0 && (
-              <button onClick={saveAndCreate}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">
-                <Sparkles size={13} />
-                Utwórz przedmiar ({positions.filter(p => p.count > 0).length} pozycji)
-              </button>
-            )}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Scale Settings Modal — identical to PlansWorkspace */}
+      {showScaleModal && (
+        <ScaleSettingsModal
+          currentScaleRatio={currentScaleRatio}
+          aiScaleLoading={aiScaleLoading}
+          onScaleChange={(ratio) => {
+            if (onScaleChange) onScaleChange(ratio);
+            const denom = Math.round(ratio / 0.3528);
+            setScaleLabel(`1:${denom}`);
+            setShowScaleModal(false);
+          }}
+          onCalibrateScale={onCalibrateScale}
+          onAiScaleDetect={onAiScaleDetect}
+          onClose={() => setShowScaleModal(false)}
+        />
+      )}
+    </>
   );
 }
