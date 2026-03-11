@@ -1263,15 +1263,38 @@ export const OffersPage: React.FC = () => {
           selected: false
         });
 
-        // Map sections with items
-        const sectionsList: LocalOfferSection[] = (sectionsRes.data || []).map(s => ({
-          ...s,
-          isExpanded: true,
-          children: [],
-          items: (itemsRes.data || [])
-            .filter((i: OfferItem) => i.section_id === s.id)
-            .map(mapItem)
-        }));
+        // Map all sections flat first
+        const allSectionsMap = new Map<string, LocalOfferSection>();
+        for (const s of (sectionsRes.data || [])) {
+          allSectionsMap.set(s.id, {
+            ...s,
+            isExpanded: true,
+            children: [],
+            items: (itemsRes.data || [])
+              .filter((i: OfferItem) => i.section_id === s.id)
+              .map(mapItem)
+          });
+        }
+
+        // Build tree: attach children to parents
+        const rootSections: LocalOfferSection[] = [];
+        for (const sec of allSectionsMap.values()) {
+          if (sec.parent_id && allSectionsMap.has(sec.parent_id)) {
+            const parent = allSectionsMap.get(sec.parent_id)!;
+            if (!parent.children) parent.children = [];
+            parent.children.push(sec);
+          } else {
+            rootSections.push(sec);
+          }
+        }
+        // Sort children by sort_order
+        const sortChildren = (sections: LocalOfferSection[]) => {
+          sections.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+          for (const s of sections) {
+            if (s.children && s.children.length > 0) sortChildren(s.children);
+          }
+        };
+        sortChildren(rootSections);
 
         // Items without section
         const unsectionedItems = (itemsRes.data || [])
@@ -1279,7 +1302,7 @@ export const OffersPage: React.FC = () => {
           .map(mapItem);
 
         if (unsectionedItems.length > 0) {
-          sectionsList.unshift({
+          rootSections.unshift({
             id: 'unsectioned',
             offer_id: offerId,
             name: 'Pozycje bez sekcji',
@@ -1292,10 +1315,10 @@ export const OffersPage: React.FC = () => {
           });
         }
 
-        setSections(sectionsList);
+        setSections(rootSections);
         // Progressive render: reveal sections one by one to avoid blocking UI
         setSectionsReady(0);
-        const totalSections = sectionsList.length;
+        const totalSections = rootSections.length;
         let revealed = 0;
         const revealNext = () => {
           revealed++;

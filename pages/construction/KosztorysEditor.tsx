@@ -2875,58 +2875,67 @@ export const KosztorysEditorPage: React.FC = () => {
   };
 
   // Helper: populate offer sections & items from estimate data
-  const populateOfferFromEstimate = async (offerId: string) => {
-    // Recursively collect ALL position IDs from a section and its subsections
-    const collectAllPosIds = (sectionId: string): string[] => {
-      const sec = estimateData.sections[sectionId];
-      if (!sec) return [];
-      let ids = [...sec.positionIds];
-      for (const subId of (sec.subsectionIds || [])) {
-        ids = ids.concat(collectAllPosIds(subId));
-      }
-      return ids;
-    };
+  // Recursively collect ALL position IDs from a section and its subsections
+  const collectAllPosIds = (sectionId: string): string[] => {
+    const sec = estimateData.sections[sectionId];
+    if (!sec) return [];
+    let ids = [...sec.positionIds];
+    for (const subId of (sec.subsectionIds || [])) {
+      ids = ids.concat(collectAllPosIds(subId));
+    }
+    return ids;
+  };
 
-    // Batch insert items per section for speed
-    for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
+  const populateOfferFromEstimate = async (offerId: string) => {
+    // Recursively create sections with subsections and their items
+    const createSectionWithItems = async (sectionId: string, sortOrder: number, parentDbId: string | null) => {
       const section = estimateData.sections[sectionId];
-      if (!section) continue;
+      if (!section) return;
 
       const { data: newSection } = await supabase
         .from('offer_sections')
         .insert({
           offer_id: offerId,
           name: section.name,
-          sort_order: sIdx
+          sort_order: sortOrder,
+          parent_id: parentDbId
         })
         .select()
         .single();
 
-      if (newSection) {
-        const allPosIds = collectAllPosIds(sectionId);
-        const itemsToInsert = allPosIds.map((posId, pIdx) => {
+      if (!newSection) return;
+
+      // Insert direct positions of this section
+      if (section.positionIds.length > 0) {
+        const itemsToInsert = section.positionIds.map((posId, pIdx) => {
           const position = estimateData.positions[posId];
           if (!position) return null;
           const posResult = calculationResult?.positions[posId];
-          const quantity = posResult?.quantity || 0;
-          const unitCost = posResult?.unitCost || 0;
           return {
             offer_id: offerId,
             section_id: newSection.id,
             name: position.name,
             description: position.base,
-            quantity,
-            unit_price: unitCost,
+            quantity: posResult?.quantity || 0,
+            unit_price: posResult?.unitCost || 0,
             sort_order: pIdx,
             is_optional: false
           };
         }).filter(Boolean);
 
-        // Batch insert (chunks of 100 for Supabase limits)
         for (let i = 0; i < itemsToInsert.length; i += 100) {
           await supabase.from('offer_items').insert(itemsToInsert.slice(i, i + 100));
         }
       }
+
+      // Recursively create subsections
+      for (const [subIdx, subId] of (section.subsectionIds || []).entries()) {
+        await createSectionWithItems(subId, subIdx, newSection.id);
+      }
+    };
+
+    for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
+      await createSectionWithItems(sectionId, sIdx, null);
     }
   };
 
@@ -2948,6 +2957,39 @@ export const KosztorysEditorPage: React.FC = () => {
       const vatAmount = isExempt ? 0 : totalNet * (vatRate / 100);
       const totalGross = totalNet + vatAmount;
 
+      // Extract client/project data from title page and request
+      const clientNipMatch = titlePageData.clientAddress.match(/NIP:\s*(\S+)/);
+      const clientNip = clientNipMatch ? clientNipMatch[1] : '';
+      const clientAddrClean = titlePageData.clientAddress.replace(/\nNIP:.*/, '').trim();
+
+      // Try to find or create contractor from client name+NIP
+      let clientId: string | null = null;
+      if (titlePageData.clientName.trim()) {
+        // Look up existing contractor by NIP or name
+        if (clientNip) {
+          const { data: existing } = await supabase
+            .from('contractors')
+            .select('id')
+            .eq('company_id', currentUser.company_id)
+            .eq('nip', clientNip)
+            .limit(1)
+            .single();
+          if (existing) clientId = existing.id;
+        }
+        if (!clientId) {
+          const { data: existing } = await supabase
+            .from('contractors')
+            .select('id')
+            .eq('company_id', currentUser.company_id)
+            .ilike('name', titlePageData.clientName.trim())
+            .limit(1)
+            .single();
+          if (existing) clientId = existing.id;
+        }
+      }
+
+      const publicToken = crypto.randomUUID();
+
       const { data: newOffer, error: offerError } = await supabase
         .from('offers')
         .insert({
@@ -2962,7 +3004,21 @@ export const KosztorysEditorPage: React.FC = () => {
           valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           notes: `Wygenerowano z kosztorysu: ${estimate.settings.name}`,
           internal_notes: `kosztorys_source:${estimate.id}`,
-          created_by_id: currentUser.id
+          created_by_id: currentUser.id,
+          client_id: clientId,
+          object_name: titlePageData.orderName || estimate.settings.name || null,
+          object_address: titlePageData.orderAddress || null,
+          public_token: publicToken,
+          public_url: `/#/offer/${publicToken}`,
+          print_settings: {
+            client_data: {
+              client_name: titlePageData.clientName,
+              nip: clientNip,
+              company_street: clientAddrClean,
+              investment_name: titlePageData.orderName || estimate.settings.name || '',
+              object_street: titlePageData.orderAddress || '',
+            }
+          }
         })
         .select()
         .single();
@@ -5986,10 +6042,12 @@ export const KosztorysEditorPage: React.FC = () => {
         }
         .print-section {
           page-break-after: always;
-          padding: 0;
+          padding: 0 !important;
+          max-width: 100%;
+          box-sizing: border-box;
         }
         .print-section:last-child { page-break-after: auto; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 1em; table-layout: auto; }
         th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
         th { background: #f5f5f5; font-weight: 600; }
         .text-right { text-align: right; }
@@ -9553,7 +9611,7 @@ export const KosztorysEditorPage: React.FC = () => {
                                     <td className="border border-gray-400 px-2 py-1"></td>
                                     <td className="border border-gray-400 px-2 py-1 font-medium" colSpan={7}>{section.name}</td>
                                   </tr>
-                                  {section.positionIds.map((posId, pIdx) => {
+                                  {collectAllPosIds(sectionId).map((posId, pIdx) => {
                                     const position = estimateData.positions[posId];
                                     if (!position) return null;
                                     const result = calculationResult?.positions[posId];
@@ -9630,7 +9688,7 @@ export const KosztorysEditorPage: React.FC = () => {
                                       <span className="font-medium">{section.name}</span>
                                     </td>
                                   </tr>
-                                  {section.positionIds.map((posId, pIdx) => {
+                                  {collectAllPosIds(sectionId).map((posId, pIdx) => {
                                     const position = estimateData.positions[posId];
                                     if (!position) return null;
                                     const result = calculationResult?.positions[posId];
@@ -10006,7 +10064,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           return (
                             <React.Fragment key={sectionId}>
                               <h3 className="text-sm font-bold mt-6 mb-2">{sIdx + 1}. {section.name}</h3>
-                              {section.positionIds.map((posId, pIdx) => {
+                              {collectAllPosIds(sectionId).map((posId, pIdx) => {
                                 const position = estimateData.positions[posId];
                                 if (!position) return null;
                                 const result = calculationResult?.positions[posId];
@@ -10186,7 +10244,7 @@ export const KosztorysEditorPage: React.FC = () => {
                                           <td className="border border-gray-400 px-1 py-1 font-bold">{sIdx + 1}</td>
                                           <td className="border border-gray-400 px-1 py-1 font-bold" colSpan={9}>{section.name}</td>
                                         </tr>
-                                        {section.positionIds.map((posId, pIdx) => {
+                                        {collectAllPosIds(sectionId).map((posId, pIdx) => {
                                           const position = estimateData.positions[posId];
                                           if (!position) return null;
                                           const result = calculationResult?.positions[posId];
