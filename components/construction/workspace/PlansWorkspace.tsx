@@ -20,6 +20,7 @@ import ViewerBottomToolbar from './ViewerBottomToolbar';
 import RuleEditorDrawer from './RuleEditorDrawer';
 import AutodeskViewer, { type SelectedObjectInfo } from '../AutodeskViewer';
 import PdfAnalysisModal from '../PdfAnalysisModal';
+import AiAutoTakeoffButton from '../AiAutoTakeoffButton';
 import DxfAnalysisModal from '../DxfAnalysisModal';
 import { parseDxf, renderDxfToBlobUrl, type IDxf, type DxfViewBoxInfo, screenToDxfCoords, findNearestEntity } from '../../../lib/dxfRenderer';
 import type { DxfAnalysis } from '../../../lib/dxfAnalyzer';
@@ -171,6 +172,7 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Analysis modals ----
   const [showPdfAnalysis, setShowPdfAnalysis] = useState(false);
   const [showDxfAnalysis, setShowDxfAnalysis] = useState(false);
+  const [pdfPageBase64, setPdfPageBase64] = useState<string>('');
 
   // ---- Scale calibration ----
   const [isCalibrating, setIsCalibrating] = useState(false);
@@ -750,6 +752,34 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Analyze ----
 
   const handleAnalyze = useCallback(async () => {
+    // For PDF files — render current page and open PDF analysis (AI auto-takeoff)
+    if (activeFile && getFileFormat(activeFile.original_filename || activeFile.name, activeFile.mime_type) === 'pdf' && pdfDoc) {
+      try {
+        const page = await pdfDoc.getPage(pdfPage);
+        const baseVp = page.getViewport({ scale: 1 });
+        const basePx = baseVp.width * baseVp.height;
+        const maxPixels = 16_000_000;
+        let renderScale = 3;
+        if (basePx * 9 < 4_000_000) renderScale = 4;
+        if (basePx * renderScale * renderScale > maxPixels) {
+          renderScale = Math.max(2, Math.floor(Math.sqrt(maxPixels / basePx)));
+        }
+        const viewport = page.getViewport({ scale: renderScale });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d')!;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+        setPdfPageBase64(base64);
+      } catch {
+        setPdfPageBase64('');
+      }
+      setShowPdfAnalysis(true);
+      return;
+    }
+    // For APS/DWG files — use Autodesk analysis
     if (!selectedPlan?.aps_urn) return;
     dispatch({ type: 'SET_STATUS', key: 'analysisStatus', status: 'loading' });
     try {
@@ -766,7 +796,7 @@ export const PlansWorkspace: React.FC = () => {
       }]);
       notify(err.message || 'Blad analizy', 'error');
     }
-  }, [selectedPlan, notify]);
+  }, [selectedPlan, activeFile, pdfDoc, pdfPage, notify]);
 
   // ---- AI Recognition ----
 
@@ -3115,7 +3145,7 @@ export const PlansWorkspace: React.FC = () => {
             viewerMode={ws.viewerMode}
             onSetMode={(mode) => dispatch({ type: 'SET_VIEWER_MODE', mode })}
             canConvert={!!activeFile && needsConversion && ws.conversionStatus !== 'loading'}
-            canAnalyze={!!activeFile?.aps_urn && ws.analysisStatus !== 'loading'}
+            canAnalyze={(!!activeFile?.aps_urn || (!!activeFile && getFileFormat(activeFile.original_filename || activeFile.name, activeFile.mime_type) === 'pdf' && !!pdfDoc)) && ws.analysisStatus !== 'loading'}
             canAiRecognize={objects.length > 0 && ws.aiStatus !== 'loading'}
             canGenerateBoq={objects.length > 0 && ws.boqStatus !== 'loading'}
             canCompare={!!activeFile?.aps_urn}
@@ -3674,6 +3704,29 @@ export const PlansWorkspace: React.FC = () => {
           onAnalysisComplete={handlePdfAnalysisComplete}
           onClose={() => setShowPdfAnalysis(false)}
         />
+      )}
+
+      {/* AI Auto-Takeoff Button — floating over PDF modal when analysis is open */}
+      {showPdfAnalysis && pdfPageBase64 && (
+        <div className="fixed bottom-6 right-6 z-[9999]">
+          <AiAutoTakeoffButton
+            pageImageBase64={pdfPageBase64}
+            styleGroups={[]}
+            onRulesGenerated={(newRules) => {
+              setRules(prev => [...prev, ...newRules.map(r => ({
+                id: r.id, name: r.name, category: r.category,
+                matchType: r.matchType as any, matchPattern: r.matchPattern,
+                quantitySource: r.quantitySource as any, unit: r.unit,
+                multiplier: r.multiplier, isDefault: r.isDefault, enabled: true,
+              }))]);
+              dispatch({ type: 'SET_RIGHT_TAB', tab: 'takeoff' });
+              setShowPdfAnalysis(false);
+              notify('Reguły AI dodane — uruchom przedmiar');
+            }}
+            onLegendDetected={() => {}}
+            className="shadow-2xl text-sm px-4 py-2"
+          />
+        </div>
       )}
 
       {/* DXF Analysis Modal */}
