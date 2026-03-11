@@ -1458,23 +1458,25 @@ export const PlansWorkspace: React.FC = () => {
         return acc;
       }, {});
 
-      for (const [catIdx, [catName, items]] of Object.entries(byCategory).entries()) {
-        const { data: section } = await supabase
+      const categoryEntries = Object.entries(byCategory);
+      for (let catIdx = 0; catIdx < categoryEntries.length; catIdx++) {
+        const [catName, catItems] = categoryEntries[catIdx];
+        const { data: section, error: secErr } = await supabase
           .from('offer_sections')
           .insert({
             offer_id: newOffer.id,
             name: catName,
-            sort_order: catIdx as number,
+            sort_order: catIdx,
           })
           .select()
           .single();
 
-        if (!section) continue;
+        if (secErr || !section) { console.error('section insert error:', secErr); continue; }
 
-        const itemsToInsert = (items as any[]).map((p: any, pIdx: number) => ({
+        const itemsToInsert = (catItems as any[]).map((p: any, pIdx: number) => ({
           offer_id: newOffer.id,
           section_id: section.id,
-          name: p.name,
+          name: p.name || p.type || 'Pozycja',
           description: p.description || '',
           quantity: p.count || 0,
           unit: p.unit || 'szt.',
