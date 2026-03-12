@@ -1219,7 +1219,6 @@ export const PlansWorkspace: React.FC = () => {
 
       // Update local state to point to new version
       if (newPlan) {
-        console.log('New version saved successfully:', newPlan.id, 'version:', newPlan.version);
         setSelectedPlan(newPlan);
         // Keep old version in list (marked not current), add new version
         setAllPlans(prev => [
