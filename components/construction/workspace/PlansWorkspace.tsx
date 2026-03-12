@@ -657,14 +657,13 @@ export const PlansWorkspace: React.FC = () => {
         const takeoffRows: BoqRow[] = (takeoffData as any[]).map((t: any, i: number) => ({
           id: t.id || `takeoff-${i}`,
           code: `P${String(i + 1).padStart(3, '0')}`,
-          name: t.name || 'Pozycja',
+          name: t.rule_name || 'Pozycja',
           category: t.category || 'Inne',
           quantity: typeof t.quantity === 'number' ? t.quantity : 0,
           unit: t.unit || 'szt.',
-          status: t.needs_review ? 'needs-review' as const : 'approved' as const,
+          status: 'approved' as const,
           sourceType: 'ai-recognition' as const,
           sourceObjectIds: [],
-          confidence: t.confidence,
           level: undefined,
         }));
         setBoqRows(takeoffRows);

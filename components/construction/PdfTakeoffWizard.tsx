@@ -441,22 +441,19 @@ export default function PdfTakeoffWizard({
         // Delete old results for this plan page first
         await supabase.from('drawing_takeoff_results')
           .delete()
-          .eq('plan_id', planId);
+          .eq('plan_id', planId)
+          .eq('page_number', pageNumber);
 
         await supabase.from('drawing_takeoff_results').insert(
           positions.map((p, i) => ({
             plan_id: planId,
-            company_id: companyId,
-            name: p.name,
+            rule_id: `ai-${i}`,
+            rule_name: p.name,
             category: p.category,
             quantity: p.count,
             unit: p.unit,
-            description: p.description,
-            confidence: p.confidence,
-            needs_review: p.needsReview,
-            review_reason: p.reviewReason,
-            source: p.source,
-            sort_order: i,
+            entity_count: Math.round(p.count),
+            page_number: pageNumber,
           }))
         );
       }
