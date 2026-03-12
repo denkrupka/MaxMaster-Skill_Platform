@@ -3224,6 +3224,27 @@ export const OffersPage: React.FC = () => {
   };
 
   // Handle template fill
+  // Detect price/value columns from header row by keyword matching
+  const detectPriceValueColumns = (headerRow: any[], colQty: number) => {
+    let colPrice = -1;
+    let colValue = -1;
+    const priceKeywords = ['cena', 'cena jedn', 'c.j.', 'cj', 'price', 'jedn'];
+    const valueKeywords = ['wartość', 'wartosc', 'wartość netto', 'kwota', 'value', 'razem', 'netto'];
+
+    for (let c = 0; c < headerRow.length; c++) {
+      const cell = String(headerRow[c] ?? '').toLowerCase().trim();
+      if (!cell) continue;
+      if (colPrice === -1 && priceKeywords.some(k => cell.includes(k))) colPrice = c;
+      if (colValue === -1 && valueKeywords.some(k => cell.includes(k)) && c !== colPrice) colValue = c;
+    }
+
+    // Fallback: if we found qty, price is usually qty+1, value is qty+2
+    if (colPrice === -1 && colQty >= 0) colPrice = colQty + 1;
+    if (colValue === -1 && colPrice >= 0) colValue = colPrice + 1;
+
+    return { colPrice, colValue };
+  };
+
   const handleFillTemplate = async (file: File) => {
     setTemplateLoading(true);
     setTemplateError(null);
@@ -3237,10 +3258,11 @@ export const OffersPage: React.FC = () => {
       if (ext === 'xlsx' || ext === 'xls') {
         setTemplateProgress('Analiza struktury Excel...');
         const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: 'array' });
+        // Read preserving styles, formulas, merges etc.
+        const workbook = XLSX.read(buffer, { type: 'array', cellStyles: true, cellFormula: true });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
 
         // Send to AI for structure analysis
         const compactRows = rows.map(row =>
@@ -3254,13 +3276,37 @@ export const OffersPage: React.FC = () => {
 
         if (aiErr || !aiData?.success) throw new Error('AI nie mogło rozpoznać struktury szablonu');
 
+        const analysis = aiData.data;
+        const headerRowIdx = analysis.headerRow ?? 0;
+        const headerRowData = rows[headerRowIdx] || [];
+        const colName = analysis.columns?.name ?? -1;
+        const colQty = analysis.columns?.qty ?? -1;
+        const { colPrice, colValue } = detectPriceValueColumns(headerRowData, colQty);
+
+        // Count position rows (non-section, non-ignore)
+        const structureRows = new Set((analysis.structure || []).map((s: any) => s.row));
+        let positionCount = 0;
+        for (let r = headerRowIdx + 1; r < rows.length; r++) {
+          if (structureRows.has(r)) continue;
+          const row = rows[r];
+          if (!row || row.every((c: any) => c == null || String(c).trim() === '')) continue;
+          if (colName >= 0 && String(row[colName] || '').trim()) positionCount++;
+        }
+
         setTemplateData({
           type: 'xlsx',
           workbook,
           sheetName,
           rows,
-          analysis: aiData.data,
-          fileName: file.name
+          analysis,
+          fileName: file.name,
+          colName,
+          colQty,
+          colPrice,
+          colValue,
+          headerRowIdx,
+          positionCount,
+          structureRows
         });
         setTemplateParsed(true);
       } else if (ext === 'pdf') {
@@ -3304,6 +3350,7 @@ export const OffersPage: React.FC = () => {
   const handleDownloadFilledTemplate = async () => {
     if (!templateData) return;
     setTemplateLoading(true);
+    setTemplateError(null);
     setTemplateProgress('Wypełnianie szablonu...');
 
     try {
@@ -3319,62 +3366,96 @@ export const OffersPage: React.FC = () => {
       );
 
       if (templateData.type === 'xlsx') {
+        // Write directly into the original workbook cells — preserves formatting
         const workbook = templateData.workbook;
         const sheet = workbook.Sheets[templateData.sheetName];
-        const analysis = templateData.analysis;
+        const { colName, colQty, colPrice, colValue, headerRowIdx, rows, structureRows } = templateData;
 
-        // Find price/value columns from AI analysis
-        const colQty = analysis.columns?.qty ?? -1;
-        const colName = analysis.columns?.name ?? -1;
-        const headerRow = analysis.headerRow ?? 0;
+        let filledCount = 0;
+        const usedOfferItems = new Set<number>();
 
-        // Try to match template rows with offer items by name similarity
-        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-        for (let rowIdx = headerRow + 1; rowIdx < rows.length; rowIdx++) {
+        for (let rowIdx = headerRowIdx + 1; rowIdx < rows.length; rowIdx++) {
+          if (structureRows.has(rowIdx)) continue;
           const row = rows[rowIdx];
-          if (!row || row.length === 0) continue;
+          if (!row || row.every((c: any) => c == null || String(c).trim() === '')) continue;
 
           const rowName = colName >= 0 ? String(row[colName] || '').toLowerCase().trim() : '';
           if (!rowName) continue;
 
-          // Find matching offer item
-          const match = allItems.find(item => {
-            const itemName = (item.name || '').toLowerCase().trim();
-            return itemName.includes(rowName) || rowName.includes(itemName) ||
-              (rowName.length > 5 && itemName.length > 5 &&
-               (rowName.substring(0, 10) === itemName.substring(0, 10)));
-          });
+          // Match template row to offer item by name
+          let bestIdx = -1;
+          let bestScore = 0;
+          for (let i = 0; i < allItems.length; i++) {
+            if (usedOfferItems.has(i)) continue;
+            const itemName = (allItems[i].name || '').toLowerCase().trim();
+            if (!itemName) continue;
 
-          if (match) {
-            // Fill unit price column (look for it near qty column)
-            const priceCol = colQty >= 0 ? colQty + 1 : row.length - 2;
-            const valueCol = priceCol + 1;
+            let score = 0;
+            // Exact match
+            if (itemName === rowName) { score = 100; }
+            // One contains the other
+            else if (rowName.includes(itemName) || itemName.includes(rowName)) {
+              score = 80;
+            }
+            // First N chars match
+            else {
+              const minLen = Math.min(rowName.length, itemName.length, 20);
+              let matchLen = 0;
+              for (let c = 0; c < minLen; c++) {
+                if (rowName[c] === itemName[c]) matchLen++; else break;
+              }
+              if (matchLen >= 8) score = 50 + matchLen;
+            }
+            // Word overlap
+            if (score === 0) {
+              const rowWords = rowName.split(/\s+/).filter(w => w.length > 2);
+              const itemWords = itemName.split(/\s+/).filter(w => w.length > 2);
+              const overlap = rowWords.filter(w => itemWords.some(iw => iw.includes(w) || w.includes(iw)));
+              if (overlap.length >= 2 && overlap.length >= rowWords.length * 0.5) {
+                score = 30 + overlap.length * 5;
+              }
+            }
 
-            const cellPrice = XLSX.utils.encode_cell({ r: rowIdx, c: priceCol });
-            const cellValue = XLSX.utils.encode_cell({ r: rowIdx, c: valueCol });
-            sheet[cellPrice] = { t: 'n', v: match.unit_price };
-            sheet[cellValue] = { t: 'n', v: match.total };
+            if (score > bestScore) { bestScore = score; bestIdx = i; }
+          }
+
+          if (bestIdx >= 0 && bestScore >= 30) {
+            const match = allItems[bestIdx];
+            usedOfferItems.add(bestIdx);
+
+            // Write unit price — preserve existing cell style
+            if (colPrice >= 0) {
+              const cellAddr = XLSX.utils.encode_cell({ r: rowIdx, c: colPrice });
+              const existingCell = sheet[cellAddr];
+              sheet[cellAddr] = {
+                t: 'n',
+                v: match.unit_price,
+                ...(existingCell?.s ? { s: existingCell.s } : {}),
+                ...(existingCell?.z ? { z: existingCell.z } : {})
+              };
+            }
+            // Write total value — preserve existing cell style
+            if (colValue >= 0) {
+              const cellAddr = XLSX.utils.encode_cell({ r: rowIdx, c: colValue });
+              const existingCell = sheet[cellAddr];
+              sheet[cellAddr] = {
+                t: 'n',
+                v: match.total,
+                ...(existingCell?.s ? { s: existingCell.s } : {}),
+                ...(existingCell?.z ? { z: existingCell.z } : {})
+              };
+            }
+            filledCount++;
           }
         }
 
-        // Add summary at bottom
-        const lastRow = rows.length + 1;
-        const sumCell = XLSX.utils.encode_cell({ r: lastRow, c: (colName >= 0 ? colName : 0) });
-        const sumValCell = XLSX.utils.encode_cell({ r: lastRow, c: (colQty >= 0 ? colQty + 2 : rows[0]?.length ? rows[0].length - 1 : 5) });
-        sheet[sumCell] = { t: 's', v: 'RAZEM NETTO:' };
-        const totalNetto = totals.total + totals.surchargeAmount;
-        sheet[sumValCell] = { t: 'n', v: totalNetto };
+        setTemplateProgress(`Wypełniono ${filledCount} z ${allItems.length} pozycji. Zapisywanie...`);
 
-        // Update sheet range
-        const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
-        range.e.r = Math.max(range.e.r, lastRow);
-        sheet['!ref'] = XLSX.utils.encode_range(range);
-
+        // Write back the same workbook — formatting, merges, formulas preserved
         const outName = templateData.fileName.replace(/\.(xlsx|xls)$/i, '_wypelniony.xlsx');
         XLSX.writeFile(workbook, outName);
       } else {
-        // For PDF templates - generate filled Excel based on parsed structure
+        // For PDF templates — create new Excel with offer data
         const wsData: any[][] = [
           ['WYPEŁNIONY SZABLON'],
           ['Źródło:', templateData.fileName],
@@ -5073,9 +5154,22 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   <p className="text-sm text-green-700">
                     {templateData?.type === 'xlsx' ? 'Excel' : 'PDF'}: {templateData?.fileName}
                   </p>
-                  <p className="text-xs text-green-600 mt-1">
-                    AI rozpoznało strukturę tabeli. Gotowe do wypełnienia cenami z oferty.
-                  </p>
+                  {templateData?.type === 'xlsx' && (
+                    <div className="text-xs text-green-600 mt-1 space-y-0.5">
+                      <p>Pozycje w szablonie: <strong>{templateData.positionCount}</strong> | Pozycje w ofercie: <strong>{sections.reduce((a: number, s: any) => a + s.items.length, 0)}</strong></p>
+                      <p>
+                        Kolumny: Nazwa={templateData.colName >= 0 ? String.fromCharCode(65 + templateData.colName) : '?'},
+                        Ilość={templateData.colQty >= 0 ? String.fromCharCode(65 + templateData.colQty) : '?'},
+                        Cena={templateData.colPrice >= 0 ? String.fromCharCode(65 + templateData.colPrice) : '?'},
+                        Wartość={templateData.colValue >= 0 ? String.fromCharCode(65 + templateData.colValue) : '?'}
+                      </p>
+                    </div>
+                  )}
+                  {templateData?.type === 'pdf' && (
+                    <p className="text-xs text-green-600 mt-1">
+                      Zostanie utworzony nowy plik Excel z danymi z oferty.
+                    </p>
+                  )}
                 </div>
               </div>
 
