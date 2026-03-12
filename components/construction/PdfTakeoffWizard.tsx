@@ -523,7 +523,7 @@ export default function PdfTakeoffWizard({
           number: offerNumber,
           name: `Przedmiar AI — Strona ${pageNumber}`,
           status: 'draft',
-          currency_id: 'PLN',
+          currency_id: 1, // Default PLN
         })
         .select()
         .single();

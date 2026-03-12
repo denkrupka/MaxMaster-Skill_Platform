@@ -1096,12 +1096,14 @@ export const PlansWorkspace: React.FC = () => {
       if (error) {
         console.error('handleHistory error:', error);
       }
-      console.log('handleHistory data:', data);
       if (data && data.length > 0) {
         setVersionHistory(data);
+        // Also populate compareVersionList with other versions (not current)
+        setCompareVersionList(data.filter(v => v.id !== selectedPlan.id));
       } else if (!data || data.length === 0) {
         // If no versions found by name, show at least the current plan
         setVersionHistory([selectedPlan]);
+        setCompareVersionList([]);
       }
     } catch (err) {
       console.error('handleHistory exception:', err);
