@@ -11,6 +11,7 @@ import type {
   WorkerState, WorkerCurrentStatus, TimeActionType, Department
 } from '../../types';
 import { SectionTabs } from '../../components/SectionTabs';
+import { EmployeeBottomNav } from '../../components/EmployeeBottomNav';
 
 // ────────────────────────────────────────────────────────────────
 // Helpers
@@ -465,16 +466,16 @@ export const EmployeeAttendancePage = () => {
           </label>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3">
+        {/* Action Buttons — large PWA-style for mobile */}
+        <div className="flex flex-col sm:flex-row gap-3">
           {currentStatus === 'offline' && (
             <button
               disabled={actionLoading}
               onClick={() => performAction('work_start')}
-              className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-bold rounded-xl shadow-sm transition-colors text-sm sm:text-base"
+              className="flex items-center justify-center gap-3 w-full sm:w-auto px-8 py-5 bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:bg-green-400 text-white font-bold rounded-2xl shadow-md transition-colors text-lg"
             >
-              <Play size={20} />
-              Rozpocznij prace
+              <Play size={24} />
+              Zaloguj przyjście
             </button>
           )}
 
@@ -483,18 +484,18 @@ export const EmployeeAttendancePage = () => {
               <button
                 disabled={actionLoading}
                 onClick={() => performAction('break_start')}
-                className="flex items-center gap-2 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white font-bold rounded-xl shadow-sm transition-colors text-sm sm:text-base"
+                className="flex items-center justify-center gap-3 w-full sm:w-auto px-8 py-5 bg-yellow-500 hover:bg-yellow-600 active:bg-yellow-700 disabled:bg-yellow-300 text-white font-bold rounded-2xl shadow-md transition-colors text-base"
               >
-                <Coffee size={20} />
+                <Coffee size={22} />
                 Przerwa
               </button>
               <button
                 disabled={actionLoading}
                 onClick={() => performAction('work_finish')}
-                className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold rounded-xl shadow-sm transition-colors text-sm sm:text-base"
+                className="flex items-center justify-center gap-3 w-full sm:w-auto px-8 py-5 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-red-400 text-white font-bold rounded-2xl shadow-md transition-colors text-lg"
               >
-                <Square size={20} />
-                Zakoncz prace
+                <Square size={24} />
+                Zaloguj wyjście
               </button>
             </>
           )}
@@ -893,6 +894,7 @@ export const EmployeeAttendancePage = () => {
           </div>
         </div>
       )}
+      <EmployeeBottomNav />
     </div>
   );
 };

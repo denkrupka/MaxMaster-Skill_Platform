@@ -5,6 +5,7 @@ import { GlobalSearch } from './GlobalSearch';
 import { Sidebar } from './Sidebar';
 import { NotificationBell, Toast } from './NotificationSystem';
 import { useAppContext } from '../context/AppContext';
+import { OnboardingWizard } from './OnboardingWizard';
 import { Role } from '../types';
 import { ROLE_LABELS } from '../constants';
 
@@ -13,6 +14,18 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { state, getEffectiveRole } = useAppContext();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Show onboarding wizard for company_admin if onboarding not completed
+  useEffect(() => {
+    if (
+      state.currentUser?.role === 'company_admin' &&
+      state.currentCompany &&
+      state.currentCompany.onboarding_completed === false
+    ) {
+      setShowOnboarding(true);
+    }
+  }, [state.currentUser?.role, state.currentCompany?.onboarding_completed, state.currentCompany?.id]);
 
   // Listen for external collapse/expand requests (e.g. from workspace views)
   useEffect(() => {
@@ -67,7 +80,7 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
                   <span className="hidden sm:inline">Szukaj...</span>
                   <kbd className="hidden lg:inline-block text-xs bg-white border border-slate-200 rounded px-1 font-mono">Ctrl+K</kbd>
                 </button>
-                {(effectiveRole === Role.HR || effectiveRole === Role.DORADCA) && (
+                {(effectiveRole === Role.HR || effectiveRole === Role.DORADCA || effectiveRole === Role.COMPANY_ADMIN) && (
                     <NotificationBell />
                 )}
                 {/* Desktop Profile Hint (Optional, kept minimal) */}
@@ -95,6 +108,9 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
 
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <Toast />
+      {showOnboarding && (
+        <OnboardingWizard onClose={() => setShowOnboarding(false)} />
+      )}
     </div>
   );
 };

@@ -7,6 +7,7 @@ import { calculateSalary } from '../../services/salaryService';
 import { SkillStatus, ContractType, VerificationType, Role } from '../../types';
 import { CONTRACT_TYPE_LABELS } from '../../constants';
 import { Button } from '../../components/Button';
+import { EmployeeBottomNav } from '../../components/EmployeeBottomNav';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 
 export const EmployeeDashboard = () => {
@@ -638,6 +639,7 @@ export const EmployeeDashboard = () => {
                 initialIndex={fileViewer.index}
                 title={fileViewer.title}
             />
+            <EmployeeBottomNav />
         </div>
     );
 };

@@ -198,6 +198,53 @@ serve(async (req) => {
 
     console.log('User record created for:', normalizedEmail)
 
+    // 6b. Create referral record + grant bonus_months to both companies
+    if (referralCompanyId) {
+      try {
+        // Create referral record
+        await supabaseAdmin
+          .from('referrals')
+          .insert([{
+            referrer_company_id: referralCompanyId,
+            referred_company_id: newCompany.id,
+            status: 'pending',
+            bonus_months: 1
+          }])
+
+        // Grant +1 bonus month to the referred (new) company
+        await supabaseAdmin
+          .from('companies')
+          .update({ bonus_months: 1 })
+          .eq('id', newCompany.id)
+
+        // Grant +1 bonus month to the referrer company
+        await supabaseAdmin.rpc('increment_bonus_months', {
+          company_id_param: referralCompanyId,
+          months_delta: 1
+        }).then(({ error }) => {
+          if (error) {
+            // Fallback if RPC not available: direct SQL increment
+            return supabaseAdmin
+              .from('companies')
+              .select('bonus_months')
+              .eq('id', referralCompanyId)
+              .maybeSingle()
+              .then(({ data: refCoData }) => {
+                const current = refCoData?.bonus_months || 0
+                return supabaseAdmin
+                  .from('companies')
+                  .update({ bonus_months: current + 1 })
+                  .eq('id', referralCompanyId)
+              })
+          }
+        })
+
+        console.log('Referral record created, bonus months granted')
+      } catch (refErr) {
+        console.warn('Referral processing error (non-fatal):', refErr)
+      }
+    }
+
     // 7. Create CRM company record for sales team
     const employeeCountNum = employeeCount
       ? parseInt(String(employeeCount).replace(/[^0-9]/g, '')) || null

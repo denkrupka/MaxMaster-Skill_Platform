@@ -15,6 +15,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { Project, GanttTask, GanttDependency, GanttDependencyType, Offer, KosztorysEstimate } from '../../types';
@@ -193,6 +194,7 @@ const ContextMenu: React.FC<{
 
 export const GanttPage: React.FC = () => {
   const { state } = useAppContext();
+  const navigate = useNavigate();
   const { currentUser, users } = state;
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -912,6 +914,16 @@ export const GanttPage: React.FC = () => {
 
   const PRIORITY_COLORS: Record<string, string> = {
     low: '#94a3b8', normal: '#3b82f6', high: '#f59e0b', critical: '#ef4444'
+  };
+
+  // Status-based bar color: todo=grey, in_progress=blue, done=green, overdue=red
+  const getTaskBarColor = (task: GanttTaskWithChildren): string => {
+    if (criticalPathIds.has(task.id)) return '#fca5a5';
+    const deadlineStatus = getDeadlineStatus(task);
+    if (deadlineStatus === 'overdue') return '#ef4444';
+    if (task.progress >= 100) return '#22c55e';
+    if (task.progress > 0) return '#3b82f6';
+    return '#94a3b8';
   };
 
   const ROW_HEIGHT = 40;
@@ -2702,6 +2714,11 @@ export const GanttPage: React.FC = () => {
             {[2,3,4,5,6].map(w => <option key={w} value={w}>{w} tyg.</option>)}
           </select>
         )}
+        <button onClick={() => setShowAdvancedPanel(showAdvancedPanel === 'resources' ? null : 'resources')}
+          title="Widok zasobów — kto czym zajęty każdego dnia"
+          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${showAdvancedPanel === 'resources' ? 'bg-cyan-100 text-cyan-700' : 'hover:bg-slate-100 text-slate-600'}`}>
+          <Users className="w-3 h-3" /> Zasoby
+        </button>
         <button onClick={() => setShowAdvancedPanel(showAdvancedPanel === 'zones' ? null : 'zones')}
           title="Strefy / Piętra"
           className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${showAdvancedPanel === 'zones' ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-600'}`}>
@@ -3035,14 +3052,14 @@ export const GanttPage: React.FC = () => {
                               left: dragPreview?.taskId === task.id ? dragPreview.left : pos.left,
                               width: Math.max(dragPreview?.taskId === task.id ? dragPreview.width : pos.width, 4),
                               top: (ROW_HEIGHT - 20) / 2, height: 20,
-                              backgroundColor: criticalPathIds.has(task.id) ? '#fca5a5' : (task.color || '#93c5fd'),
+                              backgroundColor: getTaskBarColor(task),
                               cursor: dragState?.taskId === task.id ? 'grabbing' : 'grab',
                               opacity: dragPreview?.taskId === task.id ? 0.85 : 1
                             }}
                             onMouseDown={(e) => handleBarMouseDown(e, task, 'move')}
                             title={`${title}\n${task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : ''} → ${task.end_date ? new Date(task.end_date).toLocaleDateString('pl-PL') : ''}\nCzas trwania: ${task.duration || '–'} d.\nPostęp: ${task.progress || 0}%`}>
                             {task.progress > 0 && (
-                              <div className="absolute left-0 top-0 bottom-0 rounded" style={{ width: `${Math.min(task.progress, 100)}%`, backgroundColor: criticalPathIds.has(task.id) ? '#ef4444' : '#3b82f6' }} />
+                              <div className="absolute left-0 top-0 bottom-0 rounded" style={{ width: `${Math.min(task.progress, 100)}%`, backgroundColor: task.progress >= 100 ? '#16a34a' : criticalPathIds.has(task.id) ? '#ef4444' : '#2563eb' }} />
                             )}
                             {/* Progress text on wider bars */}
                             {(dragPreview?.taskId === task.id ? dragPreview.width : pos.width) > 60 && (
@@ -3282,6 +3299,26 @@ export const GanttPage: React.FC = () => {
                     <option value="">Nie przypisano</option>
                     {users.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)}
                   </select>
+                  {/* Brigade conflict check */}
+                  {phaseForm.assigned_to_id && phaseForm.start_date && phaseForm.end_date && (() => {
+                    const conflictTasks = allFlatTasks.filter(t =>
+                      t.id !== editingPhase?.id &&
+                      t.assigned_to_id === phaseForm.assigned_to_id &&
+                      t.start_date && t.end_date &&
+                      new Date(t.start_date) <= new Date(phaseForm.end_date) &&
+                      new Date(t.end_date) >= new Date(phaseForm.start_date)
+                    );
+                    if (conflictTasks.length === 0) return null;
+                    const u = users.find(u => u.id === phaseForm.assigned_to_id);
+                    return (
+                      <div className="flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded-lg mt-1 text-xs text-amber-700">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <strong>{u?.first_name} {u?.last_name}</strong> jest już zajęty w tym czasie ({conflictTasks.length} zadań): {conflictTasks.slice(0, 2).map(t => t.title).join(', ')}{conflictTasks.length > 2 ? ` +${conflictTasks.length - 2} więcej` : ''}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Nadzorujący (starszy)</label>
@@ -3540,6 +3577,9 @@ export const GanttPage: React.FC = () => {
               }
             }},
             { label: 'Edytuj fazę', icon: <Pencil className="w-4 h-4" />, onClick: () => openEditPhase(contextMenu.task) },
+            { label: 'Otwórz w module Zadania', icon: <ArrowRight className="w-4 h-4 text-blue-500" />, onClick: () => {
+              navigate('/company/tasks');
+            }},
             { label: '', onClick: () => {}, divider: true },
             // Create
             { label: 'Utwórz fazę podrzędną', icon: <Plus className="w-4 h-4" />, onClick: () => openCreatePhase(contextMenu.task.id) },
@@ -3644,6 +3684,89 @@ export const GanttPage: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== RESOURCE VIEW PANEL ========== */}
+      {showAdvancedPanel === 'resources' && (
+        <div className="fixed bottom-4 left-4 z-[100] bg-white rounded-xl shadow-2xl border border-slate-200 w-[600px] max-h-[70vh] overflow-hidden flex flex-col">
+          <div className="p-3 border-b border-slate-200 flex justify-between items-center">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm"><Users className="w-4 h-4 text-cyan-500" /> Widok zasobów — kto czym zajęty</h3>
+            <button onClick={() => setShowAdvancedPanel(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4 text-slate-400" /></button>
+          </div>
+          <div className="flex-1 overflow-auto p-3">
+            {(() => {
+              // Build resource utilization: for each user, show tasks per day
+              const assignedTasks = allFlatTasks.filter(t => t.assigned_to_id && t.start_date && t.end_date);
+              const userIds = [...new Set(assignedTasks.map(t => t.assigned_to_id!))];
+              if (userIds.length === 0) return <p className="text-xs text-slate-400 text-center py-6">Brak przypisanych zadań z datami.</p>;
+              
+              // Show next 14 days
+              const today = new Date(); today.setHours(0,0,0,0);
+              const days14 = Array.from({length: 14}, (_, i) => {
+                const d = new Date(today); d.setDate(d.getDate() + i); return d;
+              });
+              
+              return (
+                <table className="w-full text-[10px] border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="text-left px-2 py-1 bg-slate-50 border border-slate-200 w-28 sticky left-0 z-10">Pracownik</th>
+                      {days14.map((d, i) => (
+                        <th key={i} className={`px-1 py-1 border border-slate-200 text-center font-medium min-w-[40px] ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-slate-100 text-slate-400' : 'bg-slate-50 text-slate-600'} ${d.getTime() === today.getTime() ? 'bg-red-50 text-red-600' : ''}`}>
+                          <div>{d.toLocaleDateString('pl-PL', {weekday: 'short'})}</div>
+                          <div>{d.getDate()}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userIds.map(userId => {
+                      const user = users.find(u => u.id === userId);
+                      if (!user) return null;
+                      const userTasks = assignedTasks.filter(t => t.assigned_to_id === userId);
+                      return (
+                        <tr key={userId} className="hover:bg-cyan-50/30">
+                          <td className="px-2 py-1 border border-slate-200 font-medium text-slate-700 sticky left-0 bg-white z-10 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-5 h-5 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                                {((user.first_name || '')[0] || '') + ((user.last_name || '')[0] || '')}
+                              </div>
+                              <span className="truncate max-w-[70px]">{user.first_name} {user.last_name}</span>
+                            </div>
+                          </td>
+                          {days14.map((d, di) => {
+                            const dayTasks = userTasks.filter(t => {
+                              const s = new Date(t.start_date!); s.setHours(0,0,0,0);
+                              const e = new Date(t.end_date!); e.setHours(0,0,0,0);
+                              return d >= s && d <= e;
+                            });
+                            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                            const isOverloaded = dayTasks.length > 1;
+                            return (
+                              <td key={di} className={`border border-slate-200 p-0.5 text-center ${isWeekend ? 'bg-slate-50' : ''} ${isOverloaded ? 'bg-red-50' : dayTasks.length === 1 ? 'bg-cyan-50' : ''}`}
+                                title={dayTasks.map(t => t.title).join(', ')}>
+                                {dayTasks.length > 0 && (
+                                  <div className={`text-[9px] font-medium truncate px-0.5 rounded ${isOverloaded ? 'text-red-600' : 'text-cyan-700'}`}>
+                                    {dayTasks.length > 1 ? `×${dayTasks.length}` : dayTasks[0].title?.substring(0, 8)}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </div>
+          <div className="px-3 py-2 border-t border-slate-100 text-[10px] text-slate-400 flex items-center gap-3">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-cyan-50 border border-cyan-200 rounded inline-block" /> Zajęty</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-50 border border-red-200 rounded inline-block" /> Przeciążony (&gt;1 zadanie)</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-50 border border-red-200 rounded-full inline-block" /> Dzisiaj</span>
           </div>
         </div>
       )}
