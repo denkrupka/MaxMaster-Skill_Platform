@@ -268,7 +268,12 @@ export const FinancePage: React.FC = () => {
       return { name: `${MONTHS_PL[m]}`, Przychody: inc, Koszty: exp, Saldo: inc - exp };
     });
 
-    return { income, expense, balance: income - expense, totalBalance, pendingActs, monthlyData };
+    // Burn rate: avg monthly expense over last 3 months
+    const last3Months = monthlyData.slice(-3);
+    const avgMonthlyExpense = last3Months.length > 0 ? last3Months.reduce((s, m) => s + m.Koszty, 0) / last3Months.length : 0;
+    const avgMonthlyIncome = last3Months.length > 0 ? last3Months.reduce((s, m) => s + m.Przychody, 0) / last3Months.length : 0;
+
+    return { income, expense, balance: income - expense, totalBalance, pendingActs, monthlyData, avgMonthlyExpense, avgMonthlyIncome };
   }, [operations, accounts, acts, cashflowPeriod]);
 
   // ==================== CASHFLOW ====================
@@ -959,6 +964,21 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
     { key: 'ai', label: 'AI Analiza', icon: Brain, badge: 'AI' },
   ];
 
+  // Top 5 expenses for AI context and display
+  const topExpenses = useMemo(() => {
+    return operations
+      .filter(o => o.operation_type === 'expense' && o.status === 'completed')
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+  }, [operations]);
+
+  // Budget burndown: months until budget exhausted at current rate
+  const burndownMonths = useMemo(() => {
+    if (!budgetKPIs.remaining || !stats.avgMonthlyExpense || stats.avgMonthlyExpense === 0) return null;
+    if (budgetKPIs.remaining <= 0) return 0;
+    return budgetKPIs.remaining / stats.avgMonthlyExpense;
+  }, [budgetKPIs.remaining, stats.avgMonthlyExpense]);
+
   const budgetPieData = categoryAggregates.filter(c => c.planned > 0)
     .map(c => ({ name: c.label, value: c.planned, color: c.color }));
   const budgetBarData = categoryAggregates.map(cat => ({ name: cat.label, Plan: cat.planned, Fakt: cat.actual }));
@@ -1298,6 +1318,28 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                       </div>
                     ))}
                   </div>
+
+                  {/* Burndown indicator */}
+                  {burndownMonths !== null && stats.avgMonthlyExpense > 0 && (
+                    <div className={`flex items-start gap-3 p-4 rounded-xl border ${
+                      burndownMonths < 2 ? 'bg-red-50 border-red-200' :
+                      burndownMonths < 4 ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'
+                    }`}>
+                      <Activity className={`w-5 h-5 mt-0.5 flex-shrink-0 ${burndownMonths < 2 ? 'text-red-600' : burndownMonths < 4 ? 'text-amber-600' : 'text-blue-600'}`} />
+                      <div>
+                        <p className={`font-semibold text-sm ${burndownMonths < 2 ? 'text-red-800' : burndownMonths < 4 ? 'text-amber-800' : 'text-blue-800'}`}>
+                          🔥 Burn Rate: {formatCurrency(stats.avgMonthlyExpense)}/mies.
+                          {burndownMonths > 0 && (
+                            <span className="ml-2">→ budżet starczy na ~{burndownMonths.toFixed(1)} mies.</span>
+                          )}
+                          {burndownMonths <= 0 && <span className="ml-2">→ budżet wyczerpany!</span>}
+                        </p>
+                        <p className={`text-xs mt-0.5 ${burndownMonths < 2 ? 'text-red-700' : burndownMonths < 4 ? 'text-amber-700' : 'text-blue-700'}`}>
+                          Średnie wydatki za ostatnie 3 miesiące. Pozostało: {formatCurrency(Math.max(0, budgetKPIs.remaining))}.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Category Progress Bars */}
                   <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -1749,6 +1791,34 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                   )}
                 </div>
               </div>
+
+              {/* Top Expenses Summary */}
+              {topExpenses.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 p-4">
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <TrendingDown className="w-5 h-5 text-red-500" />
+                    Top 5 największych wydatków
+                  </h4>
+                  <div className="space-y-2">
+                    {topExpenses.map((op, i) => (
+                      <div key={op.id} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg">
+                        <span className="w-6 h-6 bg-red-100 text-red-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {i + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{op.description || 'Wydatek'}</p>
+                          <p className="text-xs text-slate-500">{formatDate(op.operation_date)} • {(op as any).project?.name || 'Bez projektu'}</p>
+                        </div>
+                        <p className="text-sm font-bold text-red-600 flex-shrink-0">-{formatCurrency(op.amount)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 p-2.5 bg-slate-100 rounded-lg flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Łącznie top 5:</span>
+                    <span className="text-sm font-bold text-slate-800">{formatCurrency(topExpenses.reduce((s, o) => s + o.amount, 0))}</span>
+                  </div>
+                </div>
+              )}
 
               {/* Smart Alerts System */}
               <div className="bg-white rounded-xl border border-slate-200 p-5">
