@@ -987,7 +987,10 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
     <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="mb-6 flex flex-wrap justify-between items-center gap-2">
-        <div />
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Finanse &amp; Budżet</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Zarządzanie finansami, budżetem i cashflow projektów</p>
+        </div>
         <div className="flex flex-wrap gap-2">
           {activeTab === 'acts' && (
             <button onClick={handleExportJPK}
@@ -1728,6 +1731,52 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                   <option value="">-- Wszystkie projekty --</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+              </div>
+
+              {/* Financial Health Score */}
+              <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-5 text-white">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-semibold text-lg">📊 Financial Health Score</h4>
+                    <p className="text-slate-300 text-sm">Na podstawie danych z Twojego konta</p>
+                  </div>
+                  <div className="text-right">
+                    {(() => {
+                      let score = 10;
+                      if (stats.balance < 0) score -= 3;
+                      if (budgetKPIs.overTenPct) score -= 2;
+                      if (budgetKPIs.overBudget && !budgetKPIs.overTenPct) score -= 1;
+                      if (stats.pendingActs > 100000) score -= 1;
+                      if (burndownMonths !== null && burndownMonths < 2) score -= 2;
+                      if (offers.filter(o => o.status === 'accepted').length > 0) score += 0;
+                      score = Math.max(1, Math.min(10, score));
+                      const color = score >= 8 ? '#10b981' : score >= 5 ? '#f59e0b' : '#ef4444';
+                      const emoji = score >= 8 ? '🟢' : score >= 5 ? '🟡' : '🔴';
+                      return (
+                        <div className="text-center">
+                          <p className="text-4xl font-bold" style={{ color }}>{score}/10</p>
+                          <p className="text-sm" style={{ color }}>{emoji} {score >= 8 ? 'Doskonały' : score >= 6 ? 'Dobry' : score >= 4 ? 'Wymaga uwagi' : 'Krytyczny'}</p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-white/10 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-green-400">{formatCurrency(stats.income).split(',')[0]}</p>
+                    <p className="text-xs text-slate-300 mt-1">Przychody łącznie</p>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-red-400">{formatCurrency(stats.expense).split(',')[0]}</p>
+                    <p className="text-xs text-slate-300 mt-1">Koszty łącznie</p>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-3 text-center">
+                    <p className={`text-2xl font-bold ${stats.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {formatCurrency(stats.balance).split(',')[0]}
+                    </p>
+                    <p className="text-xs text-slate-300 mt-1">Bilans netto</p>
+                  </div>
+                </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
