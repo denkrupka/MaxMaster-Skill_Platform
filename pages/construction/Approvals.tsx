@@ -129,6 +129,16 @@ export const ApprovalsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [processing, setProcessing] = useState(false);
 
+
+  // Photo upload
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // PDF coordinate picker
+  const [pdfCoordMode, setPdfCoordMode] = useState(false);
+  const [pdfCoords, setPdfCoords] = useState<{ x: number; y: number } | null>(null);
+
   // Action modal (approve/reject/delegate)
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'delegate' | 'comment'>('approve');
@@ -189,6 +199,40 @@ export const ApprovalsPage: React.FC = () => {
       .eq('uzgodnienie_id', uzgId)
       .order('created_at', { ascending: true });
     if (data) setDetailHistory(data);
+  };
+
+
+  // Upload photos to Supabase Storage
+  const uploadPhotos = async (uzgId: string, files: File[]): Promise<string[]> => {
+    const urls: string[] = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const fileName = `uzgodnienia/${uzgId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { data, error } = await supabase.storage.from('dms').upload(fileName, file, { upsert: false });
+      if (!error && data) {
+        const { data: urlData } = supabase.storage.from('dms').getPublicUrl(fileName);
+        if (urlData?.publicUrl) urls.push(urlData.publicUrl);
+      }
+    }
+    return urls;
+  };
+
+  // Insert notification to notifications table
+  const insertNotification = async (userId: string, title: string, message: string, entityId: string) => {
+    if (!currentUser) return;
+    try {
+      await supabase.from('notifications').insert({
+        company_id: currentUser.company_id,
+        user_id: userId,
+        type: 'task_assigned',
+        title,
+        message,
+        entity_type: 'uzgodnienie',
+        entity_id: entityId,
+        is_read: false,
+        created_at: new Date().toISOString()
+      });
+    } catch (_) { /* silent fail */ }
   };
 
   // Stats
@@ -276,8 +320,30 @@ export const ApprovalsPage: React.FC = () => {
           user_id: currentUser.id
         });
 
-        // Send email to assignee
+        // Upload photos
+        if (photoFiles.length > 0) {
+          const photoUrls = await uploadPhotos(uzgId, photoFiles);
+          for (const url of photoUrls) {
+            await supabase.from('uzgodnienia_photos').insert({
+              uzgodnienie_id: uzgId, url, created_at: new Date().toISOString()
+            });
+          }
+        }
+
+        // Save PDF coords if set
+        if (pdfCoords) {
+          await supabase.from('uzgodnienia').update({
+            plan_x: pdfCoords.x, plan_y: pdfCoords.y
+          }).eq('id', uzgId);
+        }
+
+        // Insert notification + send email to assignee
         if (form.assigned_to_id) {
+          await insertNotification(form.assigned_to_id,
+            `Nowe uzgodnienie: ${form.title}`,
+            `Masz nowe uzgodnienie do rozpatrzenia. Termin: ${form.sla_hours}h.`,
+            uzgId
+          );
           const assignee = users?.find((u: any) => u.id === form.assigned_to_id);
           if (assignee?.email) {
             await supabase.functions.invoke('send-email', {
@@ -291,7 +357,7 @@ export const ApprovalsPage: React.FC = () => {
                   actionLabel: 'Przejdź do portalu'
                 }
               }
-            });
+            }).catch(() => {});
           }
         }
       }
@@ -347,12 +413,20 @@ export const ApprovalsPage: React.FC = () => {
       ]);
 
       // Notify assignee/creator
-      const notifyUser = actionType === 'delegate'
-        ? users?.find((u: any) => u.id === delegateTo)
-        : users?.find((u: any) => u.id === selectedUzgodnienie.created_by_id);
+      const notifyUserId = actionType === 'delegate' ? delegateTo : selectedUzgodnienie.created_by_id;
+      const notifyUser = users?.find((u: any) => u.id === notifyUserId);
+      const actionLabel = actionType === 'approve' ? 'zatwierdzone' : actionType === 'reject' ? 'odrzucone' : actionType === 'delegate' ? 'delegowane' : 'skomentowane';
+
+      if (notifyUserId) {
+        await insertNotification(
+          notifyUserId,
+          `Uzgodnienie ${actionLabel}: ${selectedUzgodnienie.title}`,
+          `${actionComment ? `Komentarz: ${actionComment}` : `Uzgodnienie zostało ${actionLabel}.`}`,
+          selectedUzgodnienie.id
+        );
+      }
 
       if (notifyUser?.email) {
-        const actionLabel = actionType === 'approve' ? 'zatwierdzone' : actionType === 'reject' ? 'odrzucone' : 'delegowane';
         await supabase.functions.invoke('send-email', {
           body: {
             template: 'NOTIFICATION',
@@ -436,10 +510,15 @@ export const ApprovalsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const resetForm = () => setForm({
-    project_id: '', title: '', description: '', priority: 'normal',
-    assigned_to_id: '', sla_hours: 24, plan_screenshot_url: ''
-  });
+  const resetForm = () => {
+    setForm({
+      project_id: '', title: '', description: '', priority: 'normal',
+      assigned_to_id: '', sla_hours: 24, plan_screenshot_url: ''
+    });
+    setPhotoFiles([]);
+    setPdfCoords(null);
+    setPdfCoordMode(false);
+  };
 
   const filterTabs: { key: FilterTab; label: string }[] = [
     { key: 'mine', label: 'Moje uzgodnienia' },
@@ -564,8 +643,8 @@ export const ApprovalsPage: React.FC = () => {
                         <p className="font-medium text-slate-900 truncate">{uzg.title}</p>
                         {uzg.number && <span className="text-xs text-slate-400">{uzg.number}</span>}
                         {overdue && <span className="flex items-center gap-1 text-xs text-red-600"><AlertTriangle className="w-3 h-3" />Przeterminowane</span>}
-                        {uzg.plan_screenshot_url && <MapPin className="w-3 h-3 text-slate-400" title="Przypisane do planu" />}
-                        {(uzg.photos?.length || 0) > 0 && <Image className="w-3 h-3 text-slate-400" title="Posiada zdjęcia" />}
+                        {uzg.plan_screenshot_url && <span title="Przypisane do planu"><MapPin className="w-3 h-3 text-slate-400" /></span>}
+                        {(uzg.photos?.length || 0) > 0 && <span title="Posiada zdjęcia"><Image className="w-3 h-3 text-slate-400" /></span>}
                       </div>
                       <p className="text-sm text-slate-500 truncate">
                         {uzg.project?.name || 'Bez projektu'}
@@ -675,12 +754,58 @@ export const ApprovalsPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  <div className="flex items-center gap-2"><Image className="w-4 h-4" /> URL zdjęcia / screenshotu z planu</div>
+                  <div className="flex items-center gap-2"><Image className="w-4 h-4" /> Zdjęcia z obiektu</div>
+                </label>
+                <div className="flex flex-col gap-2">
+                  <button type="button" onClick={() => photoInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 text-sm text-slate-500">
+                    <Image className="w-4 h-4" />
+                    {photoFiles.length > 0 ? `${photoFiles.length} zdjęcie(a) wybrane` : 'Kliknij aby dodać zdjęcia'}
+                  </button>
+                  <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden"
+                    onChange={e => setPhotoFiles(Array.from(e.target.files || []))} />
+                  {photoFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {photoFiles.map((f, i) => (
+                        <span key={i} className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">
+                          {f.name.length > 20 ? f.name.slice(0, 20) + '...' : f.name}
+                          <button type="button" onClick={() => setPhotoFiles(prev => prev.filter((_, j) => j !== i))}>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> URL screenshotu z planu (opcjonalnie)</div>
                 </label>
                 <input type="text" value={form.plan_screenshot_url}
                   onChange={e => setForm({ ...form, plan_screenshot_url: e.target.value })}
                   placeholder="https://... (link do screenshotu z zaznaczonym miejscem na planie)"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                {form.plan_screenshot_url && (
+                  <div className="mt-2">
+                    <p className="text-xs text-slate-500 mb-1">Kliknij na obrazie aby zaznaczyć punkt na planie:</p>
+                    <div className="relative inline-block">
+                      <img src={form.plan_screenshot_url} alt="Plan"
+                        className="max-w-full rounded border border-slate-200 cursor-crosshair max-h-48 object-contain"
+                        onClick={e => {
+                          const rect = (e.target as HTMLImageElement).getBoundingClientRect();
+                          const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                          const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+                          setPdfCoords({ x, y });
+                        }} />
+                      {pdfCoords && (
+                        <div className="absolute w-5 h-5 bg-red-500 rounded-full border-2 border-white shadow-lg transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                          style={{ left: `${pdfCoords.x}%`, top: `${pdfCoords.y}%` }} />
+                      )}
+                    </div>
+                    {pdfCoords && <p className="text-xs text-green-600 mt-1">📍 Zaznaczono punkt: x={pdfCoords.x}%, y={pdfCoords.y}%</p>}
+                  </div>
+                )}
               </div>
             </div>
             <div className="p-4 border-t flex justify-end gap-3">
@@ -752,12 +877,23 @@ export const ApprovalsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Plan screenshot */}
+              {/* Plan screenshot with coordinate marker */}
               {selectedUzgodnienie.plan_screenshot_url && (
                 <div>
                   <h3 className="font-medium text-slate-800 mb-2 flex items-center gap-2"><MapPin className="w-4 h-4" /> Lokalizacja na planie</h3>
-                  <img src={selectedUzgodnienie.plan_screenshot_url} alt="Plan"
-                    className="max-w-full rounded-lg border border-slate-200" />
+                  <div className="relative inline-block max-w-full">
+                    <img src={selectedUzgodnienie.plan_screenshot_url} alt="Plan"
+                      className="max-w-full rounded-lg border border-slate-200" />
+                    {selectedUzgodnienie.plan_x != null && selectedUzgodnienie.plan_y != null && (
+                      <div className="absolute w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-lg transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                        style={{ left: `${selectedUzgodnienie.plan_x}%`, top: `${selectedUzgodnienie.plan_y}%` }}>
+                        <span className="text-white text-xs font-bold">!</span>
+                      </div>
+                    )}
+                  </div>
+                  {selectedUzgodnienie.plan_x != null && (
+                    <p className="text-xs text-slate-500 mt-1">📍 Punkt: x={selectedUzgodnienie.plan_x}%, y={selectedUzgodnienie.plan_y}%</p>
+                  )}
                 </div>
               )}
 
