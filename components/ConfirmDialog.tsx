@@ -12,7 +12,7 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
+const ConfirmDialogImpl: React.FC<ConfirmDialogProps> = ({
   isOpen,
   title,
   message,
@@ -135,3 +135,5 @@ export const useConfirm = () => {
 
   return { confirm, dialog };
 };
+
+export const ConfirmDialog = React.memo(ConfirmDialogImpl);

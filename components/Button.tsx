@@ -6,7 +6,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   fullWidth?: boolean;
 }
 
-export const Button: React.FC<ButtonProps> = ({ 
+const ButtonImpl: React.FC<ButtonProps> = ({ 
   children, 
   variant = 'primary', 
   size = 'md', 
@@ -42,3 +42,5 @@ export const Button: React.FC<ButtonProps> = ({
     </button>
   );
 };
+
+export const Button = React.memo(ButtonImpl);

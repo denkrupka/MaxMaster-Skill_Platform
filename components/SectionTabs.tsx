@@ -106,7 +106,7 @@ interface SectionTabsProps {
   section: Section;
 }
 
-export const SectionTabs: React.FC<SectionTabsProps> = ({ section }) => {
+const SectionTabsImpl: React.FC<SectionTabsProps> = ({ section }) => {
   const { getEffectiveRole } = useAppContext();
   const location = useLocation();
   const effectiveRole = getEffectiveRole();
@@ -140,3 +140,5 @@ export const SectionTabs: React.FC<SectionTabsProps> = ({ section }) => {
     </div>
   );
 };
+
+export const SectionTabs = React.memo(SectionTabsImpl);

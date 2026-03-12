@@ -216,6 +216,27 @@ export const CompanySettingsPage: React.FC = () => {
     { key: 'quality_incident', label: 'Incydent jakościowy', icon: '🔴' },
   ];
 
+  // ═══ Tab 7: Save Notifications ═══
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  const handleSaveNotifications = async () => {
+    if (!currentUser) return;
+    setIsSavingNotifications(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ notification_settings: notificationSettings })
+        .eq('id', currentUser.id);
+      if (error) throw error;
+      showToast('Zapisano ✓', 'Ustawienia powiadomień zaktualizowane', 'success');
+    } catch (err) {
+      console.error('Error saving notifications:', err);
+      showToast('Błąd', 'Nie udało się zapisać ustawień powiadomień', 'error');
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
+
   // ═══ Tab 8: Bezpieczeństwo ═══
   const [activeSessions] = useState([
     { id: '1', device: 'Chrome na Windows', location: 'Warszawa, PL', ip: '89.64.xx.xx', lastActive: new Date().toISOString(), current: true },
@@ -1488,6 +1509,7 @@ export const CompanySettingsPage: React.FC = () => {
           {/* Save Button */}
           <div className="flex justify-end">
             <button
+              onClick={() => showToast('Zapisano ✓', 'Ustawienia budowlane zaktualizowane', 'success')}
               className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
               <Save className="w-5 h-5" />
@@ -1743,9 +1765,13 @@ export const CompanySettingsPage: React.FC = () => {
           </div>
 
           <div className="flex justify-end mt-6">
-            <button className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+            <button
+              onClick={handleSaveNotifications}
+              disabled={isSavingNotifications}
+              className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition text-sm font-medium"
+            >
               <Save className="w-4 h-4" />
-              Zapisz ustawienia
+              {isSavingNotifications ? 'Zapisywanie...' : 'Zapisz ustawienia'}
             </button>
           </div>
         </div>

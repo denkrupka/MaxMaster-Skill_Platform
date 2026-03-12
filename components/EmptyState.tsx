@@ -17,7 +17,7 @@ interface EmptyStateProps {
   compact?: boolean;
 }
 
-export const EmptyState: React.FC<EmptyStateProps> = ({
+const EmptyStateImpl: React.FC<EmptyStateProps> = ({
   icon,
   emoji,
   title,
@@ -99,4 +99,5 @@ export const ErrorEmptyState: React.FC<{ onRetry?: () => void }> = ({ onRetry })
   />
 );
 
+export const EmptyState = React.memo(EmptyStateImpl);
 export default EmptyState;
