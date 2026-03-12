@@ -1640,7 +1640,32 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         }
       } else {
         const { data } = await supabase.from('project_tasks').insert(taskData).select().single();
-        if (data) setTasks(prev => [data, ...prev]);
+        if (data) {
+          setTasks(prev => [data, ...prev]);
+          // Auto-create Gantt task if dates are specified
+          if (taskData.start_date && taskData.end_date) {
+            try {
+              const startDate = new Date(taskData.start_date);
+              const endDate = new Date(taskData.end_date);
+              const duration = Math.max(Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000), 1);
+              await supabase.from('gantt_tasks').insert({
+                project_id: taskData.project_id,
+                title: taskData.name,
+                start_date: taskData.start_date,
+                end_date: taskData.end_date,
+                duration,
+                progress: 0,
+                source: 'manual',
+                assigned_to_id: taskData.assigned_users?.[0] || null,
+                color: '#3b82f6',
+                sort_order: 0,
+              });
+            } catch (ganttErr) {
+              // Non-critical — log only
+              console.warn('Auto-create Gantt task failed:', ganttErr);
+            }
+          }
+        }
         setShowAddTask(false);
         setTaskForm({ ...emptyTaskForm });
       }
