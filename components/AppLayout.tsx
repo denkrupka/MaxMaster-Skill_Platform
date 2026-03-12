@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Menu } from 'lucide-react';
+import { Menu, Search } from 'lucide-react';
+import { GlobalSearch } from './GlobalSearch';
 import { Sidebar } from './Sidebar';
 import { NotificationBell, Toast } from './NotificationSystem';
 import { useAppContext } from '../context/AppContext';
@@ -9,6 +10,7 @@ import { ROLE_LABELS } from '../constants';
 
 export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { state, getEffectiveRole } = useAppContext();
 
@@ -23,6 +25,18 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
       window.removeEventListener('sidebar-expand', handleExpand);
     };
   }, []);
+  // Global search hotkey Ctrl+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(prev => !prev);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const effectiveRole = getEffectiveRole();
   const isSimulating = state.simulatedRole !== null;
 
@@ -35,7 +49,7 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
         {/* Header - now used for both Mobile (Menu) and Desktop (Notifications) */}
         <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6">
            <div className="flex items-center">
-                <button onClick={() => setIsSidebarOpen(true)} className="text-slate-600 lg:hidden mr-4">
+                <button onClick={() => setIsSidebarOpen(true)} className="text-slate-600 lg:hidden mr-4 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
                     <Menu size={24} />
                 </button>
                 <span className="font-bold text-slate-800 lg:hidden">MaxMaster</span>
@@ -43,6 +57,16 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
 
            {/* Right side of header (Bell + Profile hint) */}
            <div className="flex items-center gap-4 ml-auto">
+                {/* Global Search Button */}
+                <button
+                  onClick={() => setIsSearchOpen(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  title="Szukaj (Ctrl+K)"
+                >
+                  <Search size={16} />
+                  <span className="hidden sm:inline">Szukaj...</span>
+                  <kbd className="hidden lg:inline-block text-xs bg-white border border-slate-200 rounded px-1 font-mono">Ctrl+K</kbd>
+                </button>
                 {(effectiveRole === Role.HR || effectiveRole === Role.DORADCA) && (
                     <NotificationBell />
                 )}
@@ -69,6 +93,7 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
         </main>
       </div>
 
+      <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <Toast />
     </div>
   );

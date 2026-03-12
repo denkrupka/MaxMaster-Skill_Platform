@@ -20,6 +20,9 @@ import {
   FINANCE_OPERATION_TYPE_LABELS, FINANCE_OPERATION_TYPE_COLORS,
   FINANCE_OPERATION_STATUS_LABELS, ACT_STATUS_LABELS, ACT_STATUS_COLORS
 } from '../../constants';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 type TabType = 'operations' | 'acts' | 'accounts' | 'budget';
 
@@ -227,7 +230,16 @@ export const FinancePage: React.FC = () => {
     });
     const thisMonthSpent = thisMonthOps.reduce((s, o) => s + o.amount, 0);
 
-    return { totalPlanned, totalActual, remaining, pctSpent, overBudget, overTenPct, warningThreshold, thisMonthSpent };
+    // Per-category >80% alerts
+    const categoryAlerts = BUDGET_CATEGORIES.map(cat => {
+      const catItems = budgetItems.filter(i => i.category === cat.code);
+      const planned = catItems.reduce((s, i) => s + (i.planned_amount || 0), 0);
+      const actual = catItems.reduce((s, i) => s + (i.actual_amount || 0), 0);
+      const pct = planned > 0 ? actual / planned : 0;
+      return { ...cat, planned, actual, pct, alert: planned > 0 && pct >= 0.8 && actual <= planned };
+    }).filter(c => c.alert);
+
+    return { totalPlanned, totalActual, remaining, pctSpent, overBudget, overTenPct, warningThreshold, thisMonthSpent, categoryAlerts };
   }, [budgetItems, operations, budgetProject]);
 
   // Category aggregates for pie chart
@@ -502,6 +514,189 @@ export const FinancePage: React.FC = () => {
     name: '', account_type: 'bank', bank_name: '', account_number: '', current_balance: 0
   });
 
+  // ===== EXPORT FUNCTIONS =====
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    const now = new Date();
+    const projectName = projects.find(p => p.id === (projectFilter !== 'all' ? projectFilter : ''))?.name || 'Wszystkie projekty';
+    
+    doc.setFontSize(18);
+    doc.setTextColor(30, 58, 138);
+    doc.text('Raport Finansowy', 14, 20);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`MaxMaster Portal | ${now.toLocaleDateString('pl-PL')}`, 14, 28);
+    doc.text(`Projekt: ${projectName}`, 14, 35);
+
+    // Summary table
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.text('Podsumowanie', 14, 46);
+    autoTable(doc, {
+      startY: 50,
+      head: [['Wskaźnik', 'Wartość']],
+      body: [
+        ['Przychody łącznie', formatCurrency(stats.income)],
+        ['Koszty łącznie', formatCurrency(stats.expense)],
+        ['Marża (Bilans)', formatCurrency(stats.balance)],
+        ['Marża %', stats.income > 0 ? `${((stats.balance / stats.income) * 100).toFixed(1)}%` : '0%'],
+        ['Saldo kont', formatCurrency(stats.totalBalance)],
+        ['Należności', formatCurrency(stats.pendingActs)],
+      ],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [30, 58, 138] },
+    });
+
+    // Operations table
+    const ops = projectFilter !== 'all' 
+      ? filteredOperations 
+      : operations.filter(o => o.status === 'completed');
+    if (ops.length > 0) {
+      const prevY = (doc as any).lastAutoTable?.finalY || 120;
+      doc.setFontSize(13);
+      doc.setTextColor(30);
+      doc.text('Operacje finansowe', 14, prevY + 12);
+      autoTable(doc, {
+        startY: prevY + 16,
+        head: [['Data', 'Opis', 'Typ', 'Kwota']],
+        body: ops.slice(0, 50).map(op => [
+          formatDate(op.operation_date),
+          op.description || '-',
+          op.operation_type === 'income' ? 'Przychód' : 'Wydatek',
+          `${op.operation_type === 'income' ? '+' : '-'}${formatCurrency(op.amount)}`,
+        ]),
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: { 3: { halign: 'right' } },
+      });
+    }
+
+    doc.save(`Raport_Finansowy_${now.toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleExportXLSX = () => {
+    const now = new Date();
+    const wb = XLSX.utils.book_new();
+
+    // Summary sheet
+    const summaryData = [
+      ['Raport Finansowy MaxMaster', ''],
+      ['Data:', now.toLocaleDateString('pl-PL')],
+      [''],
+      ['Wskaźnik', 'Wartość PLN'],
+      ['Przychody łącznie', stats.income],
+      ['Koszty łącznie', stats.expense],
+      ['Marża (Bilans)', stats.balance],
+      ['Marża %', stats.income > 0 ? (stats.balance / stats.income) * 100 : 0],
+      ['Saldo kont', stats.totalBalance],
+      ['Należności', stats.pendingActs],
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Podsumowanie');
+
+    // Operations sheet
+    const opsData = [
+      ['Data', 'Opis', 'Typ', 'Projekt', 'Kwota PLN', 'Nr dokumentu'],
+      ...filteredOperations.map(op => [
+        formatDate(op.operation_date),
+        op.description || '',
+        op.operation_type === 'income' ? 'Przychód' : 'Wydatek',
+        (op as any).project?.name || '',
+        op.operation_type === 'income' ? op.amount : -op.amount,
+        op.document_number || '',
+      ])
+    ];
+    const wsOps = XLSX.utils.aoa_to_sheet(opsData);
+    XLSX.utils.book_append_sheet(wb, wsOps, 'Operacje');
+
+    // Acts sheet
+    const actsData = [
+      ['Nr', 'Nazwa', 'Data', 'Projekt', 'Kontrahent', 'Suma PLN', 'VAT PLN', 'Status'],
+      ...filteredActs.map(act => [
+        act.number,
+        act.name || '',
+        formatDate(act.act_date || act.date),
+        (act as any).project?.name || '',
+        (act as any).contractor?.name || '',
+        act.total || act.amount || 0,
+        act.nds_amount || 0,
+        act.payment_status,
+      ])
+    ];
+    const wsActs = XLSX.utils.aoa_to_sheet(actsData);
+    XLSX.utils.book_append_sheet(wb, wsActs, 'Akty');
+
+    XLSX.writeFile(wb, `Raport_Finansowy_${now.toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleGenerateActPDF = (act: FinanceAct) => {
+    const doc = new jsPDF();
+    const contractor = (act as any).contractor;
+    const project = (act as any).project;
+    const now = new Date();
+    const actDate = new Date(act.act_date || act.date);
+    const netAmount = (act.total || 0) - (act.nds_amount || 0);
+
+    doc.setFontSize(20);
+    doc.setTextColor(30, 58, 138);
+    doc.text('FAKTURA VAT', 105, 25, { align: 'center' });
+    doc.setFontSize(12);
+    doc.setTextColor(60);
+    doc.text(`Nr: ${act.number}`, 105, 33, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Data wystawienia: ${actDate.toLocaleDateString('pl-PL')}`, 14, 45);
+    if (act.period_start && act.period_end) {
+      doc.text(`Okres: ${new Date(act.period_start).toLocaleDateString('pl-PL')} – ${new Date(act.period_end).toLocaleDateString('pl-PL')}`, 14, 52);
+    }
+
+    doc.setFontSize(11);
+    doc.setTextColor(30);
+    doc.text('Sprzedawca:', 14, 65);
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text('MaxMaster', 14, 72);
+
+    doc.setFontSize(11);
+    doc.setTextColor(30);
+    doc.text('Nabywca:', 120, 65);
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text(contractor?.name || '—', 120, 72);
+    if (contractor?.tax_id) doc.text(`NIP: ${contractor.tax_id}`, 120, 79);
+    if (contractor?.address) doc.text(contractor.address, 120, 86);
+
+    if (project?.name) {
+      doc.setFontSize(11);
+      doc.setTextColor(30);
+      doc.text(`Projekt: ${project.name}`, 14, 98);
+    }
+
+    autoTable(doc, {
+      startY: 105,
+      head: [['Lp.', 'Nazwa usługi/towaru', 'Netto PLN', 'VAT PLN', 'Brutto PLN']],
+      body: [
+        ['1', act.name || `Usługi budowlane – ${act.number}`,
+         formatCurrency(netAmount), formatCurrency(act.nds_amount || 0), formatCurrency(act.total || 0)],
+      ],
+      foot: [['', 'RAZEM:', formatCurrency(netAmount), formatCurrency(act.nds_amount || 0), formatCurrency(act.total || 0)]],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [30, 58, 138] },
+      footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249] },
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 150;
+    doc.setFontSize(11);
+    doc.setTextColor(30);
+    doc.text(`Do zapłaty: ${formatCurrency(act.total || 0)}`, 14, finalY + 15);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`Status: ${act.payment_status === 'paid' ? 'Zapłacono' : act.payment_status === 'partial' ? 'Częściowo zapłacono' : 'Oczekuje na płatność'}`, 14, finalY + 23);
+
+    doc.save(`Faktura_${act.number.replace(/[\/]/g, '_')}.pdf`);
+  };
+
   const tabs: { key: TabType; label: string; icon: React.ElementType }[] = [
     { key: 'operations', label: 'Operacje', icon: DollarSign },
     { key: 'acts', label: 'Akty', icon: FileText },
@@ -520,20 +715,34 @@ export const FinancePage: React.FC = () => {
   }));
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
-      <div className="mb-6 flex justify-between items-center">
+      <div className="mb-6 flex flex-wrap justify-between items-center gap-2">
         <div></div>
         <div className="flex gap-2">
           {activeTab === 'acts' && (
             <button
               onClick={handleExportJPK}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+              className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 min-h-[44px] text-sm"
             >
               <Download className="w-4 h-4" />
               Eksport JPK
             </button>
           )}
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            <Download className="w-4 h-4" />
+            Raport PDF
+          </button>
+          <button
+            onClick={handleExportXLSX}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            <Download className="w-4 h-4" />
+            Raport XLSX
+          </button>
           {activeTab === 'operations' && (
             <button
               onClick={() => { resetOperationForm(); setEditingOperation(null); setShowOperationModal(true); }}
@@ -562,7 +771,7 @@ export const FinancePage: React.FC = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
         {[
           { label: 'Przychody', value: stats.income, icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50' },
           { label: 'Koszty', value: stats.expense, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
@@ -583,10 +792,10 @@ export const FinancePage: React.FC = () => {
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="border-b border-slate-200">
-          <nav className="flex -mb-px">
+          <nav className="flex -mb-px overflow-x-auto scrollbar-hide">
             {tabs.map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm ${
+                className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm whitespace-nowrap min-h-[44px] ${
                   activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
                 }`}>
                 <tab.icon className="w-4 h-4" />
@@ -717,6 +926,13 @@ export const FinancePage: React.FC = () => {
                       >
                         Wystaw fakturę
                       </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleGenerateActPDF(act); }}
+                        className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                        title="Pobierz PDF"
+                      >
+                        PDF
+                      </button>
                       <button onClick={e => {
                         e.stopPropagation(); setEditingAct(act);
                         setActForm({
@@ -845,8 +1061,28 @@ export const FinancePage: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Per-category AI alerts */}
+                  {budgetKPIs.categoryAlerts && budgetKPIs.categoryAlerts.length > 0 && (
+                    <div className="space-y-2">
+                      {budgetKPIs.categoryAlerts.map(cat => (
+                        <div key={cat.code} className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="font-semibold text-yellow-800">
+                              ⚠️ {cat.label}: {(cat.pct * 100).toFixed(0)}% budżetu wykorzystane
+                            </p>
+                            <p className="text-sm text-yellow-700">
+                              Wydano {formatCurrency(cat.actual)} z {formatCurrency(cat.planned)}.
+                              Pozostało: {formatCurrency(cat.planned - cat.actual)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* KPI Cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     {[
                       { label: 'Budżet projektu', value: budgetKPIs.totalPlanned, color: 'text-blue-600', bg: 'bg-blue-50' },
                       { label: 'Faktyczne (actual)', value: budgetKPIs.totalActual, color: budgetKPIs.overBudget ? 'text-red-600' : 'text-slate-900', bg: budgetKPIs.overBudget ? 'bg-red-50' : 'bg-slate-50' },
