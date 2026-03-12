@@ -17,7 +17,7 @@ import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, RESOURCE_TYPE_LABELS
 } from '../../constants';
 
-type TabType = 'requests' | 'orders' | 'stock';
+type TabType = 'requests' | 'orders' | 'stock' | 'dashboard';
 
 export const ProcurementPage: React.FC = () => {
   const { state } = useAppContext();
@@ -44,6 +44,14 @@ export const ProcurementPage: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editingStock, setEditingStock] = useState<Stock | null>(null);
   const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+
+  // Zamówione modal
+  const [showZamowioneModal, setShowZamowioneModal] = useState(false);
+  const [zamowioneRequest, setZamowioneRequest] = useState<ResourceRequest | null>(null);
+  const [zamowioneForm, setZamowioneForm] = useState({
+    contractor_id: '', total: 0, expected_delivery: '', notes: ''
+  });
+
   const [saving, setSaving] = useState(false);
 
   // Request form
@@ -66,6 +74,81 @@ export const ProcurementPage: React.FC = () => {
   const [receiptForm, setReceiptForm] = useState({
     order_id: '', stock_id: '', quantity: 1, item_name: '', unit_price: 0
   });
+
+
+  // Move request to W realizacji (partial)
+  const handleMoveToRealizacja = async (req: ResourceRequest) => {
+    await supabase.from('resource_requests').update({ status: 'partial' }).eq('id', req.id);
+    await loadData();
+  };
+
+  // Open Zamówione modal
+  const handleOpenZamowione = (req: ResourceRequest) => {
+    setZamowioneRequest(req);
+    setZamowioneForm({ contractor_id: '', total: 0, expected_delivery: '', notes: '' });
+    setShowZamowioneModal(true);
+  };
+
+  // Confirm Zamówione - create order record
+  const handleConfirmZamowione = async () => {
+    if (!currentUser || !zamowioneRequest) return;
+    setSaving(true);
+    try {
+      await supabase.from('resource_requests').update({ status: 'ordered' }).eq('id', zamowioneRequest.id);
+      const orderNum = `ZAM/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
+      await supabase.from('orders').insert({
+        company_id: currentUser.company_id,
+        project_id: zamowioneRequest.project_id,
+        contractor_id: zamowioneForm.contractor_id || null,
+        number: orderNum,
+        order_date: new Date().toISOString().split('T')[0],
+        expected_delivery: zamowioneForm.expected_delivery || null,
+        expected_date: zamowioneForm.expected_delivery || null,
+        subtotal: zamowioneForm.total,
+        nds_percent: 0,
+        status: 'sent' as OrderStatus,
+        notes: zamowioneForm.notes || `Zamówienie z zapotrzebowania: ${zamowioneRequest.title || zamowioneRequest.name}`,
+        created_by_id: currentUser.id
+      });
+      setShowZamowioneModal(false);
+      setZamowioneRequest(null);
+      await loadData();
+    } catch (err) {
+      console.error('Error confirming order:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Mark request as Dostarczone and auto-replenish stock
+  const handleMarkReceivedRequest = async (req: ResourceRequest) => {
+    if (!currentUser) return;
+    setSaving(true);
+    try {
+      await supabase.from('resource_requests').update({ status: 'received' }).eq('id', req.id);
+      if (stocks.length > 0 && (req.volume_required || 0) > 0) {
+        const stockId = stocks[0].id;
+        const itemName = req.title || req.name || 'Nieznany materiał';
+        const { data: existing } = await supabase.from('stock_balances')
+          .select('id, quantity').eq('stock_id', stockId).eq('name', itemName).maybeSingle();
+        if (existing) {
+          await supabase.from('stock_balances').update({
+            quantity: existing.quantity + (req.volume_required || 0)
+          }).eq('id', existing.id);
+        } else {
+          await supabase.from('stock_balances').insert({
+            stock_id: stockId, name: itemName,
+            quantity: req.volume_required || 0, reserved_quantity: 0, unit_price: 0
+          });
+        }
+      }
+      await loadData();
+    } catch (err) {
+      console.error('Error marking received:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (currentUser) loadData();
@@ -307,6 +390,43 @@ export const ProcurementPage: React.FC = () => {
     return alerts;
   }, [stockBalances, requests]);
 
+
+  // Dashboard data
+  const dashboardData = useMemo(() => {
+    const materialCounts: Record<string, { count: number; total: number; name: string }> = {};
+    requests.forEach(req => {
+      const name = req.title || req.name || 'Nieznany';
+      if (!materialCounts[name]) materialCounts[name] = { count: 0, total: 0, name };
+      materialCounts[name].count++;
+      materialCounts[name].total += req.volume_required || 0;
+    });
+    const topMaterials = Object.values(materialCounts).sort((a, b) => b.count - a.count).slice(0, 8);
+    const totalSpend = orders.filter(o => !['draft', 'cancelled'].includes(o.status))
+      .reduce((s, o) => s + (o.total || o.total_amount || 0), 0);
+    const pendingRequests = requests.filter(r => ['new', 'partial'].includes(r.status));
+    const pendingValue = orders.filter(o => ['sent', 'confirmed', 'shipped'].includes(o.status))
+      .reduce((s, o) => s + (o.total || o.total_amount || 0), 0);
+    return { topMaterials, totalSpend, pendingRequests, pendingValue };
+  }, [requests, orders]);
+
+  // Per-request AI quantity alerts
+  const requestAiAlerts = useMemo(() => {
+    const alertMap: Record<string, string> = {};
+    requests.forEach(req => {
+      if (!['new', 'partial'].includes(req.status) || !req.volume_required) return;
+      const sameItem = requests.filter(r =>
+        r.id !== req.id && r.project_id === req.project_id &&
+        (r.title || r.name || '').toLowerCase() === (req.title || req.name || '').toLowerCase() &&
+        r.status !== 'cancelled'
+      );
+      const totalOrdered = sameItem.reduce((s, r) => s + (r.volume_required || 0), 0);
+      if (totalOrdered > 0 && Math.abs(totalOrdered - req.volume_required) / req.volume_required > 0.15) {
+        alertMap[req.id] = `Sprawdź ilość! Wcześniej zamówiono ${totalOrdered} szt tego materiału.`;
+      }
+    });
+    return alertMap;
+  }, [requests]);
+
   // Request CRUD
   const handleSaveRequest = async () => {
     if (!currentUser || !requestForm.name || !requestForm.project_id) return;
@@ -431,6 +551,7 @@ export const ProcurementPage: React.FC = () => {
     { key: 'requests', label: 'Zapotrzebowania', icon: ShoppingCart },
     { key: 'orders', label: 'Zamówienia', icon: FileText },
     { key: 'stock', label: 'Magazyn', icon: Warehouse },
+    { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   ];
 
   const requestStatusOptions: ResourceRequestStatus[] = ['new', 'partial', 'ordered', 'received', 'cancelled'];
@@ -452,6 +573,7 @@ export const ProcurementPage: React.FC = () => {
               <Plus className="w-5 h-5" /> Nowe zamówienie
             </button>
           )}
+          {activeTab === 'dashboard' && null}
           {activeTab === 'stock' && (
             <button onClick={() => { setEditingStock(null); setStockForm({ name: '', address: '', description: '' }); setShowStockModal(true); }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
@@ -577,14 +699,31 @@ export const ProcurementPage: React.FC = () => {
                         <AlertTriangle className="w-3 h-3" /> Przekroczone
                       </span>
                     )}
+                    {requestAiAlerts[req.id] && (
+                      <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded" title={requestAiAlerts[req.id]}>
+                        <AlertCircle className="w-3 h-3" /> Sprawdź ilość!
+                      </span>
+                    )}
                     <span className={`px-2 py-1 rounded-full text-xs font-medium border ${RESOURCE_REQUEST_STATUS_COLORS[req.status]}`}>
                       {RESOURCE_REQUEST_STATUS_LABELS[req.status]}
                     </span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 flex-wrap">
                       {req.status === 'new' && (
-                        <button onClick={() => handleApproveRequest(req)} disabled={saving}
+                        <button onClick={() => handleMoveToRealizacja(req)} disabled={saving}
+                          className="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> W realizacji
+                        </button>
+                      )}
+                      {req.status === 'partial' && (
+                        <button onClick={() => handleOpenZamowione(req)} disabled={saving}
+                          className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 flex items-center gap-1">
+                          <ShoppingCart className="w-3 h-3" /> Zamów
+                        </button>
+                      )}
+                      {req.status === 'ordered' && (
+                        <button onClick={() => handleMarkReceivedRequest(req)} disabled={saving}
                           className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> Zatwierdź → Zamówienie
+                          <CheckCircle className="w-3 h-3" /> Dostarczone
                         </button>
                       )}
                       <button onClick={() => {
@@ -694,6 +833,82 @@ export const ProcurementPage: React.FC = () => {
                 ))}
               </div>
             )
+          ) : activeTab === 'dashboard' ? (
+            /* DASHBOARD TAB */
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'Łączny wydatek', value: formatCurrency(dashboardData.totalSpend), icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50' },
+                  { label: 'Zamówienia w toku', value: formatCurrency(dashboardData.pendingValue), icon: Truck, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { label: 'Zaявки w oczekiwaniu', value: `${dashboardData.pendingRequests.length} szt`, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+                  { label: 'Stan magazynu', value: formatCurrency(stats.totalStockValue), icon: Warehouse, color: 'text-purple-600', bg: 'bg-purple-50' },
+                ].map(({ label, value, icon: Icon, color, bg }) => (
+                  <div key={label} className={`${bg} rounded-xl p-4 border border-slate-200`}>
+                    <div className={`flex items-center gap-2 ${color} mb-1`}>
+                      <Icon className="w-5 h-5" />
+                      <span className="text-sm font-medium">{label}</span>
+                    </div>
+                    <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Top Materials */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-blue-600" /> Top materiały
+                  </h3>
+                  {dashboardData.topMaterials.length === 0 ? (
+                    <p className="text-slate-500 text-sm">Brak danych</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {dashboardData.topMaterials.map((m, i) => (
+                        <div key={m.name} className="flex items-center gap-3">
+                          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-800 truncate">{m.name}</p>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1">
+                              <div className="bg-blue-500 h-1.5 rounded-full"
+                                style={{ width: `${Math.min(100, (m.count / dashboardData.topMaterials[0].count) * 100)}%` }} />
+                            </div>
+                          </div>
+                          <span className="text-sm text-slate-500 flex-shrink-0">{m.count}x</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pending Requests */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-amber-600" /> Zaявки w oczekiwaniu
+                  </h3>
+                  {dashboardData.pendingRequests.length === 0 ? (
+                    <p className="text-slate-500 text-sm">Brak oczekujących zaявок</p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {dashboardData.pendingRequests.map(req => (
+                        <div key={req.id} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200">
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            req.priority === 'urgent' ? 'bg-red-500' :
+                            req.priority === 'high' ? 'bg-amber-500' : 'bg-blue-500'
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{req.title || req.name}</p>
+                            <p className="text-xs text-slate-400">{(req as any).project?.name || 'Bez projektu'} • {req.volume_required} szt</p>
+                          </div>
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${RESOURCE_REQUEST_STATUS_COLORS[req.status]}`}>
+                            {RESOURCE_REQUEST_STATUS_LABELS[req.status]}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           ) : (
             /* STOCK TAB */
             <div className="space-y-6">
@@ -935,6 +1150,65 @@ export const ProcurementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Zamówione Modal */}
+      {showZamowioneModal && zamowioneRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-lg font-semibold">🛒 Utwórz zamówienie</h2>
+              <button onClick={() => setShowZamowioneModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="p-3 bg-blue-50 rounded-lg text-sm">
+                <p className="font-medium text-blue-800">Zapotrzebowanie: {zamowioneRequest.title || zamowioneRequest.name}</p>
+                <p className="text-blue-600 mt-1">Ilość: {zamowioneRequest.volume_required} szt</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Dostawca</label>
+                <select value={zamowioneForm.contractor_id}
+                  onChange={e => setZamowioneForm({ ...zamowioneForm, contractor_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                  <option value="">-- Wybierz dostawcę --</option>
+                  {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kwota netto (PLN)</label>
+                  <input type="number" min="0" step="0.01" value={zamowioneForm.total || ''}
+                    onChange={e => setZamowioneForm({ ...zamowioneForm, total: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Planowana dostawa</label>
+                  <input type="date" value={zamowioneForm.expected_delivery}
+                    onChange={e => setZamowioneForm({ ...zamowioneForm, expected_delivery: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi</label>
+                <textarea value={zamowioneForm.notes}
+                  onChange={e => setZamowioneForm({ ...zamowioneForm, notes: e.target.value })}
+                  rows={2} placeholder="Dodatkowe informacje dla dostawcy..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none" />
+              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-3">
+              <button onClick={() => setShowZamowioneModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={handleConfirmZamowione} disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingCart className="w-4 h-4" />}
+                Zamów i przejdź do Zamówione
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Stock Modal */}
       {showStockModal && (
