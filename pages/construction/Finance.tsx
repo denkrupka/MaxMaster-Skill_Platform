@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Search, DollarSign, TrendingUp, TrendingDown, Wallet,
-  CreditCard, Loader2, Filter, Download, Calendar, Building2,
+  CreditCard, Loader2, Download, Building2,
   FileText, ArrowUpRight, ArrowDownRight, PieChart, BarChart3,
-  Receipt, CheckCircle, Clock, AlertCircle, X, Pencil, Save, Trash2
+  Receipt, Clock, X, Pencil, Save, Trash2, ChevronLeft, ChevronRight,
+  Target
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -18,6 +19,22 @@ import {
 
 type TabType = 'operations' | 'acts' | 'accounts' | 'budget';
 
+interface ProjectBudget {
+  id: string;
+  project_id: string;
+  year: number;
+  month: number;
+  planned_income: number;
+  planned_expense: number;
+  created_at: string;
+  updated_at: string;
+}
+
+const MONTH_NAMES = [
+  'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
+  'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
+];
+
 export const FinancePage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser } = state;
@@ -28,10 +45,24 @@ export const FinancePage: React.FC = () => {
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [budgets, setBudgets] = useState<ProjectBudget[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<FinanceOperationType | 'all'>('all');
+
+  // Budget state
+  const [budgetProjectId, setBudgetProjectId] = useState<string>('');
+  const [budgetYear, setBudgetYear] = useState<number>(new Date().getFullYear());
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<ProjectBudget | null>(null);
+  const [budgetForm, setBudgetForm] = useState({
+    project_id: '',
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    planned_income: 0,
+    planned_expense: 0
+  });
 
   // Modals
   const [showOperationModal, setShowOperationModal] = useState(false);
@@ -51,21 +82,21 @@ export const FinancePage: React.FC = () => {
     amount: 0,
     description: '',
     operation_date: new Date().toISOString().split('T')[0],
-    document_number: ''
+    invoice_number: ''
   });
 
-  // Act form
+  // Act form — uses period_from/period_to to match DB schema
   const [actForm, setActForm] = useState({
     project_id: '',
     contractor_id: '',
     number: '',
     name: '',
     act_date: new Date().toISOString().split('T')[0],
-    period_start: '',
-    period_end: '',
+    period_from: '',
+    period_to: '',
     total: 0,
     nds_amount: 0,
-    payment_status: 'pending' as 'pending' | 'partial' | 'paid'
+    payment_status: 'unpaid' as 'unpaid' | 'partial' | 'paid'
   });
 
   // Account form
@@ -85,7 +116,7 @@ export const FinancePage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [operationsRes, actsRes, accountsRes, projectsRes, contractorsRes] = await Promise.all([
+      const [operationsRes, actsRes, accountsRes, projectsRes, contractorsRes, budgetsRes] = await Promise.all([
         supabase
           .from('finance_operations')
           .select('*, project:projects(*), account:finance_accounts(*), contractor:contractors(*)')
@@ -112,14 +143,27 @@ export const FinancePage: React.FC = () => {
           .from('contractors')
           .select('*')
           .eq('company_id', currentUser.company_id)
-          .is('deleted_at', null)
+          .is('deleted_at', null),
+        supabase
+          .from('project_budgets')
+          .select('*')
+          .in('project_id', (await supabase.from('projects').select('id').eq('company_id', currentUser.company_id)).data?.map(p => p.id) || [])
+          .order('year', { ascending: true })
+          .order('month', { ascending: true })
       ]);
 
       if (operationsRes.data) setOperations(operationsRes.data);
       if (actsRes.data) setActs(actsRes.data);
       if (accountsRes.data) setAccounts(accountsRes.data);
-      if (projectsRes.data) setProjects(projectsRes.data);
+      if (projectsRes.data) {
+        setProjects(projectsRes.data);
+        if (projectsRes.data.length > 0 && !budgetProjectId) {
+          setBudgetProjectId(projectsRes.data[0].id);
+          setBudgetForm(f => ({ ...f, project_id: projectsRes.data[0].id }));
+        }
+      }
       if (contractorsRes.data) setContractors(contractorsRes.data);
+      if (budgetsRes.data) setBudgets(budgetsRes.data);
     } catch (err) {
       console.error('Error loading finance data:', err);
     } finally {
@@ -129,10 +173,10 @@ export const FinancePage: React.FC = () => {
 
   const stats = useMemo(() => {
     const completedOps = operations.filter(o => o.status === 'completed');
-    const income = completedOps.filter(o => o.operation_type === 'income').reduce((sum, o) => sum + o.amount, 0);
-    const expense = completedOps.filter(o => o.operation_type === 'expense').reduce((sum, o) => sum + o.amount, 0);
-    const totalBalance = accounts.reduce((sum, a) => sum + a.current_balance, 0);
-    const pendingActs = acts.filter(a => a.payment_status !== 'paid').reduce((sum, a) => sum + (a.total - a.paid_amount), 0);
+    const income = completedOps.filter(o => o.operation_type === 'income' || (o as any).transaction_type === 'income').reduce((sum, o) => sum + o.amount, 0);
+    const expense = completedOps.filter(o => o.operation_type === 'expense' || (o as any).transaction_type === 'expense').reduce((sum, o) => sum + o.amount, 0);
+    const totalBalance = accounts.reduce((sum, a) => sum + (a.current_balance ?? a.balance ?? 0), 0);
+    const pendingActs = acts.filter(a => a.payment_status !== 'paid').reduce((sum, a) => sum + ((a.total ?? a.amount ?? 0) - (a.paid_amount ?? 0)), 0);
 
     return { income, expense, balance: income - expense, totalBalance, pendingActs };
   }, [operations, accounts, acts]);
@@ -140,7 +184,8 @@ export const FinancePage: React.FC = () => {
   const filteredOperations = useMemo(() => {
     return operations.filter(op => {
       const matchesProject = projectFilter === 'all' || op.project_id === projectFilter;
-      const matchesType = typeFilter === 'all' || op.operation_type === typeFilter;
+      const opType = op.operation_type || (op as any).transaction_type;
+      const matchesType = typeFilter === 'all' || opType === typeFilter;
       const matchesSearch = !search || op.description?.toLowerCase().includes(search.toLowerCase());
       return matchesProject && matchesType && matchesSearch;
     });
@@ -156,36 +201,69 @@ export const FinancePage: React.FC = () => {
     });
   }, [acts, projectFilter, search]);
 
+  // Budget computations for selected project+year
+  const budgetData = useMemo(() => {
+    const projectBudgets = budgets.filter(b => b.project_id === budgetProjectId && b.year === budgetYear);
+
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1;
+      const budget = projectBudgets.find(b => b.month === month);
+
+      // Actual from operations
+      const monthOps = operations.filter(op => {
+        if (!budgetProjectId || op.project_id !== budgetProjectId) return false;
+        const d = new Date(op.operation_date || (op as any).transaction_date || '');
+        return d.getFullYear() === budgetYear && d.getMonth() + 1 === month && op.status === 'completed';
+      });
+
+      const actualIncome = monthOps
+        .filter(o => o.operation_type === 'income' || (o as any).transaction_type === 'income')
+        .reduce((s, o) => s + o.amount, 0);
+      const actualExpense = monthOps
+        .filter(o => o.operation_type === 'expense' || (o as any).transaction_type === 'expense')
+        .reduce((s, o) => s + o.amount, 0);
+
+      return {
+        month,
+        monthName: MONTH_NAMES[i],
+        budgetId: budget?.id,
+        plannedIncome: budget?.planned_income ?? 0,
+        plannedExpense: budget?.planned_expense ?? 0,
+        actualIncome,
+        actualExpense,
+        varianceIncome: actualIncome - (budget?.planned_income ?? 0),
+        varianceExpense: actualExpense - (budget?.planned_expense ?? 0),
+      };
+    });
+  }, [budgets, budgetProjectId, budgetYear, operations]);
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
 
   const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString('pl-PL');
+    date ? new Date(date).toLocaleDateString('pl-PL') : '—';
 
-  // Operation CRUD
+  // ─── Operation CRUD ───────────────────────────────────────────────────────
   const handleSaveOperation = async () => {
-    if (!currentUser || !operationForm.amount) return;
+    if (!currentUser || !operationForm.amount || !operationForm.account_id) return;
     setSaving(true);
     try {
       const data = {
         company_id: currentUser.company_id,
         project_id: operationForm.project_id || null,
-        account_id: operationForm.account_id || null,
+        account_id: operationForm.account_id,
         contractor_id: operationForm.contractor_id || null,
         operation_type: operationForm.operation_type,
         amount: operationForm.amount,
         description: operationForm.description,
         operation_date: operationForm.operation_date,
-        document_number: operationForm.document_number || null,
+        invoice_number: operationForm.invoice_number || null,
         status: 'completed' as FinanceOperationStatus,
         created_by_id: currentUser.id
       };
 
       if (editingOperation) {
-        await supabase
-          .from('finance_operations')
-          .update(data)
-          .eq('id', editingOperation.id);
+        await supabase.from('finance_operations').update(data).eq('id', editingOperation.id);
       } else {
         await supabase.from('finance_operations').insert(data);
       }
@@ -204,10 +282,7 @@ export const FinancePage: React.FC = () => {
   const handleDeleteOperation = async (op: FinanceOperation) => {
     if (!confirm('Czy na pewno chcesz usunąć tę operację?')) return;
     try {
-      await supabase
-        .from('finance_operations')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', op.id);
+      await supabase.from('finance_operations').update({ deleted_at: new Date().toISOString() }).eq('id', op.id);
       await loadData();
     } catch (err) {
       console.error('Error deleting operation:', err);
@@ -217,30 +292,30 @@ export const FinancePage: React.FC = () => {
   const resetOperationForm = () => {
     setOperationForm({
       project_id: '',
-      account_id: '',
+      account_id: accounts.length === 1 ? accounts[0].id : '',
       contractor_id: '',
       operation_type: 'expense',
       amount: 0,
       description: '',
       operation_date: new Date().toISOString().split('T')[0],
-      document_number: ''
+      invoice_number: ''
     });
   };
 
-  // Act CRUD
+  // ─── Act CRUD ─────────────────────────────────────────────────────────────
   const handleSaveAct = async () => {
-    if (!currentUser || !actForm.number || !actForm.total) return;
+    if (!currentUser || !actForm.number || !actForm.total || !actForm.project_id || !actForm.contractor_id) return;
     setSaving(true);
     try {
       const data = {
         company_id: currentUser.company_id,
-        project_id: actForm.project_id || null,
-        contractor_id: actForm.contractor_id || null,
+        project_id: actForm.project_id,
+        contractor_id: actForm.contractor_id,
         number: actForm.number,
-        name: actForm.name,
+        name: actForm.name || null,
         act_date: actForm.act_date,
-        period_start: actForm.period_start || null,
-        period_end: actForm.period_end || null,
+        period_from: actForm.period_from || actForm.act_date,
+        period_to: actForm.period_to || actForm.act_date,
         total: actForm.total,
         nds_amount: actForm.nds_amount,
         payment_status: actForm.payment_status,
@@ -249,10 +324,7 @@ export const FinancePage: React.FC = () => {
       };
 
       if (editingAct) {
-        await supabase
-          .from('finance_acts')
-          .update(data)
-          .eq('id', editingAct.id);
+        await supabase.from('finance_acts').update(data).eq('id', editingAct.id);
       } else {
         await supabase.from('finance_acts').insert(data);
       }
@@ -271,10 +343,7 @@ export const FinancePage: React.FC = () => {
   const handleDeleteAct = async (act: FinanceAct) => {
     if (!confirm('Czy na pewno chcesz usunąć ten akt?')) return;
     try {
-      await supabase
-        .from('finance_acts')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', act.id);
+      await supabase.from('finance_acts').update({ deleted_at: new Date().toISOString() }).eq('id', act.id);
       await loadData();
     } catch (err) {
       console.error('Error deleting act:', err);
@@ -288,15 +357,15 @@ export const FinancePage: React.FC = () => {
       number: '',
       name: '',
       act_date: new Date().toISOString().split('T')[0],
-      period_start: '',
-      period_end: '',
+      period_from: '',
+      period_to: '',
       total: 0,
       nds_amount: 0,
-      payment_status: 'pending'
+      payment_status: 'unpaid'
     });
   };
 
-  // Account CRUD
+  // ─── Account CRUD ─────────────────────────────────────────────────────────
   const handleSaveAccount = async () => {
     if (!currentUser || !accountForm.name) return;
     setSaving(true);
@@ -311,10 +380,7 @@ export const FinancePage: React.FC = () => {
       };
 
       if (editingAccount) {
-        await supabase
-          .from('finance_accounts')
-          .update(data)
-          .eq('id', editingAccount.id);
+        await supabase.from('finance_accounts').update(data).eq('id', editingAccount.id);
       } else {
         await supabase.from('finance_accounts').insert({ ...data, is_active: true });
       }
@@ -331,13 +397,73 @@ export const FinancePage: React.FC = () => {
   };
 
   const resetAccountForm = () => {
-    setAccountForm({
-      name: '',
-      account_type: 'bank',
-      bank_name: '',
-      account_number: '',
-      current_balance: 0
+    setAccountForm({ name: '', account_type: 'bank', bank_name: '', account_number: '', current_balance: 0 });
+  };
+
+  // ─── Budget CRUD ──────────────────────────────────────────────────────────
+  const handleSaveBudget = async () => {
+    if (!currentUser || !budgetForm.project_id) return;
+    setSaving(true);
+    try {
+      const data = {
+        project_id: budgetForm.project_id,
+        year: budgetForm.year,
+        month: budgetForm.month,
+        planned_income: budgetForm.planned_income,
+        planned_expense: budgetForm.planned_expense
+      };
+
+      if (editingBudget) {
+        await supabase.from('project_budgets').update(data).eq('id', editingBudget.id);
+      } else {
+        // upsert by project_id+year+month
+        await supabase.from('project_budgets').upsert(data, { onConflict: 'project_id,year,month' });
+      }
+
+      setShowBudgetModal(false);
+      setEditingBudget(null);
+      await loadData();
+    } catch (err) {
+      console.error('Error saving budget:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openBudgetModal = (month: number, existing?: ProjectBudget) => {
+    setEditingBudget(existing || null);
+    setBudgetForm({
+      project_id: budgetProjectId,
+      year: budgetYear,
+      month,
+      planned_income: existing?.planned_income ?? 0,
+      planned_expense: existing?.planned_expense ?? 0
     });
+    setShowBudgetModal(true);
+  };
+
+  // ─── Export ───────────────────────────────────────────────────────────────
+  const handleExportCSV = () => {
+    const rows = [
+      ['Data', 'Typ', 'Kwota', 'Opis', 'Nr dokumentu', 'Projekt', 'Status'],
+      ...filteredOperations.map(op => [
+        formatDate(op.operation_date || (op as any).transaction_date || ''),
+        FINANCE_OPERATION_TYPE_LABELS[op.operation_type as FinanceOperationType] || op.operation_type,
+        op.operation_type === 'expense' ? -op.amount : op.amount,
+        op.description || '',
+        (op as any).invoice_number || (op as any).document_number || '',
+        (op as any).project?.name || '',
+        FINANCE_OPERATION_STATUS_LABELS[op.status as FinanceOperationStatus] || op.status
+      ])
+    ];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `operacje_finansowe_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const tabs: { key: TabType; label: string; icon: React.ElementType }[] = [
@@ -349,9 +475,16 @@ export const FinancePage: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex justify-end">
-        <div className="flex gap-2">
-          {activeTab === 'operations' && (
+      <div className="mb-6 flex justify-end gap-2">
+        {activeTab === 'operations' && (
+          <>
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              <Download className="w-4 h-4" />
+              Eksport CSV
+            </button>
             <button
               onClick={() => { resetOperationForm(); setEditingOperation(null); setShowOperationModal(true); }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -359,26 +492,35 @@ export const FinancePage: React.FC = () => {
               <Plus className="w-5 h-5" />
               Nowa operacja
             </button>
-          )}
-          {activeTab === 'acts' && (
-            <button
-              onClick={() => { resetActForm(); setEditingAct(null); setShowActModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="w-5 h-5" />
-              Nowy akt
-            </button>
-          )}
-          {activeTab === 'accounts' && (
-            <button
-              onClick={() => { resetAccountForm(); setEditingAccount(null); setShowAccountModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="w-5 h-5" />
-              Nowe konto
-            </button>
-          )}
-        </div>
+          </>
+        )}
+        {activeTab === 'acts' && (
+          <button
+            onClick={() => { resetActForm(); setEditingAct(null); setShowActModal(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-5 h-5" />
+            Nowy akt
+          </button>
+        )}
+        {activeTab === 'accounts' && (
+          <button
+            onClick={() => { resetAccountForm(); setEditingAccount(null); setShowAccountModal(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-5 h-5" />
+            Nowe konto
+          </button>
+        )}
+        {activeTab === 'budget' && budgetProjectId && (
+          <button
+            onClick={() => openBudgetModal(new Date().getMonth() + 1)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-5 h-5" />
+            Zaplanuj miesiąc
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -500,62 +642,74 @@ export const FinancePage: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredOperations.map(op => (
-                  <div
-                    key={op.id}
-                    className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer group"
-                  >
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      op.operation_type === 'income' ? 'bg-green-100' : 'bg-red-100'
-                    }`}>
-                      {op.operation_type === 'income' ? (
-                        <ArrowUpRight className="w-5 h-5 text-green-600" />
-                      ) : (
-                        <ArrowDownRight className="w-5 h-5 text-red-600" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{op.description || 'Operacja finansowa'}</p>
-                      <p className="text-sm text-slate-500">
-                        {formatDate(op.operation_date)} • {(op as any).project?.name || 'Bez projektu'}
-                        {op.document_number && ` • ${op.document_number}`}
+                {filteredOperations.map(op => {
+                  const opType = op.operation_type || (op as any).transaction_type;
+                  return (
+                    <div
+                      key={op.id}
+                      className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer group"
+                    >
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        opType === 'income' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        {opType === 'income' ? (
+                          <ArrowUpRight className="w-5 h-5 text-green-600" />
+                        ) : (
+                          <ArrowDownRight className="w-5 h-5 text-red-600" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-900">{op.description || 'Operacja finansowa'}</p>
+                        <p className="text-sm text-slate-500">
+                          {formatDate(op.operation_date || (op as any).transaction_date || '')}
+                          {' • '}
+                          {(op as any).project?.name || 'Bez projektu'}
+                          {((op as any).invoice_number || (op as any).document_number) && ` • ${(op as any).invoice_number || (op as any).document_number}`}
+                        </p>
+                      </div>
+                      <span className={`hidden md:inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                        op.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        op.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        {FINANCE_OPERATION_STATUS_LABELS[op.status as FinanceOperationStatus] || op.status}
+                      </span>
+                      <p className={`text-lg font-semibold ${
+                        opType === 'income' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {opType === 'income' ? '+' : '-'}{formatCurrency(op.amount)}
                       </p>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingOperation(op);
+                            setOperationForm({
+                              project_id: op.project_id || '',
+                              account_id: op.account_id || '',
+                              contractor_id: op.contractor_id || '',
+                              operation_type: (opType || 'expense') as FinanceOperationType,
+                              amount: op.amount,
+                              description: op.description || '',
+                              operation_date: (op.operation_date || (op as any).transaction_date || '').split('T')[0],
+                              invoice_number: (op as any).invoice_number || (op as any).document_number || ''
+                            });
+                            setShowOperationModal(true);
+                          }}
+                          className="p-1 hover:bg-slate-200 rounded"
+                        >
+                          <Pencil className="w-4 h-4 text-slate-400" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteOperation(op); }}
+                          className="p-1 hover:bg-red-100 rounded"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
                     </div>
-                    <p className={`text-lg font-semibold ${
-                      op.operation_type === 'income' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {op.operation_type === 'income' ? '+' : '-'}{formatCurrency(op.amount)}
-                    </p>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingOperation(op);
-                          setOperationForm({
-                            project_id: op.project_id || '',
-                            account_id: op.account_id || '',
-                            contractor_id: op.contractor_id || '',
-                            operation_type: op.operation_type as FinanceOperationType,
-                            amount: op.amount,
-                            description: op.description || '',
-                            operation_date: op.operation_date?.split('T')[0] || '',
-                            document_number: op.document_number || ''
-                          });
-                          setShowOperationModal(true);
-                        }}
-                        className="p-1 hover:bg-slate-200 rounded"
-                      >
-                        <Pencil className="w-4 h-4 text-slate-400" />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteOperation(op); }}
-                        className="p-1 hover:bg-red-100 rounded"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           ) : activeTab === 'acts' ? (
@@ -581,16 +735,30 @@ export const FinancePage: React.FC = () => {
                       <Receipt className="w-5 h-5 text-blue-600" />
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium text-slate-900">Akt nr {act.number}</p>
+                      <p className="font-medium text-slate-900">Akt nr {act.number}{act.name ? ` — ${act.name}` : ''}</p>
                       <p className="text-sm text-slate-500">
-                        {formatDate(act.act_date)} • {(act as any).project?.name}
+                        {formatDate(act.act_date || act.date)}
+                        {' • '}
+                        {(act as any).project?.name || '—'}
                         {(act as any).contractor?.name && ` • ${(act as any).contractor?.name}`}
                       </p>
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${ACT_STATUS_COLORS[act.status]}`}>
-                      {ACT_STATUS_LABELS[act.status]}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      ACT_STATUS_COLORS[act.status as ActStatus] || 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {ACT_STATUS_LABELS[act.status as ActStatus] || act.status}
                     </span>
-                    <p className="text-lg font-semibold text-slate-900">{formatCurrency(act.total)}</p>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      act.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                      act.payment_status === 'partial' ? 'bg-amber-100 text-amber-700' :
+                      'bg-slate-100 text-slate-500'
+                    }`}>
+                      {act.payment_status === 'paid' ? 'Opłacony' :
+                       act.payment_status === 'partial' ? 'Częściowo' : 'Oczekuje'}
+                    </span>
+                    <p className="text-lg font-semibold text-slate-900">
+                      {formatCurrency(act.total ?? act.amount ?? 0)}
+                    </p>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100">
                       <button
                         onClick={(e) => {
@@ -601,12 +769,12 @@ export const FinancePage: React.FC = () => {
                             contractor_id: act.contractor_id || '',
                             number: act.number,
                             name: act.name || '',
-                            act_date: act.act_date?.split('T')[0] || '',
-                            period_start: act.period_start?.split('T')[0] || '',
-                            period_end: act.period_end?.split('T')[0] || '',
-                            total: act.total,
-                            nds_amount: act.nds_amount,
-                            payment_status: (act.payment_status || 'pending') as 'pending' | 'partial' | 'paid'
+                            act_date: (act.act_date || act.date || '').split('T')[0],
+                            period_from: ((act as any).period_from || (act as any).period_start || '').split('T')[0],
+                            period_to: ((act as any).period_to || (act as any).period_end || '').split('T')[0],
+                            total: act.total ?? act.amount ?? 0,
+                            nds_amount: act.nds_amount ?? 0,
+                            payment_status: (act.payment_status === 'unpaid' ? 'unpaid' : act.payment_status || 'unpaid') as 'unpaid' | 'partial' | 'paid'
                           });
                           setShowActModal(true);
                         }}
@@ -667,7 +835,7 @@ export const FinancePage: React.FC = () => {
                               account_type: (account.account_type || 'bank') as 'bank' | 'cash' | 'card',
                               bank_name: account.bank_name || '',
                               account_number: account.account_number || '',
-                              current_balance: account.current_balance
+                              current_balance: account.current_balance ?? account.balance ?? 0
                             });
                             setShowAccountModal(true);
                           }}
@@ -677,7 +845,9 @@ export const FinancePage: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                    <p className="text-2xl font-bold text-slate-900">{formatCurrency(account.current_balance)}</p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {formatCurrency(account.current_balance ?? account.balance ?? 0)}
+                    </p>
                     {account.account_number && (
                       <p className="text-xs text-slate-400 mt-1">{account.account_number}</p>
                     )}
@@ -686,15 +856,160 @@ export const FinancePage: React.FC = () => {
               </div>
             )
           ) : (
-            <div className="text-center py-12">
-              <PieChart className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">Budżetowanie w przygotowaniu</p>
+            /* ─── BUDGET TAB ─────────────────────────────────────────── */
+            <div>
+              {projects.length === 0 ? (
+                <div className="text-center py-12">
+                  <Target className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-500">Brak projektów do planowania budżetu</p>
+                </div>
+              ) : (
+                <>
+                  {/* Controls */}
+                  <div className="flex flex-wrap gap-4 mb-6 items-center">
+                    <select
+                      value={budgetProjectId}
+                      onChange={e => setBudgetProjectId(e.target.value)}
+                      className="px-4 py-2 border border-slate-200 rounded-lg font-medium"
+                    >
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setBudgetYear(y => y - 1)}
+                        className="p-2 hover:bg-slate-100 rounded-lg"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-lg font-semibold text-slate-900 min-w-16 text-center">
+                        {budgetYear}
+                      </span>
+                      <button
+                        onClick={() => setBudgetYear(y => y + 1)}
+                        className="p-2 hover:bg-slate-100 rounded-lg"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Year summary */}
+                  {(() => {
+                    const totalPlannedIncome = budgetData.reduce((s, r) => s + r.plannedIncome, 0);
+                    const totalPlannedExpense = budgetData.reduce((s, r) => s + r.plannedExpense, 0);
+                    const totalActualIncome = budgetData.reduce((s, r) => s + r.actualIncome, 0);
+                    const totalActualExpense = budgetData.reduce((s, r) => s + r.actualExpense, 0);
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+                          <p className="text-xs text-green-600 font-medium mb-1">Plan przychód</p>
+                          <p className="text-lg font-bold text-green-700">{formatCurrency(totalPlannedIncome)}</p>
+                        </div>
+                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                          <p className="text-xs text-blue-600 font-medium mb-1">Fakt przychód</p>
+                          <p className="text-lg font-bold text-blue-700">{formatCurrency(totalActualIncome)}</p>
+                        </div>
+                        <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+                          <p className="text-xs text-red-600 font-medium mb-1">Plan wydatki</p>
+                          <p className="text-lg font-bold text-red-700">{formatCurrency(totalPlannedExpense)}</p>
+                        </div>
+                        <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                          <p className="text-xs text-amber-600 font-medium mb-1">Fakt wydatki</p>
+                          <p className="text-lg font-bold text-amber-700">{formatCurrency(totalActualExpense)}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Monthly table */}
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Miesiąc</th>
+                          <th className="px-4 py-3 text-right font-medium text-green-600">Plan przychód</th>
+                          <th className="px-4 py-3 text-right font-medium text-blue-600">Fakt przychód</th>
+                          <th className="px-4 py-3 text-right font-medium text-slate-500">Odchylenie</th>
+                          <th className="px-4 py-3 text-right font-medium text-red-600">Plan wydatki</th>
+                          <th className="px-4 py-3 text-right font-medium text-amber-600">Fakt wydatki</th>
+                          <th className="px-4 py-3 text-right font-medium text-slate-500">Odchylenie</th>
+                          <th className="px-4 py-3 text-center font-medium text-slate-500 w-20"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {budgetData.map(row => {
+                          const currentMonth = new Date().getMonth() + 1;
+                          const currentYear = new Date().getFullYear();
+                          const isCurrentMonth = row.month === currentMonth && budgetYear === currentYear;
+                          const hasBudget = row.plannedIncome > 0 || row.plannedExpense > 0;
+
+                          return (
+                            <tr
+                              key={row.month}
+                              className={`border-b border-slate-100 hover:bg-slate-50 ${isCurrentMonth ? 'bg-blue-50/30' : ''}`}
+                            >
+                              <td className="px-4 py-3 font-medium text-slate-900">
+                                <span className={isCurrentMonth ? 'text-blue-600' : ''}>{row.monthName}</span>
+                                {isCurrentMonth && <span className="ml-2 text-xs text-blue-500 font-normal">bieżący</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-700">
+                                {hasBudget ? formatCurrency(row.plannedIncome) : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-700">
+                                {row.actualIncome > 0 ? formatCurrency(row.actualIncome) : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {hasBudget && (
+                                  <span className={`text-xs font-medium ${
+                                    row.varianceIncome >= 0 ? 'text-green-600' : 'text-red-600'
+                                  }`}>
+                                    {row.varianceIncome >= 0 ? '+' : ''}{formatCurrency(row.varianceIncome)}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-700">
+                                {hasBudget ? formatCurrency(row.plannedExpense) : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-700">
+                                {row.actualExpense > 0 ? formatCurrency(row.actualExpense) : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {hasBudget && (
+                                  <span className={`text-xs font-medium ${
+                                    row.varianceExpense <= 0 ? 'text-green-600' : 'text-red-600'
+                                  }`}>
+                                    {row.varianceExpense >= 0 ? '+' : ''}{formatCurrency(row.varianceExpense)}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  onClick={() => openBudgetModal(row.month, row.budgetId
+                                    ? budgets.find(b => b.id === row.budgetId)
+                                    : undefined
+                                  )}
+                                  className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"
+                                  title="Edytuj plan"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Operation Modal */}
+      {/* ─── Operation Modal ─────────────────────────────────────────────── */}
       {showOperationModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-lg">
@@ -756,6 +1071,23 @@ export const FinancePage: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Konto *</label>
+                <select
+                  value={operationForm.account_id}
+                  onChange={e => setOperationForm({ ...operationForm, account_id: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg ${
+                    !operationForm.account_id ? 'border-amber-300 bg-amber-50' : 'border-slate-200'
+                  }`}
+                >
+                  <option value="">-- Wybierz konto --</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                {!operationForm.account_id && (
+                  <p className="text-xs text-amber-600 mt-1">Konto jest wymagane</p>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
                 <input
                   type="text"
@@ -777,11 +1109,11 @@ export const FinancePage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Nr dokumentu</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Nr faktury</label>
                   <input
                     type="text"
-                    value={operationForm.document_number}
-                    onChange={e => setOperationForm({ ...operationForm, document_number: e.target.value })}
+                    value={operationForm.invoice_number}
+                    onChange={e => setOperationForm({ ...operationForm, invoice_number: e.target.value })}
                     placeholder="FV/2024/001"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                   />
@@ -801,28 +1133,16 @@ export const FinancePage: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Konto</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kontrahent</label>
                   <select
-                    value={operationForm.account_id}
-                    onChange={e => setOperationForm({ ...operationForm, account_id: e.target.value })}
+                    value={operationForm.contractor_id}
+                    onChange={e => setOperationForm({ ...operationForm, contractor_id: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                   >
                     <option value="">-- Wybierz --</option>
-                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Kontrahent</label>
-                <select
-                  value={operationForm.contractor_id}
-                  onChange={e => setOperationForm({ ...operationForm, contractor_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                >
-                  <option value="">-- Wybierz --</option>
-                  {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
               </div>
             </div>
             <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
@@ -834,7 +1154,7 @@ export const FinancePage: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveOperation}
-                disabled={!operationForm.amount || saving}
+                disabled={!operationForm.amount || !operationForm.account_id || saving}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -845,7 +1165,7 @@ export const FinancePage: React.FC = () => {
         </div>
       )}
 
-      {/* Act Modal */}
+      {/* ─── Act Modal ───────────────────────────────────────────────────── */}
       {showActModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-lg">
@@ -893,22 +1213,22 @@ export const FinancePage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Projekt *</label>
                   <select
                     value={actForm.project_id}
                     onChange={e => setActForm({ ...actForm, project_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    className={`w-full px-3 py-2 border rounded-lg ${!actForm.project_id ? 'border-amber-300' : 'border-slate-200'}`}
                   >
                     <option value="">-- Wybierz --</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Kontrahent</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kontrahent *</label>
                   <select
                     value={actForm.contractor_id}
                     onChange={e => setActForm({ ...actForm, contractor_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    className={`w-full px-3 py-2 border rounded-lg ${!actForm.contractor_id ? 'border-amber-300' : 'border-slate-200'}`}
                   >
                     <option value="">-- Wybierz --</option>
                     {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -921,8 +1241,8 @@ export const FinancePage: React.FC = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Okres od</label>
                   <input
                     type="date"
-                    value={actForm.period_start}
-                    onChange={e => setActForm({ ...actForm, period_start: e.target.value })}
+                    value={actForm.period_from}
+                    onChange={e => setActForm({ ...actForm, period_from: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                   />
                 </div>
@@ -930,8 +1250,8 @@ export const FinancePage: React.FC = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Okres do</label>
                   <input
                     type="date"
-                    value={actForm.period_end}
-                    onChange={e => setActForm({ ...actForm, period_end: e.target.value })}
+                    value={actForm.period_to}
+                    onChange={e => setActForm({ ...actForm, period_to: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                   />
                 </div>
@@ -971,7 +1291,7 @@ export const FinancePage: React.FC = () => {
                   onChange={e => setActForm({ ...actForm, payment_status: e.target.value as any })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                 >
-                  <option value="pending">Oczekuje</option>
+                  <option value="unpaid">Nieopłacony</option>
                   <option value="partial">Częściowo opłacony</option>
                   <option value="paid">Opłacony</option>
                 </select>
@@ -986,7 +1306,7 @@ export const FinancePage: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveAct}
-                disabled={!actForm.number || !actForm.total || saving}
+                disabled={!actForm.number || !actForm.total || !actForm.project_id || !actForm.contractor_id || saving}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -997,7 +1317,7 @@ export const FinancePage: React.FC = () => {
         </div>
       )}
 
-      {/* Account Modal */}
+      {/* ─── Account Modal ───────────────────────────────────────────────── */}
       {showAccountModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md">
@@ -1085,6 +1405,105 @@ export const FinancePage: React.FC = () => {
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editingAccount ? 'Zapisz' : 'Dodaj'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Budget Modal ────────────────────────────────────────────────── */}
+      {showBudgetModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">
+                Budżet — {MONTH_NAMES[budgetForm.month - 1]} {budgetForm.year}
+              </h2>
+              <button onClick={() => setShowBudgetModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
+                <select
+                  value={budgetForm.project_id}
+                  onChange={e => setBudgetForm({ ...budgetForm, project_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                >
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Rok</label>
+                  <input
+                    type="number"
+                    value={budgetForm.year}
+                    onChange={e => setBudgetForm({ ...budgetForm, year: parseInt(e.target.value) || budgetYear })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    min="2020" max="2030"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Miesiąc</label>
+                  <select
+                    value={budgetForm.month}
+                    onChange={e => setBudgetForm({ ...budgetForm, month: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                  >
+                    {MONTH_NAMES.map((name, i) => (
+                      <option key={i + 1} value={i + 1}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Plan przychód (PLN)</label>
+                <input
+                  type="number"
+                  value={budgetForm.planned_income || ''}
+                  onChange={e => setBudgetForm({ ...budgetForm, planned_income: parseFloat(e.target.value) || 0 })}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                  step="0.01" min="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Plan wydatki (PLN)</label>
+                <input
+                  type="number"
+                  value={budgetForm.planned_expense || ''}
+                  onChange={e => setBudgetForm({ ...budgetForm, planned_expense: parseFloat(e.target.value) || 0 })}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                  step="0.01" min="0"
+                />
+              </div>
+              {budgetForm.planned_income > 0 && budgetForm.planned_expense > 0 && (
+                <div className={`p-3 rounded-lg text-sm font-medium ${
+                  budgetForm.planned_income >= budgetForm.planned_expense
+                    ? 'bg-green-50 text-green-700'
+                    : 'bg-red-50 text-red-700'
+                }`}>
+                  Planowany wynik: {formatCurrency(budgetForm.planned_income - budgetForm.planned_expense)}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowBudgetModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveBudget}
+                disabled={!budgetForm.project_id || saving}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Zapisz plan
               </button>
             </div>
           </div>
