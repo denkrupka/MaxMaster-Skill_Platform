@@ -27,6 +27,7 @@ import { SuperAdminCompaniesPage } from './pages/superadmin/Companies';
 import { SuperAdminSettingsPage } from './pages/superadmin/Settings';
 import { SuperAdminDashboard } from './pages/superadmin/Dashboard';
 import { SuperAdminClients } from './pages/superadmin/Clients';
+import { SuperAdminDashboard as SuperAdminDashboardAdmin } from './pages/admin/SuperAdminDashboard';
 
 // Company Admin Pages
 import { CompanyDashboard } from './pages/company/Dashboard';
@@ -431,6 +432,7 @@ export default function App() {
 
           {/* SuperAdmin Routes */}
           <Route path="/superadmin/dashboard" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/superadmin" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminDashboardAdmin /></ProtectedRoute>} />
           <Route path="/superadmin/users" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminUsersPage /></ProtectedRoute>} />
           <Route path="/superadmin/companies" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminCompaniesPage /></ProtectedRoute>} />
           <Route path="/superadmin/clients" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminClients /></ProtectedRoute>} />

@@ -33,13 +33,15 @@ const BUDGET_CATEGORIES = [
 const MONTHS_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze',
                    'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
 
-interface BudgetCategory {
+interface BudgetItem {
   id?: string;
   project_id: string;
+  company_id?: string;
+  category: string; // materialy | robocizna | sprzet | inne
   name: string;
-  category_code: string;
   planned_amount: number;
-  spent_amount?: number;
+  actual_amount: number;
+  created_at?: string;
 }
 
 export const FinancePage: React.FC = () => {
@@ -58,13 +60,18 @@ export const FinancePage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<FinanceOperationType | 'all'>('all');
 
   // Budget state
-  const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([]);
+  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([]);
   const [budgetProject, setBudgetProject] = useState<string>('');
   const [budgetYear, setBudgetYear] = useState<number>(new Date().getFullYear());
   const [monthlyBudget, setMonthlyBudget] = useState<any[]>([]);
-  const [editingBudgetCategory, setEditingBudgetCategory] = useState<string | null>(null);
-  const [budgetCategoryForm, setBudgetCategoryForm] = useState<Record<string, number>>({});
   const [savingBudget, setSavingBudget] = useState(false);
+  const [showAddBudgetItemModal, setShowAddBudgetItemModal] = useState(false);
+  const [budgetItemForm, setBudgetItemForm] = useState({
+    category: 'materialy',
+    name: '',
+    planned_amount: 0,
+    actual_amount: 0,
+  });
 
   // Modals
   const [showOperationModal, setShowOperationModal] = useState(false);
@@ -146,34 +153,16 @@ export const FinancePage: React.FC = () => {
   };
 
   const loadBudgetData = useCallback(async () => {
-    if (!budgetProject) return;
+    if (!budgetProject || !currentUser) return;
     try {
-      // Load budget categories
-      const { data: cats } = await supabase
-        .from('project_budget_categories')
+      const { data: items } = await supabase
+        .from('budget_items')
         .select('*')
         .eq('project_id', budgetProject)
-        .order('sort_order');
+        .order('created_at', { ascending: true });
+      setBudgetItems(items || []);
 
-      // If no categories yet, create defaults
-      if (!cats || cats.length === 0) {
-        const defaultCats = BUDGET_CATEGORIES.map((c, i) => ({
-          project_id: budgetProject,
-          name: c.label,
-          category_code: c.code,
-          planned_amount: 0,
-          sort_order: i
-        }));
-        const { data: inserted } = await supabase
-          .from('project_budget_categories')
-          .insert(defaultCats)
-          .select();
-        if (inserted) setBudgetCategories(inserted);
-      } else {
-        setBudgetCategories(cats);
-      }
-
-      // Load monthly project_budgets for the year
+      // Load monthly project_budgets for the year (keep for bar chart)
       const { data: monthly } = await supabase
         .from('project_budgets')
         .select('*')
@@ -184,7 +173,7 @@ export const FinancePage: React.FC = () => {
     } catch (err) {
       console.error('Error loading budget data:', err);
     }
-  }, [budgetProject, budgetYear]);
+  }, [budgetProject, budgetYear, currentUser]);
 
   useEffect(() => {
     if (activeTab === 'budget' && budgetProject) {
@@ -220,55 +209,38 @@ export const FinancePage: React.FC = () => {
 
   // Budget KPIs
   const budgetKPIs = useMemo(() => {
-    const totalPlanned = budgetCategories.reduce((s, c) => s + c.planned_amount, 0);
-    const projectOps = operations.filter(o =>
-      o.project_id === budgetProject &&
-      o.operation_type === 'expense' &&
-      o.status === 'completed'
-    );
-    const totalSpent = projectOps.reduce((s, o) => s + o.amount, 0);
+    const totalPlanned = budgetItems.reduce((s, c) => s + (c.planned_amount || 0), 0);
+    const totalActual = budgetItems.reduce((s, c) => s + (c.actual_amount || 0), 0);
+    const remaining = totalPlanned - totalActual;
+    const pctSpent = totalPlanned > 0 ? totalActual / totalPlanned : 0;
+
+    // Overspend > 10% warning
+    const overBudget = totalActual > totalPlanned && totalPlanned > 0;
+    const overTenPct = totalPlanned > 0 && (totalActual - totalPlanned) / totalPlanned > 0.1;
+    const warningThreshold = pctSpent > 0.8 && !overBudget && totalPlanned > 0;
+
     const now = new Date();
-    const thisMonthOps = projectOps.filter(o => {
+    const thisMonthOps = operations.filter(o => {
+      if (o.project_id !== budgetProject || o.operation_type !== 'expense' || o.status !== 'completed') return false;
       const d = new Date(o.operation_date);
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     });
     const thisMonthSpent = thisMonthOps.reduce((s, o) => s + o.amount, 0);
 
-    // Budget monthly plan (current month)
-    const currentMonthPlan = monthlyBudget.find(mb =>
-      mb.year === now.getFullYear() && mb.month === (now.getMonth() + 1)
-    );
-    const monthlyPlanned = currentMonthPlan?.planned_expense || (totalPlanned / 12);
+    return { totalPlanned, totalActual, remaining, pctSpent, overBudget, overTenPct, warningThreshold, thisMonthSpent };
+  }, [budgetItems, operations, budgetProject]);
 
-    // Forecast: at current month pace, how many days until budget runs out
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const daysPassed = now.getDate();
-    const dailyBurn = daysPassed > 0 ? thisMonthSpent / daysPassed : 0;
-    const remaining = totalPlanned - totalSpent;
-    const daysLeft = dailyBurn > 0 ? Math.round(remaining / dailyBurn) : Infinity;
-
-    const overBudget = totalSpent > totalPlanned && totalPlanned > 0;
-    const warningThreshold = totalSpent / totalPlanned > 0.8 && totalPlanned > 0;
-
-    return { totalPlanned, totalSpent, remaining, monthlyPlanned, thisMonthSpent, daysLeft, overBudget, warningThreshold };
-  }, [budgetCategories, operations, budgetProject, monthlyBudget]);
-
-  // Category spent computation
-  const categorySpentMap = useMemo(() => {
-    // Since we don't have direct category linking in operations, show total per category proportionally
-    // In real scenario you'd link operations to budget categories
-    const projectOps = operations.filter(o =>
-      o.project_id === budgetProject && o.operation_type === 'expense' && o.status === 'completed'
-    );
-    const total = projectOps.reduce((s, o) => s + o.amount, 0);
-    const totalPlanned = budgetCategories.reduce((s, c) => s + c.planned_amount, 0);
-
-    return budgetCategories.reduce((acc, cat) => {
-      const ratio = totalPlanned > 0 ? cat.planned_amount / totalPlanned : 0;
-      acc[cat.category_code] = total * ratio;
-      return acc;
-    }, {} as Record<string, number>);
-  }, [operations, budgetCategories, budgetProject]);
+  // Category aggregates for pie chart
+  const categoryAggregates = useMemo(() => {
+    return BUDGET_CATEGORIES.map(cat => {
+      const items = budgetItems.filter(i => i.category === cat.code);
+      return {
+        ...cat,
+        planned: items.reduce((s, i) => s + (i.planned_amount || 0), 0),
+        actual: items.reduce((s, i) => s + (i.actual_amount || 0), 0),
+      };
+    });
+  }, [budgetItems]);
 
   const filteredOperations = useMemo(() => operations.filter(op => {
     const matchesProject = projectFilter === 'all' || op.project_id === projectFilter;
@@ -368,24 +340,40 @@ export const FinancePage: React.FC = () => {
     setShowActModal(true);
   };
 
-  // Save budget category
-  const handleSaveBudgetCategory = async (categoryId: string) => {
+  // Add budget item
+  const handleAddBudgetItem = async () => {
+    if (!currentUser || !budgetProject || !budgetItemForm.name) return;
     setSavingBudget(true);
-    const amount = budgetCategoryForm[categoryId] || 0;
     try {
-      await supabase
-        .from('project_budget_categories')
-        .update({ planned_amount: amount })
-        .eq('id', categoryId);
-      setBudgetCategories(prev => prev.map(c =>
-        c.id === categoryId ? { ...c, planned_amount: amount } : c
-      ));
-      setEditingBudgetCategory(null);
+      const { data, error } = await supabase
+        .from('budget_items')
+        .insert({
+          project_id: budgetProject,
+          company_id: currentUser.company_id,
+          category: budgetItemForm.category,
+          name: budgetItemForm.name,
+          planned_amount: budgetItemForm.planned_amount,
+          actual_amount: budgetItemForm.actual_amount,
+        })
+        .select()
+        .single();
+      if (!error && data) {
+        setBudgetItems(prev => [...prev, data]);
+      }
+      setShowAddBudgetItemModal(false);
+      setBudgetItemForm({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0 });
     } catch (err) {
-      console.error('Error saving budget category:', err);
+      console.error('Error adding budget item:', err);
     } finally {
       setSavingBudget(false);
     }
+  };
+
+  // Delete budget item
+  const handleDeleteBudgetItem = async (id: string) => {
+    if (!confirm('Usunąć pozycję budżetową?')) return;
+    await supabase.from('budget_items').delete().eq('id', id);
+    setBudgetItems(prev => prev.filter(i => i.id !== id));
   };
 
   // Operation CRUD
@@ -521,27 +509,15 @@ export const FinancePage: React.FC = () => {
     { key: 'budget', label: 'Budżet', icon: PieChart }
   ];
 
-  const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+  const budgetPieData = categoryAggregates
+    .filter(c => c.planned > 0)
+    .map(c => ({ name: c.label, value: c.planned, color: c.color }));
 
-  const budgetPieData = budgetCategories.map((cat, i) => ({
-    name: cat.name,
-    value: cat.planned_amount,
-    color: BUDGET_CATEGORIES.find(c => c.code === cat.category_code)?.color || PIE_COLORS[i % PIE_COLORS.length]
-  })).filter(d => d.value > 0);
-
-  const budgetBarData = Array.from({ length: 12 }, (_, i) => {
-    const mb = monthlyBudget.find(m => m.month === i + 1);
-    const monthOps = operations.filter(o => {
-      if (o.project_id !== budgetProject || o.operation_type !== 'expense' || o.status !== 'completed') return false;
-      const d = new Date(o.operation_date);
-      return d.getFullYear() === budgetYear && d.getMonth() === i;
-    });
-    return {
-      name: MONTHS_PL[i],
-      Plan: mb?.planned_expense || 0,
-      Faktura: monthOps.reduce((s, o) => s + o.amount, 0)
-    };
-  });
+  const budgetBarData = categoryAggregates.map(cat => ({
+    name: cat.label,
+    Plan: cat.planned,
+    Faktura: cat.actual,
+  }));
 
   return (
     <div className="p-6">
@@ -833,29 +809,37 @@ export const FinancePage: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  {/* AI Alerts */}
-                  {budgetKPIs.overBudget && (
+                  {/* Alerts */}
+                  {budgetKPIs.overTenPct && (
                     <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
                       <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="font-semibold text-red-800">🚨 Budżet przekroczony!</p>
+                        <p className="font-semibold text-red-800">🚨 Budżet przekroczony o ponad 10%!</p>
                         <p className="text-sm text-red-700">
-                          Wydano {formatCurrency(budgetKPIs.totalSpent)} z planowanych {formatCurrency(budgetKPIs.totalPlanned)}.
-                          Przekroczenie: {formatCurrency(budgetKPIs.totalSpent - budgetKPIs.totalPlanned)}
+                          Faktyczne: {formatCurrency(budgetKPIs.totalActual)} z planowanych {formatCurrency(budgetKPIs.totalPlanned)}.
+                          Przekroczenie: {formatCurrency(budgetKPIs.totalActual - budgetKPIs.totalPlanned)} ({((budgetKPIs.pctSpent - 1) * 100).toFixed(1)}%)
                         </p>
                       </div>
                     </div>
                   )}
-                  {!budgetKPIs.overBudget && budgetKPIs.warningThreshold && (
+                  {budgetKPIs.overBudget && !budgetKPIs.overTenPct && (
+                    <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                      <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-orange-800">⚠️ Budżet nieznacznie przekroczony</p>
+                        <p className="text-sm text-orange-700">
+                          Faktyczne: {formatCurrency(budgetKPIs.totalActual)} z {formatCurrency(budgetKPIs.totalPlanned)}.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {budgetKPIs.warningThreshold && (
                     <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                       <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="font-semibold text-amber-800">⚠️ Uwaga: wydano ponad 80% budżetu</p>
+                        <p className="font-semibold text-amber-800">⚠️ Uwaga: wykorzystano ponad 80% budżetu</p>
                         <p className="text-sm text-amber-700">
-                          Wydano {formatCurrency(budgetKPIs.totalSpent)} z {formatCurrency(budgetKPIs.totalPlanned)}.
-                          {budgetKPIs.daysLeft !== Infinity && (
-                            <> Przy obecnym tempie budżet skończy się za <strong>{budgetKPIs.daysLeft} dni</strong>.</>
-                          )}
+                          Faktyczne: {formatCurrency(budgetKPIs.totalActual)} z {formatCurrency(budgetKPIs.totalPlanned)}.
                         </p>
                       </div>
                     </div>
@@ -865,24 +849,32 @@ export const FinancePage: React.FC = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
                       { label: 'Budżet projektu', value: budgetKPIs.totalPlanned, color: 'text-blue-600', bg: 'bg-blue-50' },
-                      { label: 'Wydano łącznie', value: budgetKPIs.totalSpent, color: budgetKPIs.overBudget ? 'text-red-600' : 'text-slate-900', bg: budgetKPIs.overBudget ? 'bg-red-50' : 'bg-slate-50' },
+                      { label: 'Faktyczne (actual)', value: budgetKPIs.totalActual, color: budgetKPIs.overBudget ? 'text-red-600' : 'text-slate-900', bg: budgetKPIs.overBudget ? 'bg-red-50' : 'bg-slate-50' },
                       { label: 'Pozostało', value: budgetKPIs.remaining, color: budgetKPIs.remaining < 0 ? 'text-red-600' : 'text-green-600', bg: 'bg-green-50' },
-                      { label: 'Koszty miesiąc', value: budgetKPIs.thisMonthSpent, color: 'text-purple-600', bg: 'bg-purple-50' },
-                    ].map(({ label, value, color, bg }) => (
+                      { label: 'Realizacja', value: budgetKPIs.pctSpent * 100, color: budgetKPIs.overBudget ? 'text-red-600' : 'text-purple-600', bg: 'bg-purple-50', isPercent: true },
+                    ].map(({ label, value, color, bg, isPercent }) => (
                       <div key={label} className={`p-4 rounded-xl border border-slate-200 ${bg}`}>
                         <p className="text-xs text-slate-500 mb-1">{label}</p>
-                        <p className={`text-xl font-bold ${color}`}>{formatCurrency(value)}</p>
+                        <p className={`text-xl font-bold ${color}`}>{isPercent ? `${value.toFixed(1)}%` : formatCurrency(value)}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Budget vs Actual Bar Chart */}
+                  {/* Budget vs Actual Bar Chart by category */}
                   <div className="bg-white rounded-xl border border-slate-200 p-4">
-                    <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-blue-600" />
-                      Plan vs Faktura (miesięcznie {budgetYear})
-                    </h3>
-                    <ResponsiveContainer width="100%" height={260}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5 text-blue-600" />
+                        Plan vs Realizacja wg kategorii
+                      </h3>
+                      <button
+                        onClick={() => { setBudgetItemForm({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0 }); setShowAddBudgetItemModal(true); }}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                      >
+                        <Plus className="w-4 h-4" /> Dodaj pozycję budżetową
+                      </button>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
                       <BarChart data={budgetBarData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
@@ -895,70 +887,75 @@ export const FinancePage: React.FC = () => {
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Budget Categories */}
+                  {/* Budget Items Table */}
                   <div className="bg-white rounded-xl border border-slate-200 p-4">
                     <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
                       <Layers className="w-5 h-5 text-purple-600" />
-                      Podział na kategorie
+                      Pozycje budżetowe
                     </h3>
                     <div className="grid md:grid-cols-2 gap-6">
-                      <div className="space-y-3">
-                        {budgetCategories.map(cat => {
-                          const spent = categorySpentMap[cat.category_code] || 0;
-                          const pct = cat.planned_amount > 0 ? Math.min(100, (spent / cat.planned_amount) * 100) : 0;
-                          const overBudget = spent > cat.planned_amount && cat.planned_amount > 0;
-                          const catColor = BUDGET_CATEGORIES.find(c => c.code === cat.category_code)?.color || '#3b82f6';
-
-                          return (
-                            <div key={cat.id || cat.category_code} className="p-3 bg-slate-50 rounded-lg">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-slate-800">{cat.name}</span>
-                                {editingBudgetCategory === cat.id ? (
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="number"
-                                      value={budgetCategoryForm[cat.id!] ?? cat.planned_amount}
-                                      onChange={e => setBudgetCategoryForm(prev => ({ ...prev, [cat.id!]: Number(e.target.value) }))}
-                                      className="w-28 px-2 py-1 border border-slate-300 rounded text-sm"
-                                    />
-                                    <button onClick={() => handleSaveBudgetCategory(cat.id!)}
-                                      disabled={savingBudget}
-                                      className="p-1 text-green-600 hover:bg-green-100 rounded">
-                                      {savingBudget ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                                    </button>
-                                    <button onClick={() => setEditingBudgetCategory(null)}
-                                      className="p-1 text-slate-400 hover:bg-slate-200 rounded">
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-sm font-medium ${overBudget ? 'text-red-600' : 'text-slate-600'}`}>
-                                      {formatCurrency(spent)} / {formatCurrency(cat.planned_amount)}
-                                    </span>
-                                    <button onClick={() => {
-                                      setEditingBudgetCategory(cat.id!);
-                                      setBudgetCategoryForm(prev => ({ ...prev, [cat.id!]: cat.planned_amount }));
-                                    }} className="p-1 hover:bg-slate-200 rounded">
-                                      <Pencil className="w-3 h-3 text-slate-400" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all"
-                                  style={{ width: `${pct}%`, backgroundColor: overBudget ? '#ef4444' : catColor }}
-                                />
-                              </div>
-                              {overBudget && (
-                                <p className="text-xs text-red-600 mt-1">
-                                  Przekroczono o {formatCurrency(spent - cat.planned_amount)}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
+                      <div>
+                        {budgetItems.length === 0 ? (
+                          <div className="text-center py-8 text-slate-400">
+                            <Target className="w-10 h-10 mx-auto mb-2" />
+                            <p className="text-sm">Brak pozycji. Dodaj pierwszą pozycję budżetową.</p>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-xs text-slate-500 border-b border-slate-100">
+                                  <th className="text-left pb-2 pr-2">Nazwa</th>
+                                  <th className="text-left pb-2 pr-2">Kategoria</th>
+                                  <th className="text-right pb-2 pr-2">Plan</th>
+                                  <th className="text-right pb-2 pr-2">Fakt</th>
+                                  <th className="text-right pb-2 pr-2">Odchyl.</th>
+                                  <th className="pb-2"></th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50">
+                                {budgetItems.map(item => {
+                                  const deviation = (item.actual_amount || 0) - (item.planned_amount || 0);
+                                  const over = deviation > 0;
+                                  const catInfo = BUDGET_CATEGORIES.find(c => c.code === item.category);
+                                  return (
+                                    <tr key={item.id} className="hover:bg-slate-50">
+                                      <td className="py-2 pr-2 font-medium text-slate-800">{item.name}</td>
+                                      <td className="py-2 pr-2">
+                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                                          style={{ backgroundColor: catInfo?.color + '22', color: catInfo?.color }}>
+                                          {catInfo?.label || item.category}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 pr-2 text-right text-slate-600">{formatCurrency(item.planned_amount || 0)}</td>
+                                      <td className="py-2 pr-2 text-right font-medium">{formatCurrency(item.actual_amount || 0)}</td>
+                                      <td className={`py-2 pr-2 text-right font-semibold ${over ? 'text-red-600' : 'text-green-600'}`}>
+                                        {over ? '+' : ''}{formatCurrency(deviation)}
+                                      </td>
+                                      <td className="py-2">
+                                        <button onClick={() => handleDeleteBudgetItem(item.id!)}
+                                          className="p-1 hover:bg-red-100 rounded text-red-400 opacity-0 group-hover:opacity-100">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                              <tfoot className="border-t-2 border-slate-200">
+                                <tr className="font-bold text-slate-900">
+                                  <td className="pt-2 pr-2" colSpan={2}>Łącznie</td>
+                                  <td className="pt-2 pr-2 text-right">{formatCurrency(budgetKPIs.totalPlanned)}</td>
+                                  <td className="pt-2 pr-2 text-right">{formatCurrency(budgetKPIs.totalActual)}</td>
+                                  <td className={`pt-2 pr-2 text-right ${budgetKPIs.remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                    {budgetKPIs.remaining < 0 ? '+' : ''}{formatCurrency(-budgetKPIs.remaining)}
+                                  </td>
+                                  <td></td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        )}
                       </div>
 
                       {/* Pie Chart */}
@@ -980,7 +977,7 @@ export const FinancePage: React.FC = () => {
                         </div>
                       ) : (
                         <div className="flex items-center justify-center text-slate-400 text-sm">
-                          Ustaw kwoty budżetowe powyżej aby zobaczyć wykres
+                          Dodaj pozycje budżetowe aby zobaczyć wykres
                         </div>
                       )}
                     </div>
@@ -1174,6 +1171,60 @@ export const FinancePage: React.FC = () => {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editingAct ? 'Zapisz' : 'Dodaj'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Budget Item Modal */}
+      {showAddBudgetItemModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Dodaj pozycję budżetową</h2>
+              <button onClick={() => setShowAddBudgetItemModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria *</label>
+                <select value={budgetItemForm.category}
+                  onChange={e => setBudgetItemForm({ ...budgetItemForm, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                  {BUDGET_CATEGORIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa pozycji *</label>
+                <input type="text" value={budgetItemForm.name}
+                  onChange={e => setBudgetItemForm({ ...budgetItemForm, name: e.target.value })}
+                  placeholder="np. Cement, piasek, robocizna elektryczna..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kwota planowana (PLN)</label>
+                  <input type="number" value={budgetItemForm.planned_amount || ''}
+                    onChange={e => setBudgetItemForm({ ...budgetItemForm, planned_amount: parseFloat(e.target.value) || 0 })}
+                    min="0" step="0.01"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kwota faktyczna (PLN)</label>
+                  <input type="number" value={budgetItemForm.actual_amount || ''}
+                    onChange={e => setBudgetItemForm({ ...budgetItemForm, actual_amount: parseFloat(e.target.value) || 0 })}
+                    min="0" step="0.01"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button onClick={() => setShowAddBudgetItemModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={handleAddBudgetItem} disabled={!budgetItemForm.name || savingBudget}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {savingBudget ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                Dodaj pozycję
               </button>
             </div>
           </div>

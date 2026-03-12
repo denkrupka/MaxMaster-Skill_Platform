@@ -116,6 +116,24 @@ const ALL_NOTIFICATION_TYPES: NotificationType_Hub[] = [
 ];
 
 type ReadFilter = 'all' | 'unread' | 'read';
+type CategoryFilter = 'all' | 'zadania' | 'projekty' | 'finanse' | 'system';
+
+const CATEGORY_TYPES: Record<CategoryFilter, NotificationType_Hub[]> = {
+  all: [],
+  zadania: ['task_assigned', 'task_status_changed', 'task_comment'],
+  projekty: ['schedule_updated', 'attendance_reminder'],
+  finanse: ['timesheet_ready'],
+  system: ['day_request_new', 'day_request_approved', 'day_request_rejected',
+           'time_off_new', 'time_off_approved', 'time_off_rejected', 'general'],
+};
+
+const CATEGORY_LABELS: Record<CategoryFilter, string> = {
+  all: 'Wszystkie',
+  zadania: 'Zadania',
+  projekty: 'Projekty',
+  finanse: 'Finanse',
+  system: 'System',
+};
 
 // ---------------------------------------------------------------
 // Main Page
@@ -135,6 +153,7 @@ export const NotificationsPage: React.FC = () => {
   // Filters
   const [typeFilter, setTypeFilter] = useState<NotificationType_Hub | 'all'>('all');
   const [readFilter, setReadFilter] = useState<ReadFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
 
   const userId = currentUser?.id;
   const companyId = currentUser?.company_id;
@@ -152,7 +171,12 @@ export const NotificationsPage: React.FC = () => {
       query = query.eq('user_id', userId);
     }
 
-    if (typeFilter !== 'all') {
+    if (categoryFilter !== 'all' && typeFilter === 'all') {
+      const types = CATEGORY_TYPES[categoryFilter];
+      if (types.length > 0) {
+        query = query.in('type', types);
+      }
+    } else if (typeFilter !== 'all') {
       query = query.eq('type', typeFilter);
     }
     if (readFilter === 'unread') {
@@ -162,7 +186,7 @@ export const NotificationsPage: React.FC = () => {
     }
 
     return query;
-  }, [userId, typeFilter, readFilter]);
+  }, [userId, typeFilter, readFilter, categoryFilter]);
 
   // Load notifications
   const loadNotifications = useCallback(async (reset = true) => {
@@ -198,7 +222,7 @@ export const NotificationsPage: React.FC = () => {
   // Initial load
   useEffect(() => {
     loadNotifications(true);
-  }, [userId, typeFilter, readFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, typeFilter, readFilter, categoryFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime subscription
   useEffect(() => {
@@ -239,7 +263,7 @@ export const NotificationsPage: React.FC = () => {
         channelRef.current = null;
       }
     };
-  }, [userId, typeFilter, readFilter]);
+  }, [userId, typeFilter, readFilter, categoryFilter]);
 
   // Mark single notification as read
   const markAsRead = async (notification: NotificationHub) => {
@@ -342,10 +366,27 @@ export const NotificationsPage: React.FC = () => {
       <div className="bg-white rounded-xl border border-slate-200 p-3 mb-4 flex flex-wrap items-center gap-3">
         <Filter className="w-4 h-4 text-slate-400" />
 
+        {/* Category filter */}
+        <div className="flex bg-slate-100 rounded-lg p-0.5">
+          {((['all', 'zadania', 'projekty', 'finanse', 'system'] as CategoryFilter[])).map(cat => (
+            <button
+              key={cat}
+              onClick={() => { setCategoryFilter(cat); setTypeFilter('all'); }}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                categoryFilter === cat
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {CATEGORY_LABELS[cat]}
+            </button>
+          ))}
+        </div>
+
         {/* Type filter */}
         <select
           value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value as NotificationType_Hub | 'all')}
+          onChange={e => { setTypeFilter(e.target.value as NotificationType_Hub | 'all'); setCategoryFilter('all'); }}
           className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
         >
           <option value="all">Wszystkie typy</option>
@@ -377,9 +418,9 @@ export const NotificationsPage: React.FC = () => {
           ))}
         </div>
 
-        {(typeFilter !== 'all' || readFilter !== 'all') && (
+        {(typeFilter !== 'all' || readFilter !== 'all' || categoryFilter !== 'all') && (
           <button
-            onClick={() => { setTypeFilter('all'); setReadFilter('all'); }}
+            onClick={() => { setTypeFilter('all'); setReadFilter('all'); setCategoryFilter('all'); }}
             className="text-xs text-slate-400 hover:text-slate-600 ml-auto flex items-center gap-1"
           >
             <X className="w-3 h-3" />
