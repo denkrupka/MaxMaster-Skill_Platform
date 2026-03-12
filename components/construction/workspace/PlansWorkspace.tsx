@@ -649,6 +649,29 @@ export const PlansWorkspace: React.FC = () => {
     } catch {
       // Tables may not exist yet
     }
+    try {
+      // Load drawing takeoff results → populate BOQ panel
+      const { data: takeoffData } = await supabase.from('drawing_takeoff_results').select('*')
+        .eq('plan_id', planId).order('sort_order', { ascending: true });
+      if (takeoffData && takeoffData.length > 0) {
+        const takeoffRows: BoqRow[] = (takeoffData as any[]).map((t: any, i: number) => ({
+          id: t.id || `takeoff-${i}`,
+          code: `P${String(i + 1).padStart(3, '0')}`,
+          name: t.name || 'Pozycja',
+          category: t.category || 'Inne',
+          quantity: typeof t.quantity === 'number' ? t.quantity : 0,
+          unit: t.unit || 'szt.',
+          status: t.needs_review ? 'needs-review' as const : 'approved' as const,
+          sourceType: 'ai-recognition' as const,
+          sourceObjectIds: [],
+          confidence: t.confidence,
+          level: undefined,
+        }));
+        setBoqRows(takeoffRows);
+      }
+    } catch {
+      // drawing_takeoff_results table may not exist yet
+    }
   };
 
   // ---- Import ----
