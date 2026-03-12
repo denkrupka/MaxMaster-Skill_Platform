@@ -1609,6 +1609,61 @@ export const PlansWorkspace: React.FC = () => {
   const handleDxfAnalysisComplete = useCallback((analysis: DxfAnalysis) => {
     setShowDxfAnalysis(false);
     notify(`Analiza DXF zakonczona: ${analysis.totalBlocks} blokow, ${analysis.totalEntities} elementow`);
+
+    // Auto-populate BOQ from DXF analysis
+    if (analysis.blocks.length > 0 || analysis.layers.length > 0) {
+      const newRows: BoqRow[] = [];
+
+      // Add blocks as BOQ items (blocks = symbols like sockets, luminaires, etc.)
+      for (const block of analysis.blocks.filter(b => b.insertCount > 0 && !b.name.startsWith('*'))) {
+        newRows.push({
+          id: `dxf-block-${block.name}`,
+          code: block.name,
+          name: block.name,
+          category: 'DXF',
+          unit: 'szt.',
+          quantity: block.insertCount,
+          sourceType: 'DWG',
+          sourceObjectIds: [],
+          status: 'needs-review',
+          confidence: 0.7,
+        });
+      }
+
+      // Add line layers with lengths as BOQ cable items
+      for (const layer of analysis.layers.filter(l => l.entityCount > 0)) {
+        const lineEntities = analysis.entities.filter(e =>
+          e.layerName === layer.name &&
+          (e.entityType === 'LINE' || e.entityType === 'LWPOLYLINE' || e.entityType === 'POLYLINE' || e.entityType === 'SPLINE') &&
+          e.lengthM > 0
+        );
+        if (lineEntities.length === 0) continue;
+        const totalLengthM = lineEntities.reduce((s, e) => s + e.lengthM, 0);
+        if (totalLengthM < 0.1) continue;
+        newRows.push({
+          id: `dxf-layer-${layer.name}`,
+          code: layer.name,
+          name: `${layer.name} (kabel/trasa)`,
+          category: 'DXF',
+          unit: 'm',
+          quantity: Math.round(totalLengthM * 10) / 10,
+          sourceType: 'DWG',
+          sourceObjectIds: [],
+          status: 'needs-review',
+          confidence: 0.6,
+        });
+      }
+
+      if (newRows.length > 0) {
+        setBoqRows(prev => {
+          // Remove old DXF rows and add new ones
+          const nonDxf = prev.filter(r => r.sourceType !== 'DWG');
+          return [...nonDxf, ...newRows];
+        });
+        dispatch({ type: 'SET_RIGHT_TAB', tab: 'boq' });
+        notify(`Dodano ${newRows.length} pozycji do BOQ z analizy DXF`);
+      }
+    }
   }, [notify]);
 
   // ---- Sidebar conversion ----
