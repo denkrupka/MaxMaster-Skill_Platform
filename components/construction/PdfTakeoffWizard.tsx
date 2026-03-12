@@ -332,9 +332,39 @@ export default function PdfTakeoffWizard({
     setStep('analyzing');
     setStatusMsg('AI analizuje rysunek — proszę czekać…');
 
+    // Build structured data for vector mode (if extracted geometry available from pdfAnalyzer)
+    const extraction = analysisExtra.extraction;
+    const hasVectorData = analysisExtra.styleGroups?.length > 0 || extraction?.texts?.length > 0;
+    const structuredDataForAI = hasVectorData ? {
+      texts: (extraction?.texts || []).slice(0, 1000).map(t => ({
+        text: t.text, x: t.x, y: t.y, fontSize: t.fontSize,
+      })),
+      symbols: (analysisExtra.symbols || []).slice(0, 2000).map(s => {
+        const sg = analysisExtra.styleGroups?.find(g => g.id === s.styleGroupId);
+        return {
+          shape: s.shape, centerX: s.centerX, centerY: s.centerY,
+          radius: s.radius, clusterId: s.clusterId,
+          color: sg?.strokeColor || '#000000', count: 1,
+        };
+      }),
+      styleGroups: (analysisExtra.styleGroups || []).slice(0, 30).map(sg => ({
+        name: sg.name, color: sg.strokeColor, lineWidth: sg.lineWidth,
+        dashPattern: Array.isArray(sg.dashPattern) ? sg.dashPattern.map(v => v.toFixed(0)).join('-') : 'solid',
+        pathCount: sg.pathCount, totalLengthM: sg.totalLengthM,
+      })),
+      pageWidth: extraction?.pageWidth || 1000,
+      pageHeight: extraction?.pageHeight || 700,
+      scale: analysisExtra.scaleInfo?.scaleText || '1:100',
+    } : undefined;
+
     const [claudeRes, geminiRes] = await Promise.allSettled([
       supabase.functions.invoke('pdf-analyze-raster', {
-        body: { imageBase64: pageBase64, mimeType: 'image/jpeg', pageNumber },
+        body: {
+          imageBase64: pageBase64,
+          mimeType: 'image/jpeg',
+          pageNumber,
+          structuredData: structuredDataForAI,
+        },
       }),
       supabase.functions.invoke('pdf-analyze-legend', {
         body: {
