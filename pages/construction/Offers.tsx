@@ -449,7 +449,11 @@ export const OffersPage: React.FC = () => {
   const [showSearchLabourModal, setShowSearchLabourModal] = useState(false);
   const [showSearchMaterialModal, setShowSearchMaterialModal] = useState(false);
   const [showSearchEquipmentModal, setShowSearchEquipmentModal] = useState(false);
-  const [searchComponentTarget, setSearchComponentTarget] = useState<{ sectionId: string; itemId: string; type: 'labor' | 'material' | 'equipment' } | null>(null);
+  const [showSearchRobociznaModal, setShowSearchRobociznaModal] = useState(false);
+  const [robociznaPickerItems, setRobociznaPickerItems] = useState<any[]>([]);
+  const [robociznaPickerSearch, setRobociznaPickerSearch] = useState('');
+  const [robociznaPickerCategory, setRobociznaPickerCategory] = useState<string | null>(null);
+  const [searchComponentTarget, setSearchComponentTarget] = useState<{ sectionId: string; itemId: string; type: 'labor' | 'material' | 'equipment'; compId?: string } | null>(null);
   const [searchPositionTarget, setSearchPositionTarget] = useState<{ sectionId: string } | null>(null);
   const [kartotekaSearchText, setKartotekaSearchText] = useState('');
   const [kartotekaData, setKartotekaData] = useState<any[]>([]);
@@ -6069,7 +6073,43 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                       }`}>
                         {comp.type === 'labor' ? 'R' : comp.type === 'material' ? 'M' : 'S'}
                       </span>
-                      <span className="text-xs text-slate-700 truncate" title={comp.name}>{comp.name}</span>
+                      <div className="flex items-center gap-1 min-w-0">
+                        <input
+                          type="text"
+                          value={comp.name}
+                          onChange={e => updateComponent(sectionId, item.id, comp.id, { name: e.target.value })}
+                          className="flex-1 min-w-0 px-1 py-0.5 border border-slate-200 rounded text-xs text-slate-700"
+                          placeholder="Nazwa..."
+                        />
+                        <button
+                          onClick={() => {
+                            setKartotekaMode('add_component');
+                            setSearchComponentTarget({ sectionId, itemId: item.id, type: comp.type, compId: comp.id });
+                            setKartotekaSearchText('');
+                            setKartotekaDetailItem(null);
+                            if (comp.type === 'labor') {
+                              // Open robocizna catalog for labor components
+                              setRobociznaPickerSearch('');
+                              setRobociznaPickerCategory(null);
+                              if (currentUser?.company_id) {
+                                supabase.from('kosztorys_robocizna').select('*').eq('company_id', currentUser.company_id).order('name')
+                                  .then(({ data }) => setRobociznaPickerItems(data || []));
+                              }
+                              setShowSearchRobociznaModal(true);
+                            } else if (comp.type === 'material') {
+                              setKartotekaMainTab('katalog');
+                              setShowSearchMaterialModal(true);
+                            } else {
+                              setKartotekaMainTab('katalog');
+                              setShowSearchEquipmentModal(true);
+                            }
+                          }}
+                          className="p-0.5 hover:bg-blue-50 rounded text-blue-400 shrink-0"
+                          title="Wybierz z katalogu"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       <div className="text-center">
                         <select
                           value={comp.unit || 'szt.'}
@@ -6136,11 +6176,9 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  setKartotekaMode('add_component');
-                  setSearchComponentTarget({ sectionId, itemId: item.id, type: 'labor' });
-                  setKartotekaSearchText('');
-                  setKartotekaDetailItem(null);
-                  setShowSearchLabourModal(true);
+                  addComponent(sectionId, item.id, {
+                    type: 'labor', name: '', code: '', unit: 'r-g', quantity: 1, unit_price: 0, total_price: 0
+                  });
                 }}
                 className="flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-600 border border-purple-200 rounded text-xs hover:bg-purple-100"
               >
@@ -6149,12 +6187,9 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               </button>
               <button
                 onClick={() => {
-                  setKartotekaMode('add_component');
-                  setSearchComponentTarget({ sectionId, itemId: item.id, type: 'material' });
-                  setKartotekaSearchText('');
-                  setKartotekaDetailItem(null);
-                  setKartotekaMainTab('katalog');
-                  setShowSearchMaterialModal(true);
+                  addComponent(sectionId, item.id, {
+                    type: 'material', name: '', code: '', unit: 'szt.', quantity: 1, unit_price: 0, total_price: 0
+                  });
                 }}
                 className="flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-600 border border-green-200 rounded text-xs hover:bg-green-100"
               >
@@ -6163,12 +6198,9 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               </button>
               <button
                 onClick={() => {
-                  setKartotekaMode('add_component');
-                  setSearchComponentTarget({ sectionId, itemId: item.id, type: 'equipment' });
-                  setKartotekaSearchText('');
-                  setKartotekaDetailItem(null);
-                  setKartotekaMainTab('katalog');
-                  setShowSearchEquipmentModal(true);
+                  addComponent(sectionId, item.id, {
+                    type: 'equipment', name: '', code: '', unit: 'm-g', quantity: 1, unit_price: 0, total_price: 0
+                  });
                 }}
                 className="flex items-center gap-1 px-2.5 py-1 bg-orange-50 text-orange-600 border border-orange-200 rounded text-xs hover:bg-orange-100"
               >
@@ -9730,12 +9762,126 @@ tr{page-break-inside:avoid;page-break-after:auto;}
         </div>
       )}
 
+      {/* Robocizna Picker Modal (for labor components) */}
+      {showSearchRobociznaModal && (() => {
+        const avgRate = 0; // TODO: load avg rate if needed
+        const pickerCats = [...new Set(robociznaPickerItems.filter(r => r.is_active !== false).map((r: any) => r.category).filter(Boolean))] as string[];
+        const filteredItems = robociznaPickerItems.filter((r: any) => {
+          if (r.is_active === false) return false;
+          if (robociznaPickerCategory === '__none__' && r.category) return false;
+          if (robociznaPickerCategory && robociznaPickerCategory !== '__none__' && r.category !== robociznaPickerCategory) return false;
+          if (robociznaPickerSearch) {
+            const s = robociznaPickerSearch.toLowerCase();
+            return (r.name || '').toLowerCase().includes(s) || (r.code || '').toLowerCase().includes(s);
+          }
+          return true;
+        });
+        return (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-3xl shadow-xl flex flex-col" style={{ height: '70vh' }}>
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-semibold">Wybierz robociznę z katalogu</h3>
+              <button onClick={() => { setShowSearchRobociznaModal(false); setSearchComponentTarget(null); }} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex flex-1 overflow-hidden">
+              {/* Category sidebar */}
+              <div className="w-48 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+                <div className="px-3 py-2.5 border-b border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+                </div>
+                <div className="py-1">
+                  <button onClick={() => setRobociznaPickerCategory(null)}
+                    className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${!robociznaPickerCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                    <span>Wszystkie</span>
+                    <span className="ml-auto text-[10px] text-slate-400">{robociznaPickerItems.filter((r: any) => r.is_active !== false).length}</span>
+                  </button>
+                  {pickerCats.sort().map(cat => (
+                    <button key={cat} onClick={() => setRobociznaPickerCategory(cat)}
+                      className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${robociznaPickerCategory === cat ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                      <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                      <span className="truncate">{cat}</span>
+                      <span className="ml-auto text-[10px] text-slate-400">{robociznaPickerItems.filter((r: any) => r.is_active !== false && r.category === cat).length}</span>
+                    </button>
+                  ))}
+                  <button onClick={() => setRobociznaPickerCategory('__none__')}
+                    className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${robociznaPickerCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                    <span>Bez kategorii</span>
+                    <span className="ml-auto text-[10px] text-slate-400">{robociznaPickerItems.filter((r: any) => r.is_active !== false && !r.category).length}</span>
+                  </button>
+                </div>
+              </div>
+              {/* Main content */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-3 border-b border-slate-100">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input type="text" value={robociznaPickerSearch} onChange={e => setRobociznaPickerSearch(e.target.value)}
+                      placeholder="Szukaj robocizny..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm" />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Kod</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Nazwa</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">Koszt</th>
+                        <th className="px-4 py-2 w-16"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredItems.map((r: any) => {
+                        const cost = r.cost_type === 'rg'
+                          ? (r.price_unit || 0) * ((r.time_hours || 0) + (r.time_minutes || 0) / 60)
+                          : (r.cost_ryczalt || 0);
+                        return (
+                          <tr key={r.id} className="hover:bg-blue-50 cursor-pointer"
+                            onClick={() => {
+                              if (searchComponentTarget?.compId) {
+                                updateComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, searchComponentTarget.compId, {
+                                  name: r.name, unit: 'r-g', unit_price: cost, total_price: cost
+                                });
+                              } else {
+                                addComponent(searchComponentTarget!.sectionId, searchComponentTarget!.itemId, {
+                                  type: 'labor', name: r.name, code: r.code || '', unit: 'r-g', quantity: 1, unit_price: cost, total_price: cost
+                                });
+                              }
+                              setShowSearchRobociznaModal(false);
+                              setSearchComponentTarget(null);
+                            }}>
+                            <td className="px-4 py-2 font-mono text-xs text-slate-500">{r.code}</td>
+                            <td className="px-4 py-2 font-medium">{r.name}</td>
+                            <td className="px-4 py-2 text-right font-semibold text-blue-600">{cost.toFixed(2)} zł</td>
+                            <td className="px-4 py-2">
+                              <span className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Dodaj</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {filteredItems.length === 0 && (
+                        <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                          {robociznaPickerItems.length === 0 ? 'Brak robocizny — dodaj w Kartotece' : 'Brak wyników'}
+                        </td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
       {/* Kartoteka Search Modal (Labour/Material/Equipment) */}
       {(showSearchLabourModal || showSearchMaterialModal || showSearchEquipmentModal) && (() => {
         const closeKartoteka = () => {
           setShowSearchLabourModal(false);
           setShowSearchMaterialModal(false);
           setShowSearchEquipmentModal(false);
+          setShowSearchRobociznaModal(false);
           setSearchComponentTarget(null);
           setSearchPositionTarget(null);
           setKartotekaDetailItem(null);
@@ -9752,8 +9898,18 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               unit_price: price
             });
           } else if (kartotekaMode === 'add_component' && searchComponentTarget) {
-            // Add as component
             const compType = showSearchLabourModal ? 'labor' : showSearchMaterialModal ? 'material' : 'equipment';
+            if (searchComponentTarget.compId) {
+              // Update existing component (from folder icon)
+              updateComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, searchComponentTarget.compId, {
+                name: item.name,
+                code: item.code || '',
+                unit: item.unit || (compType === 'labor' ? 'r-g' : compType === 'equipment' ? 'm-g' : 'szt.'),
+                unit_price: price,
+                total_price: price
+              });
+            } else {
+            // Add as new component
             addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
               type: compType,
               name: item.name,
@@ -9792,6 +9948,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   });
                 });
               }
+            }
             }
           }
           closeKartoteka();

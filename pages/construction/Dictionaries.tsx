@@ -261,6 +261,8 @@ export const DictionariesPage: React.FC = () => {
   const [avgEmployeeRate, setAvgEmployeeRate] = useState<number | null>(null);
   const [manualHourlyRate, setManualHourlyRate] = useState<number>(0);
   const [useManualRate, setUseManualRate] = useState(false);
+  const [pozycjaPriceMode, setPozycjaPriceMode] = useState<'fixed' | 'markup'>('fixed');
+  const [pozycjaMarkupPercent, setPozycjaMarkupPercent] = useState<number>(0);
 
   // ============ Linked items tracking for icon highlighting ============
   const [laboursWithMats, setLaboursWithMats] = useState<Set<string>>(new Set());
@@ -4106,7 +4108,7 @@ export const DictionariesPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" />
             </div>
 
-            {/* Unit + Price */}
+            {/* Unit + Price + Time */}
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
@@ -4117,9 +4119,36 @@ export const DictionariesPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Cena jednostkowa</label>
-                <input type="number" step="0.01" min="0" value={editingOwnLabour.price || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" placeholder="0.00 zł" />
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="text-sm font-medium text-slate-700">Cena jednostkowa</label>
+                  <div className="flex bg-slate-100 rounded p-0.5 ml-auto">
+                    <button type="button" onClick={() => setPozycjaPriceMode('fixed')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium ${pozycjaPriceMode === 'fixed' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                      Stała
+                    </button>
+                    <button type="button" onClick={() => setPozycjaPriceMode('markup')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium ${pozycjaPriceMode === 'markup' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                      Narzut
+                    </button>
+                  </div>
+                </div>
+                {pozycjaPriceMode === 'fixed' ? (
+                  <input type="number" step="0.01" min="0" value={editingOwnLabour.price || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, price: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" placeholder="0.00 zł" />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input type="number" step="0.1" min="0" value={pozycjaMarkupPercent || ''} onChange={e => {
+                      const pct = parseFloat(e.target.value) || 0;
+                      setPozycjaMarkupPercent(pct);
+                      const robCost = ownLabourRobocizna.reduce((s, r) => s + (r.robocizna_price || 0) * (r.robocizna_quantity || 1), 0);
+                      const totalCost = robCost + materialCostSum + equipmentCostSum;
+                      setEditingOwnLabour({ ...editingOwnLabour, price: Math.round(totalCost * (1 + pct / 100) * 100) / 100 });
+                    }}
+                      className="w-20 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-center" placeholder="%" />
+                    <span className="text-xs text-slate-500">%</span>
+                    <span className="text-xs text-slate-400 ml-auto">{(editingOwnLabour.price || 0).toFixed(2)} zł</span>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Czasochłonność (HH:MM)</label>
@@ -4371,9 +4400,8 @@ export const DictionariesPage: React.FC = () => {
             {(() => {
               const labourCost = ownLabourRobocizna.reduce((sum, r) => sum + (r.robocizna_price || 0) * (r.robocizna_quantity || 1), 0);
               const totalCost = labourCost + materialCostSum + equipmentCostSum;
-              const profit = (editingOwnLabour.price || 0) - totalCost;
               return (
-                <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                <div className="p-3 bg-slate-50 rounded-lg">
                   <div className="grid grid-cols-4 gap-3">
                     <div>
                       <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt robocizny</div>
@@ -4388,13 +4416,10 @@ export const DictionariesPage: React.FC = () => {
                       <div className="text-sm font-semibold text-slate-800">{equipmentCostSum.toFixed(2)} zł</div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-medium">Zysk</div>
-                      <div className={`text-sm font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {profit.toFixed(2)} zł
-                      </div>
+                      <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt pozycji</div>
+                      <div className="text-sm font-semibold text-blue-700">{totalCost.toFixed(2)} zł</div>
                     </div>
                   </div>
-                  <div className="text-[10px] text-slate-400">Cena − Suma kosztów = Zysk</div>
                 </div>
               );
             })()}
@@ -6877,101 +6902,90 @@ export const DictionariesPage: React.FC = () => {
 
                   {/* Add/Edit Robocizna Modal */}
                   {robociznaDialog && editingRobocizna && (
-                    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-10 overflow-y-auto">
-                      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 mb-10">
-                        <div className="p-5 border-b border-slate-200 flex justify-between items-center">
-                          <h2 className="text-lg font-semibold">{editingRobocizna.id ? 'Edytuj robociznę' : 'Dodaj robociznę'}</h2>
+                    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+                      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
+                        <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                          <h2 className="text-base font-semibold">{editingRobocizna.id ? 'Edytuj robociznę' : 'Dodaj robociznę'}</h2>
                           <button onClick={() => { setRobociznaDialog(false); setEditingRobocizna(null); }} className="p-1 hover:bg-slate-100 rounded">
                             <X className="w-5 h-5" />
                           </button>
                         </div>
-                        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-                          {/* Code + Auto */}
-                          <div className="grid grid-cols-2 gap-4">
+                        <div className="px-4 py-3 space-y-3">
+                          {/* Code + Kategoria */}
+                          <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-1">Kod robocizny</label>
-                              <div className="flex gap-2 items-center">
+                              <label className="block text-xs font-medium text-slate-600 mb-0.5">Kod robocizny</label>
+                              <div className="flex gap-1.5 items-center">
                                 <input type="text" value={autoGenerateRobociznaCode ? 'Auto' : (editingRobocizna.code || '')}
                                   onChange={e => setEditingRobocizna({ ...editingRobocizna, code: e.target.value })}
                                   disabled={autoGenerateRobociznaCode}
-                                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-50 disabled:text-slate-400" placeholder="Auto" />
-                                <label className="flex items-center gap-1 text-sm text-blue-600 whitespace-nowrap cursor-pointer">
-                                  <input type="checkbox" checked={autoGenerateRobociznaCode} onChange={e => setAutoGenerateRobociznaCode(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                  className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-sm disabled:bg-slate-50 disabled:text-slate-400" placeholder="Auto" />
+                                <label className="flex items-center gap-1 text-xs text-blue-600 whitespace-nowrap cursor-pointer">
+                                  <input type="checkbox" checked={autoGenerateRobociznaCode} onChange={e => setAutoGenerateRobociznaCode(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" />
                                   Auto
                                 </label>
                               </div>
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+                              <label className="block text-xs font-medium text-slate-600 mb-0.5">Kategoria</label>
                               <select value={editingRobocizna.category || ''}
-                                onChange={e => {
-                                  if (e.target.value === '__new__') {
-                                    const newCat = prompt('Nowa kategoria:');
-                                    if (newCat?.trim()) {
-                                      setEditingRobocizna({ ...editingRobocizna, category: newCat.trim() });
-                                      if (!robociznaCategories.includes(newCat.trim())) {
-                                        setRobociznaCategories(prev => [...prev, newCat.trim()].sort());
-                                      }
-                                    }
-                                  } else {
-                                    setEditingRobocizna({ ...editingRobocizna, category: e.target.value || null });
-                                  }
-                                }}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                onChange={e => setEditingRobocizna({ ...editingRobocizna, category: e.target.value || null })}
+                                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm">
                                 <option value="">Bez kategorii</option>
                                 {robociznaCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                <option value="__new__">+ Dodaj nową kategorię...</option>
                               </select>
                             </div>
                           </div>
 
                           {/* Name */}
                           <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+                            <label className="block text-xs font-medium text-slate-600 mb-0.5">Nazwa *</label>
                             <input type="text" value={editingRobocizna.name || ''}
                               onChange={e => setEditingRobocizna({ ...editingRobocizna, name: e.target.value })}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nazwa robocizny..." />
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm" placeholder="Nazwa robocizny..." />
                           </div>
 
-                          {/* Unit + Time */}
+                          {/* Unit + Time in one row */}
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
+                              <label className="block text-xs font-medium text-slate-600 mb-0.5">Jednostka</label>
                               <select value={editingRobocizna.unit || 'szt.'}
                                 onChange={e => setEditingRobocizna({ ...editingRobocizna, unit: e.target.value })}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm">
                                 {LABOUR_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                               </select>
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-1">Czasochłonność (HH:MM)</label>
+                              <label className="block text-xs font-medium text-slate-600 mb-0.5">Czasochłonność (HH:MM)</label>
                               <div className="flex items-center gap-1">
                                 <input type="number" min="0" value={editingRobocizna.time_hours || 0}
                                   onChange={e => setEditingRobocizna({ ...editingRobocizna, time_hours: parseInt(e.target.value) || 0 })}
-                                  className="w-16 px-2 py-2 border border-slate-300 rounded-lg text-sm text-center" />
-                                <span className="text-lg font-bold text-slate-400">:</span>
+                                  className="w-14 px-2 py-1.5 border border-slate-300 rounded-lg text-sm text-center" />
+                                <span className="text-slate-400 font-bold">:</span>
                                 <input type="number" min="0" max="59" value={editingRobocizna.time_minutes || 0}
                                   onChange={e => setEditingRobocizna({ ...editingRobocizna, time_minutes: Math.min(59, parseInt(e.target.value) || 0) })}
-                                  className="w-16 px-2 py-2 border border-slate-300 rounded-lg text-sm text-center" />
+                                  className="w-14 px-2 py-1.5 border border-slate-300 rounded-lg text-sm text-center" />
                               </div>
                             </div>
                           </div>
 
                           {/* Koszt robocizny block */}
                           <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Koszt robocizny</label>
-                            <div className="flex gap-2 mb-2">
-                              <button onClick={() => setEditingRobocizna({ ...editingRobocizna, cost_type: 'rg' })}
-                                className={`px-3 py-1.5 rounded text-sm font-medium ${editingRobocizna.cost_type === 'rg' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                                RG
-                              </button>
-                              <button onClick={() => setEditingRobocizna({ ...editingRobocizna, cost_type: 'ryczalt' })}
-                                className={`px-3 py-1.5 rounded text-sm font-medium ${editingRobocizna.cost_type === 'ryczalt' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                                Ryczałt
-                              </button>
+                            <div className="flex items-center gap-2 mb-1">
+                              <label className="text-xs font-medium text-slate-600">Koszt robocizny</label>
+                              <div className="flex bg-slate-100 rounded p-0.5">
+                                <button onClick={() => setEditingRobocizna({ ...editingRobocizna, cost_type: 'rg' })}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-medium ${editingRobocizna.cost_type === 'rg' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>
+                                  RG
+                                </button>
+                                <button onClick={() => setEditingRobocizna({ ...editingRobocizna, cost_type: 'ryczalt' })}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-medium ${editingRobocizna.cost_type === 'ryczalt' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>
+                                  Ryczałt
+                                </button>
+                              </div>
                             </div>
                             {editingRobocizna.cost_type === 'rg' ? (
-                              <div className="px-3 py-2.5 bg-blue-50 rounded-lg space-y-2">
+                              <div className="px-2.5 py-2 bg-blue-50 rounded-lg space-y-1.5">
                                 {(() => {
                                   const activeRate = robociznaUseManualRate ? robociznaManualRate : (avgEmployeeRate ?? 0);
                                   const timeDecimal = (editingRobocizna.time_hours || 0) + (editingRobocizna.time_minutes || 0) / 60;
@@ -6979,39 +6993,34 @@ export const DictionariesPage: React.FC = () => {
                                   return (
                                     <>
                                       <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1.5">
                                           <button onClick={() => setRobociznaUseManualRate(false)}
-                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${!robociznaUseManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                                            className={`px-2 py-0.5 rounded text-[10px] font-medium ${!robociznaUseManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>
                                             Średnia
                                           </button>
                                           <button onClick={() => setRobociznaUseManualRate(true)}
-                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${robociznaUseManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                                            className={`px-2 py-0.5 rounded text-[10px] font-medium ${robociznaUseManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>
                                             Ręcznie
                                           </button>
                                         </div>
                                         {!robociznaUseManualRate && avgEmployeeRate !== null && (
-                                          <span className="text-[10px] text-blue-500">śr. stawka pracowników (baza + bonusy)</span>
+                                          <span className="text-[9px] text-blue-500">śr. stawka pracowników</span>
                                         )}
                                       </div>
                                       {robociznaUseManualRate ? (
                                         <div className="flex items-center gap-2">
                                           <input type="number" step="0.01" min="0" value={robociznaManualRate || ''} onChange={e => setRobociznaManualRate(parseFloat(e.target.value) || 0)}
-                                            className="w-28 px-2 py-1.5 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500" placeholder="zł/h" />
+                                            className="w-24 px-2 py-1 border border-blue-200 rounded text-sm" placeholder="zł/h" />
                                           <span className="text-xs text-blue-700">
-                                            × {editingRobocizna.time_hours || 0}h{String(editingRobocizna.time_minutes || 0).padStart(2, '0')}m
-                                            = <span className="font-bold">{cost.toFixed(2)} zł</span>
+                                            × {editingRobocizna.time_hours || 0}h{String(editingRobocizna.time_minutes || 0).padStart(2, '0')}m = <span className="font-bold">{cost.toFixed(2)} zł</span>
                                           </span>
                                         </div>
                                       ) : avgEmployeeRate !== null ? (
                                         <div className="text-xs text-blue-700">
-                                          Śr. stawka: <span className="font-semibold">{avgEmployeeRate.toFixed(2)} zł/h</span>
-                                          {' × '}
-                                          {editingRobocizna.time_hours || 0}h{String(editingRobocizna.time_minutes || 0).padStart(2, '0')}m
-                                          {' = '}
-                                          <span className="font-bold">{cost.toFixed(2)} zł</span>
+                                          Śr. stawka: <span className="font-semibold">{avgEmployeeRate.toFixed(2)} zł/h</span> × {editingRobocizna.time_hours || 0}h{String(editingRobocizna.time_minutes || 0).padStart(2, '0')}m = <span className="font-bold">{cost.toFixed(2)} zł</span>
                                         </div>
                                       ) : (
-                                        <div className="text-xs text-blue-500">Brak aktywnych pracowników ze stawką — przełącz na «Ręcznie»</div>
+                                        <div className="text-[10px] text-blue-500">Brak pracowników ze stawką — przełącz na «Ręcznie»</div>
                                       )}
                                     </>
                                   );
@@ -7019,33 +7028,33 @@ export const DictionariesPage: React.FC = () => {
                               </div>
                             ) : (
                               <input type="number" step="0.01" min="0" value={editingRobocizna.cost_ryczalt || ''} onChange={e => setEditingRobocizna({ ...editingRobocizna, cost_ryczalt: parseFloat(e.target.value) || 0 })}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Kwota ryczałtu..." />
+                                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm" placeholder="Kwota ryczałtu..." />
                             )}
                           </div>
 
                           {/* Description */}
                           <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                            <label className="block text-xs font-medium text-slate-600 mb-0.5">Opis</label>
                             <textarea value={editingRobocizna.description || ''}
                               onChange={e => setEditingRobocizna({ ...editingRobocizna, description: e.target.value })}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" rows={2} placeholder="Opis..." />
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm" rows={1} placeholder="Opis..." />
                           </div>
 
                           {/* Active checkbox */}
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" checked={editingRobocizna.is_active !== false}
                               onChange={e => setEditingRobocizna({ ...editingRobocizna, is_active: e.target.checked })}
-                              className="w-4 h-4 text-blue-600 rounded" />
-                            <span className="text-sm text-slate-700">Aktywna</span>
+                              className="w-3.5 h-3.5 text-blue-600 rounded" />
+                            <span className="text-xs text-slate-700">Aktywna</span>
                           </label>
                         </div>
 
                         {/* Footer */}
-                        <div className="p-5 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-3">
                           <button onClick={() => { setRobociznaDialog(false); setEditingRobocizna(null); }}
-                            className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm">Anuluj</button>
+                            className="px-4 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm">Anuluj</button>
                           <button onClick={handleSaveRobocizna} disabled={saving || !editingRobocizna.name?.trim()}
-                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
+                            className="px-5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Zapisz'}
                           </button>
                         </div>
