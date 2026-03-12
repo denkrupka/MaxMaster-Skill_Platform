@@ -4,6 +4,7 @@ import { Menu, Search } from 'lucide-react';
 import { GlobalSearch } from './GlobalSearch';
 import { Sidebar } from './Sidebar';
 import { NotificationBell, Toast } from './NotificationSystem';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { useAppContext } from '../context/AppContext';
 import { OnboardingWizard } from './OnboardingWizard';
 import { Role } from '../types';
@@ -80,6 +81,7 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
                   <span className="hidden sm:inline">Szukaj...</span>
                   <kbd className="hidden lg:inline-block text-xs bg-white border border-slate-200 rounded px-1 font-mono">Ctrl+K</kbd>
                 </button>
+                <LanguageSwitcher />
                 {(effectiveRole === Role.HR || effectiveRole === Role.DORADCA || effectiveRole === Role.COMPANY_ADMIN) && (
                     <NotificationBell />
                 )}

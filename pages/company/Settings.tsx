@@ -2,13 +2,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2, Link2, Webhook, Bell, Shield, CheckCircle, AlertCircle, RefreshCw, Copy, Globe, Smartphone, Monitor, LogOut, Key, Zap, ExternalLink } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { WorkingHours, WorkingHoursDay, RoundTime, HolidayDay } from '../../types';
 import { supabase } from '../../lib/supabase';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-type TabKey = 'company' | 'working_time' | 'holidays' | 'construction' | 'integracje' | 'api_webhooks' | 'powiadomienia' | 'bezpieczenstwo';
+type TabKey = 'company' | 'working_time' | 'holidays' | 'construction' | 'integracje' | 'api_webhooks' | 'powiadomienia' | 'bezpieczenstwo' | 'jezyk';
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'company', label: 'Dane firmy', icon: <Building2 className="w-4 h-4" /> },
@@ -19,6 +20,7 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'api_webhooks', label: 'API & Webhooks', icon: <Webhook className="w-4 h-4" /> },
   { key: 'powiadomienia', label: 'Powiadomienia', icon: <Bell className="w-4 h-4" /> },
   { key: 'bezpieczenstwo', label: 'Bezpieczeństwo', icon: <Shield className="w-4 h-4" /> },
+  { key: 'jezyk', label: 'Język', icon: <Globe className="w-4 h-4" /> },
 ];
 
 const TIMEZONES = [
@@ -1843,6 +1845,24 @@ export const CompanySettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* ════════════════════════════════════════════════════════════════════
+          Tab: Język
+          ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'jezyk' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+              <Globe className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Język interfejsu</h2>
+              <p className="text-sm text-slate-500">Wybierz język wyświetlania portalu</p>
+            </div>
+          </div>
+          <LanguageSwitcher inline />
+        </div>
+      )}
+
       {confirmDialog}
     </div>
   );
