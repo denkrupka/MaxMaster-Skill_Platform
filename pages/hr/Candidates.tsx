@@ -5,7 +5,8 @@ import {
     Plus, Archive, RotateCcw, AlertTriangle, User as UserIcon, Calendar,
     Check, CheckCircle, Edit, Trash2, UserPlus, Briefcase, UserCheck, Eye, X,
     Upload, ChevronDown, Bot, Loader2, Share2, Copy, FileInput, Save,
-    Shield, Wallet, Award, Calculator, ChevronLeft, Globe, Mail, Phone, ExternalLink, Activity, Info as InfoIcon, MapPin, Sparkles, Link2, MessageCircle
+    Shield, Wallet, Award, Calculator, ChevronLeft, Globe, Mail, Phone, ExternalLink, Activity, Info as InfoIcon, MapPin, Sparkles, Link2, MessageCircle,
+    LayoutGrid, List, BrainCircuit, ThumbsUp, ThumbsDown, Star, AlertCircle
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -77,8 +78,25 @@ export const HRCandidatesPage = () => {
     const [selectedCandidate, setSelectedCandidate] = useState<User | null>(null);
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
-    const [activeTab, setActiveTab] = useState<'info'|'personal'|'salary'|'tests'|'docs'|'history'>('info');
+    const [activeTab, setActiveTab] = useState<'info'|'personal'|'salary'|'tests'|'docs'|'history'|'ai'>('info');
     const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+    const [listView, setListView] = useState<'list' | 'kanban'>('list');
+    const [moveCardModal, setMoveCardModal] = useState<{ candidate: any; fromStatus: string } | null>(null);
+
+    // AI Analysis state
+    const [aiAnalysis, setAiAnalysis] = useState<null | {
+        recommendation: 'hire' | 'reject' | 'maybe';
+        score: number;
+        strengths: string[];
+        risks: string[];
+        summary: string;
+    }>(null);
+    const [isAiAnalysisLoading, setIsAiAnalysisLoading] = useState(false);
+    const [aiAnalysisError, setAiAnalysisError] = useState<string | null>(null);
+
+    // Questionnaire state
+    const [isSendingQuestionnaire, setIsSendingQuestionnaire] = useState(false);
+    const [questionnaireStatus, setQuestionnaireStatus] = useState<'idle' | 'sent' | 'error'>('idle');
     
     // Modals & Popovers State
     const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false); 
@@ -261,6 +279,15 @@ export const HRCandidatesPage = () => {
              window.history.replaceState({}, document.title);
         }
     }, [location]);
+
+    // Reset AI analysis and questionnaire status when candidate changes
+    useEffect(() => {
+        if (selectedCandidate) {
+            setAiAnalysis(null);
+            setAiAnalysisError(null);
+            setQuestionnaireStatus('idle');
+        }
+    }, [selectedCandidate?.id]);
 
     useEffect(() => {
         if (selectedCandidate) {
@@ -792,6 +819,141 @@ export const HRCandidatesPage = () => {
         }
     };
 
+    // --- AI Candidate Analysis ---
+    const handleAiAnalysis = useCallback(async () => {
+        if (!selectedCandidate) return;
+        setIsAiAnalysisLoading(true);
+        setAiAnalysisError(null);
+        setAiAnalysis(null);
+
+        try {
+            const candidateData = {
+                name: `${selectedCandidate.first_name} ${selectedCandidate.last_name}`,
+                position: selectedCandidate.target_position || 'nieznane stanowisko',
+                source: selectedCandidate.source || 'nieznane źródło',
+                notes: selectedCandidate.notes || '',
+                status: selectedCandidate.status,
+                hasCV: !!selectedCandidate.resume_url,
+                testAttempts: testAttempts.filter(ta => ta.user_id === selectedCandidate.id).map(ta => ({
+                    passed: ta.passed,
+                    score: ta.score,
+                    date: ta.created_at
+                }))
+            };
+
+            const prompt = `Jesteś doświadczonym rekruterem w firmie budowlanej MaxMaster.
+Przeanalizuj poniższe dane kandydata i daj rekomendację.
+
+DANE KANDYDATA:
+- Imię i nazwisko: ${candidateData.name}
+- Stanowisko: ${candidateData.position}
+- Źródło: ${candidateData.source}
+- CV załączone: ${candidateData.hasCV ? 'Tak' : 'Nie'}
+- Status: ${candidateData.status}
+- Notatki rekrutera: ${candidateData.notes || 'Brak'}
+- Wyniki testów: ${candidateData.testAttempts.length > 0 ? candidateData.testAttempts.map(t => `Wynik: ${t.score}%, ${t.passed ? 'zaliczony' : 'niezaliczony'}`).join('; ') : 'Brak testów'}
+
+Odpowiedz TYLKO w formacie JSON (bez markdown):
+{
+  "recommendation": "hire" | "reject" | "maybe",
+  "score": <liczba 1-10>,
+  "strengths": ["<mocna strona 1>", "<mocna strona 2>", "<mocna strona 3>"],
+  "risks": ["<ryzyko 1>", "<ryzyko 2>", "<ryzyko 3>"],
+  "summary": "<krótkie podsumowanie 2-3 zdania po polsku>"
+}`;
+
+            const geminiApiKey = 'AIzaSyC2eB-eTn0lxJc2-0iFLFkLxN9Wq5mXE_s';
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiApiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+                    })
+                }
+            );
+
+            if (!response.ok) {
+                // Try via Supabase edge function as fallback
+                const { data: fnData, error: fnError } = await supabase.functions.invoke('parse-cv', {
+                    body: { analysisMode: true, candidateData }
+                });
+                if (fnError) throw new Error('Nie można połączyć z AI');
+                setAiAnalysis(fnData);
+                return;
+            }
+
+            const data = await response.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            const cleaned = text.replace(/```json\n?|```/g, '').trim();
+            const parsed = JSON.parse(cleaned);
+            setAiAnalysis(parsed);
+            await logCandidateAction(selectedCandidate.id, `Przeprowadzono analizę AI kandydata (ocena: ${parsed.score}/10)`);
+        } catch (err: any) {
+            console.error('AI Analysis error:', err);
+            setAiAnalysisError(err.message || 'Błąd podczas analizy AI');
+        } finally {
+            setIsAiAnalysisLoading(false);
+        }
+    }, [selectedCandidate, testAttempts, logCandidateAction]);
+
+    // --- Send Questionnaire ---
+    const handleSendQuestionnaire = useCallback(async () => {
+        if (!selectedCandidate) return;
+        setIsSendingQuestionnaire(true);
+        setQuestionnaireStatus('idle');
+
+        try {
+            // Generate unique token
+            const token = `${selectedCandidate.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const questionnaireUrl = `${window.location.origin}/candidate/register?token=${encodeURIComponent(token)}&id=${selectedCandidate.id}`;
+
+            // Save token to candidate record
+            await updateUser(selectedCandidate.id, {
+                questionnaire_token: token,
+                questionnaire_sent_at: new Date().toISOString()
+            } as any);
+
+            // Send email via edge function
+            if (selectedCandidate.email) {
+                await supabase.functions.invoke('send-email', {
+                    body: {
+                        to: selectedCandidate.email,
+                        subject: 'MaxMaster - Wypełnij ankietę rekrutacyjną',
+                        html: `
+                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                                <h2 style="color: #1e40af;">Witaj, ${selectedCandidate.first_name}!</h2>
+                                <p>Dziękujemy za zainteresowanie pracą w MaxMaster.</p>
+                                <p>Aby kontynuować proces rekrutacji, prosimy o wypełnienie ankiety rekrutacyjnej.</p>
+                                <div style="text-align: center; margin: 30px 0;">
+                                    <a href="${questionnaireUrl}" style="background: #2563eb; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
+                                        Wypełnij ankietę →
+                                    </a>
+                                </div>
+                                <p style="color: #6b7280; font-size: 14px;">Link jest ważny przez 7 dni.</p>
+                                <p style="color: #6b7280; font-size: 14px;">Jeśli masz pytania, skontaktuj się z nami.</p>
+                                <hr style="border-color: #e5e7eb; margin: 20px 0;">
+                                <p style="color: #9ca3af; font-size: 12px;">MaxMaster - Portal Pracowniczy</p>
+                            </div>
+                        `
+                    }
+                });
+            }
+
+            await logCandidateAction(selectedCandidate.id, `Wysłano ankietę rekrutacyjną na ${selectedCandidate.email || 'brak emaila'}`);
+            triggerNotification('success', 'Ankieta wysłana', `Wysłano link do ankiety do ${selectedCandidate.first_name}`);
+            setQuestionnaireStatus('sent');
+        } catch (err: any) {
+            console.error('Send questionnaire error:', err);
+            setQuestionnaireStatus('error');
+            triggerNotification('error', 'Błąd', 'Nie udało się wysłać ankiety');
+        } finally {
+            setIsSendingQuestionnaire(false);
+        }
+    }, [selectedCandidate, updateUser, logCandidateAction, triggerNotification]);
+
     const handleStatusChange = async (newStatus: UserStatus) => {
         if (!selectedCandidate) return;
         await updateUser(selectedCandidate.id, { status: newStatus });
@@ -1025,6 +1187,19 @@ export const HRCandidatesPage = () => {
                                 </Button>
                             )}
 
+                            {/* Questionnaire button */}
+                            <Button
+                                variant="outline"
+                                className={`h-9 px-3 text-xs font-bold whitespace-nowrap ${questionnaireStatus === 'sent' ? 'border-emerald-500 text-emerald-600 hover:bg-emerald-50' : 'border-purple-500 text-purple-600 hover:bg-purple-50'}`}
+                                onClick={handleSendQuestionnaire}
+                                disabled={isSendingQuestionnaire}
+                            >
+                                {isSendingQuestionnaire ? <Loader2 size={14} className="mr-2 animate-spin"/> :
+                                 questionnaireStatus === 'sent' ? <CheckCircle size={14} className="mr-2"/> :
+                                 <Send size={14} className="mr-2"/>}
+                                {questionnaireStatus === 'sent' ? 'Ankieta wysłana' : 'Wyślij ankietę'}
+                            </Button>
+
                             {!isRejected && ![UserStatus.DATA_SUBMITTED, UserStatus.TRIAL, UserStatus.ACTIVE].includes(selectedCandidate.status) && (
                                 selectedCandidate.status === UserStatus.DATA_REQUESTED ? (
                                     <Button variant="outline" className="h-9 px-3 text-xs font-bold border-blue-600 text-blue-600 hover:bg-blue-50 whitespace-nowrap" onClick={() => triggerNotification('info', 'Przypomnienie', 'Wysłano przypomnienie o uzupełnieniu danych.')}>
@@ -1075,7 +1250,8 @@ export const HRCandidatesPage = () => {
                             { id: 'salary', label: 'Symulacja Wynagrodzenia' },
                             { id: 'tests', label: 'Historia Testów' },
                             { id: 'docs', label: 'Dokumenty' },
-                            { id: 'history', label: 'Historia Działań' }
+                            { id: 'history', label: 'Historia Działań' },
+                            { id: 'ai', label: '🤖 Analiza AI' }
                         ].map(t => (
                             <button key={t.id} onClick={() => setActiveTab(t.id as any)} className={`py-3.5 px-4 font-bold text-sm border-b-4 transition-all whitespace-nowrap ${activeTab === t.id ? 'border-blue-600 text-blue-600 bg-blue-50/20' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
                                 {t.label}
@@ -1341,6 +1517,113 @@ export const HRCandidatesPage = () => {
                                 ))}
                             </div>
                         )}
+                        {activeTab === 'ai' && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><BrainCircuit size={22} className="text-indigo-600"/> Analiza AI Kandydata</h3>
+                                        <p className="text-sm text-slate-500 mt-0.5">AI oceni kandydata na podstawie dostępnych danych i testów</p>
+                                    </div>
+                                    <button
+                                        onClick={handleAiAnalysis}
+                                        disabled={isAiAnalysisLoading}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 transition-all"
+                                    >
+                                        {isAiAnalysisLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18}/>}
+                                        {isAiAnalysisLoading ? 'Analizuję...' : 'Uruchom analizę AI'}
+                                    </button>
+                                </div>
+
+                                {aiAnalysisError && (
+                                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-red-700">
+                                        <AlertCircle size={20}/>
+                                        <span className="text-sm font-medium">{aiAnalysisError}</span>
+                                    </div>
+                                )}
+
+                                {!aiAnalysis && !isAiAnalysisLoading && !aiAnalysisError && (
+                                    <div className="text-center py-16 text-slate-400">
+                                        <BrainCircuit size={48} className="mx-auto mb-4 opacity-30"/>
+                                        <p className="font-medium">Kliknij "Uruchom analizę AI" aby ocenić kandydata</p>
+                                        <p className="text-sm mt-1">AI przeanalizuje dane, wyniki testów i notatki</p>
+                                    </div>
+                                )}
+
+                                {aiAnalysis && (
+                                    <div className="space-y-4 animate-in fade-in duration-500">
+                                        {/* Recommendation banner */}
+                                        <div className={`rounded-2xl p-6 flex items-center gap-5 ${
+                                            aiAnalysis.recommendation === 'hire' ? 'bg-emerald-50 border-2 border-emerald-200' :
+                                            aiAnalysis.recommendation === 'reject' ? 'bg-red-50 border-2 border-red-200' :
+                                            'bg-amber-50 border-2 border-amber-200'
+                                        }`}>
+                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                                                aiAnalysis.recommendation === 'hire' ? 'bg-emerald-100 text-emerald-600' :
+                                                aiAnalysis.recommendation === 'reject' ? 'bg-red-100 text-red-600' :
+                                                'bg-amber-100 text-amber-600'
+                                            }`}>
+                                                {aiAnalysis.recommendation === 'hire' ? <ThumbsUp size={28}/> :
+                                                 aiAnalysis.recommendation === 'reject' ? <ThumbsDown size={28}/> :
+                                                 <AlertCircle size={28}/>}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className={`text-xl font-black uppercase tracking-widest ${
+                                                    aiAnalysis.recommendation === 'hire' ? 'text-emerald-700' :
+                                                    aiAnalysis.recommendation === 'reject' ? 'text-red-700' :
+                                                    'text-amber-700'
+                                                }`}>
+                                                    {aiAnalysis.recommendation === 'hire' ? '✅ REKOMENDACJA: ZATRUDNIĆ' :
+                                                     aiAnalysis.recommendation === 'reject' ? '❌ REKOMENDACJA: ODRZUCIĆ' :
+                                                     '⚠️ REKOMENDACJA: DO ROZWAŻENIA'}
+                                                </div>
+                                                <p className="text-sm text-slate-600 mt-1">{aiAnalysis.summary}</p>
+                                            </div>
+                                            <div className="text-center flex-shrink-0">
+                                                <div className="text-4xl font-black text-slate-900">{aiAnalysis.score}</div>
+                                                <div className="text-xs text-slate-500 font-medium">/ 10</div>
+                                                <div className="flex gap-0.5 mt-1 justify-center">
+                                                    {[1,2,3,4,5,6,7,8,9,10].map(i => (
+                                                        <div key={i} className={`w-2 h-2 rounded-full ${i <= aiAnalysis.score ? 'bg-indigo-500' : 'bg-slate-200'}`}/>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Strengths */}
+                                            <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-100">
+                                                <h4 className="text-xs font-black text-emerald-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                    <ThumbsUp size={14}/> Mocne strony
+                                                </h4>
+                                                <ul className="space-y-2">
+                                                    {aiAnalysis.strengths.map((s, i) => (
+                                                        <li key={i} className="flex items-start gap-2 text-sm text-emerald-800">
+                                                            <Check size={14} className="mt-0.5 flex-shrink-0 text-emerald-500"/>
+                                                            {s}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+
+                                            {/* Risks */}
+                                            <div className="bg-red-50 rounded-xl p-5 border border-red-100">
+                                                <h4 className="text-xs font-black text-red-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                    <AlertCircle size={14}/> Ryzyka
+                                                </h4>
+                                                <ul className="space-y-2">
+                                                    {aiAnalysis.risks.map((r, i) => (
+                                                        <li key={i} className="flex items-start gap-2 text-sm text-red-800">
+                                                            <XCircle size={14} className="mt-0.5 flex-shrink-0 text-red-400"/>
+                                                            {r}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1370,6 +1653,23 @@ export const HRCandidatesPage = () => {
                         </button>
                     </div>
                     <div className="flex gap-2">
+                        {/* List/Kanban toggle */}
+                        <div className="bg-white border border-slate-200 rounded-lg flex p-1 shadow-sm">
+                            <button
+                                onClick={() => setListView('list')}
+                                className={`p-1.5 rounded transition-all ${listView === 'list' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                title="Widok listy"
+                            >
+                                <List size={16}/>
+                            </button>
+                            <button
+                                onClick={() => setListView('kanban')}
+                                className={`p-1.5 rounded transition-all ${listView === 'kanban' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                title="Widok Kanban"
+                            >
+                                <LayoutGrid size={16}/>
+                            </button>
+                        </div>
                         <Button variant="outline" onClick={generateInvitationLink} className="flex-1 sm:flex-none">
                             <Link2 size={18} className="mr-1 sm:mr-2"/> <span className="hidden sm:inline">Wyślij zaproszenie</span><span className="sm:hidden">Zaproś</span>
                         </Button>
@@ -1406,6 +1706,7 @@ export const HRCandidatesPage = () => {
                 </div>
             </div>
 
+            {listView === 'list' ? (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm min-w-[600px]">
@@ -1506,8 +1807,166 @@ export const HRCandidatesPage = () => {
                 </table>
                 </div>
             </div>
+            ) : (
+            /* Kanban Board View — Rekrutacja */
+            <div className="overflow-x-auto pb-4">
+                <div className="flex gap-4 min-w-max">
+                    {([
+                        { statuses: [UserStatus.INVITED, UserStatus.STARTED], targetStatus: UserStatus.STARTED, label: 'Nowy', color: 'bg-indigo-50 border-indigo-200', headerColor: 'bg-indigo-500' },
+                        { statuses: [UserStatus.TESTS_IN_PROGRESS], targetStatus: UserStatus.TESTS_IN_PROGRESS, label: 'Screening', color: 'bg-blue-50 border-blue-200', headerColor: 'bg-blue-500' },
+                        { statuses: [UserStatus.TESTS_COMPLETED], targetStatus: UserStatus.TESTS_COMPLETED, label: 'Rozmowa', color: 'bg-cyan-50 border-cyan-200', headerColor: 'bg-cyan-500' },
+                        { statuses: [UserStatus.DATA_REQUESTED, UserStatus.DATA_SUBMITTED], targetStatus: UserStatus.DATA_REQUESTED, label: 'Oferta', color: 'bg-amber-50 border-amber-200', headerColor: 'bg-amber-500' },
+                        { statuses: [UserStatus.ACTIVE, UserStatus.TRIAL], targetStatus: UserStatus.ACTIVE, label: 'Zatrudniony', color: 'bg-emerald-50 border-emerald-200', headerColor: 'bg-emerald-500' },
+                        { statuses: [UserStatus.REJECTED], targetStatus: UserStatus.REJECTED, label: 'Odrzucony', color: 'bg-red-50 border-red-200', headerColor: 'bg-red-400' },
+                    ] as Array<{ statuses: string[]; targetStatus: string; label: string; color: string; headerColor: string }>).map(col => {
+                        const colCandidates = users.filter(u => {
+                            if (u.role !== Role.CANDIDATE) return false;
+                            if (search && !`${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(search.toLowerCase())) return false;
+                            return col.statuses.includes(u.status as string);
+                        });
+                        return (
+                            <div key={col.label} className={`w-64 rounded-xl border ${col.color} flex flex-col min-h-[400px] flex-shrink-0`}>
+                                <div className={`${col.headerColor} text-white px-3 py-2.5 rounded-t-xl flex items-center justify-between`}>
+                                    <span className="font-black text-xs uppercase tracking-widest">{col.label}</span>
+                                    <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{colCandidates.length}</span>
+                                </div>
+                                <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-320px)]">
+                                    {colCandidates.map(candidate => {
+                                        const bestScore = testAttempts.filter(ta => ta.user_id === candidate.id).reduce((max, ta) => Math.max(max, ta.score || 0), 0);
+                                        // Compute a simple AI score heuristic: based on test score, CV presence, data completeness
+                                        const hasCV = !!candidate.resume_url;
+                                        const dataComplete = isDataComplete(candidate);
+                                        const aiScore = Math.min(10, Math.round(
+                                            (bestScore > 0 ? bestScore / 10 : 0) * 0.5
+                                            + (hasCV ? 2 : 0)
+                                            + (dataComplete ? 2 : 0)
+                                            + (candidate.source === 'Polecenie pracownika' ? 1 : 0)
+                                        ));
+                                        return (
+                                            <div
+                                                key={candidate.id}
+                                                className="bg-white rounded-lg shadow-sm border border-white hover:shadow-md hover:border-slate-200 cursor-pointer transition-all p-3 group"
+                                                onClick={() => setSelectedCandidate(candidate)}
+                                            >
+                                                {/* Avatar + name + position */}
+                                                <div className="flex items-start gap-2 mb-2">
+                                                    <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-[11px] flex-shrink-0 shadow-sm">
+                                                        {candidate.first_name?.[0]}{candidate.last_name?.[0]}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="font-bold text-slate-900 text-xs truncate">{candidate.first_name} {candidate.last_name}</div>
+                                                        <div className="text-[9px] text-slate-500 truncate flex items-center gap-1">
+                                                            <Briefcase size={9} className="flex-shrink-0"/>
+                                                            {candidate.target_position || 'brak stanowiska'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {/* Date + AI score */}
+                                                <div className="flex items-center justify-between mt-1.5">
+                                                    <span className="text-[9px] text-slate-400 flex items-center gap-1">
+                                                        <Calendar size={9}/>
+                                                        {candidate.created_at ? new Date(candidate.created_at).toLocaleDateString('pl-PL') : '-'}
+                                                    </span>
+                                                    <div className="flex items-center gap-1">
+                                                        {bestScore > 0 && (
+                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${bestScore >= 70 ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                                {bestScore}%
+                                                            </span>
+                                                        )}
+                                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${aiScore >= 7 ? 'bg-indigo-100 text-indigo-700' : aiScore >= 4 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                            <BrainCircuit size={9}/>{aiScore}/10
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {/* AI summary snippet */}
+                                                {candidate.notes && (
+                                                    <div className="text-[9px] text-slate-400 mt-1.5 line-clamp-2 italic">{candidate.notes.slice(0, 60)}{candidate.notes.length > 60 ? '...' : ''}</div>
+                                                )}
+                                                {/* Actions on hover */}
+                                                <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button
+                                                        className="flex-1 text-[9px] font-bold py-1 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 transition-colors flex items-center justify-center gap-0.5"
+                                                        onClick={(e) => { e.stopPropagation(); setMoveCardModal({ candidate, fromStatus: candidate.status }); }}
+                                                    >
+                                                        <ArrowLeft size={9} className="rotate-180"/> Przenieś
+                                                    </button>
+                                                    <button
+                                                        className="flex-1 text-[9px] font-bold py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedCandidate(candidate); }}
+                                                    >
+                                                        Otwórz
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {colCandidates.length === 0 && (
+                                        <div className="text-center py-8 text-slate-300">
+                                            <UserIcon size={24} className="mx-auto mb-1 opacity-40"/>
+                                            <p className="text-[10px] font-medium">Brak kandydatów</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+            )}
         </div>
     );
+
+
+    // --- Move Card Modal ---
+    const renderMoveCardModal = () => {
+        if (!moveCardModal) return null;
+        const kanbanCols = [
+            { label: 'Nowy', targetStatus: UserStatus.STARTED },
+            { label: 'Screening', targetStatus: UserStatus.TESTS_IN_PROGRESS },
+            { label: 'Rozmowa', targetStatus: UserStatus.TESTS_COMPLETED },
+            { label: 'Oferta', targetStatus: UserStatus.DATA_REQUESTED },
+            { label: 'Zatrudniony', targetStatus: UserStatus.ACTIVE },
+            { label: 'Odrzucony', targetStatus: UserStatus.REJECTED },
+        ].filter(c => c.targetStatus !== moveCardModal.fromStatus);
+
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in duration-300">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-black uppercase tracking-tight text-slate-900">Przenieś kandydata</h3>
+                        <button onClick={() => setMoveCardModal(null)} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
+                    </div>
+                    <div className="flex items-center gap-3 mb-5 p-3 bg-slate-50 rounded-xl">
+                        <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                            {moveCardModal.candidate.first_name?.[0]}{moveCardModal.candidate.last_name?.[0]}
+                        </div>
+                        <div>
+                            <div className="font-bold text-slate-900 text-sm">{moveCardModal.candidate.first_name} {moveCardModal.candidate.last_name}</div>
+                            <div className="text-[10px] text-slate-400">{moveCardModal.candidate.target_position || 'brak stanowiska'}</div>
+                        </div>
+                    </div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Wybierz kolumnę docelową</p>
+                    <div className="space-y-2">
+                        {kanbanCols.map(col => (
+                            <button
+                                key={col.label}
+                                className="w-full text-left px-4 py-2.5 rounded-xl border-2 border-slate-100 hover:border-blue-400 hover:bg-blue-50 transition-all font-bold text-sm text-slate-700 hover:text-blue-700 flex items-center justify-between"
+                                onClick={async () => {
+                                    await updateUser(moveCardModal.candidate.id, { status: col.targetStatus });
+                                    await logCandidateAction(moveCardModal.candidate.id, `Przeniesiono na tablicy Kanban: ${col.label}`);
+                                    setMoveCardModal(null);
+                                    triggerNotification('success', 'Przeniesiono', `${moveCardModal.candidate.first_name} przeniesiony do kolumny "${col.label}"`);
+                                }}
+                            >
+                                <span>{col.label}</span>
+                                <ArrowLeft size={14} className="rotate-180 text-slate-400"/>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const renderSelectionModal = () => {
         if (!isSelectionModalOpen) return null;
@@ -1988,6 +2447,7 @@ export const HRCandidatesPage = () => {
             {renderEditBasicModal()}
             {renderDocModal()}
             {renderTrialModal()}
+            {renderMoveCardModal()}
             <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
             <input type="file" ref={aiFileInputRef} className="hidden" accept=".pdf" onChange={handleAIImport}/>
         </div>
