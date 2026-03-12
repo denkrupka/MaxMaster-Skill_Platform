@@ -301,6 +301,7 @@ export default function PdfTakeoffWizard({
 
   const isLoading = step === 'rendering' || step === 'analyzing' || step === 'saving';
   const reviewCount = positions.filter(p => p.needsReview).length;
+  const hasSavedState = !!(savedState?.positions?.length);
 
   const showToast = useCallback((message: string, type: ToastProps['type'] = 'info') => {
     setToast({ message, type });
@@ -609,6 +610,27 @@ export default function PdfTakeoffWizard({
 
           {/* Body */}
           <div className="p-4 flex-1 overflow-y-auto space-y-3">
+
+            {/* Restored session banner */}
+            {hasSavedState && step === 'result' && (
+              <div className="flex items-center gap-2 text-xs bg-blue-50 border border-blue-200 rounded px-3 py-2 text-blue-700">
+                <Sparkles size={12} />
+                <span>Przywrócono zapisany wynik analizy. Możesz kontynuować edycję.</span>
+                <button
+                  onClick={() => {
+                    clearSavedState();
+                    setStep('scale');
+                    setPositions([]);
+                    setClaudeRaw(null);
+                    setGeminiRaw(null);
+                    setScaleConfirmed(false);
+                  }}
+                  className="ml-auto text-[10px] underline text-blue-500 hover:text-blue-700"
+                >
+                  Zacznij od nowa
+                </button>
+              </div>
+            )}
 
             {/* Scale block — only before confirm */}
             {!scaleConfirmed && (

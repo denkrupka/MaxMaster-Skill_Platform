@@ -3765,12 +3765,35 @@ export const PlansWorkspace: React.FC = () => {
               setMeasurements(prev => prev.map(m => m.id === id ? { ...m, label: newLabel } : m));
             }
           }}
-          onExportMeasurements={() => {
-            const csv = measurements.map(m => `${m.type},${m.value},${m.unit},${m.label || ''}`).join('\n');
-            const blob = new Blob([`Typ,Wartosc,Jednostka,Etykieta\n${csv}`], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = 'pomiary.csv'; a.click();
-            URL.revokeObjectURL(url);
+          onExportMeasurements={async () => {
+            try {
+              const XLSX = await import('xlsx');
+              const date = new Date().toISOString().slice(0, 10);
+              const wsData = [
+                ['Lp.', 'Typ', 'Wartosc', 'Jednostka', 'Etykieta', 'Data'],
+                ...measurements.map((m, i) => [
+                  i + 1,
+                  m.type === 'length' ? 'Dlugosc' : m.type === 'area' ? 'Powierzchnia' : m.type === 'angle' ? 'Kat' : m.type,
+                  m.value,
+                  m.unit,
+                  m.label || '',
+                  m.createdAt ? new Date(m.createdAt).toLocaleDateString('pl-PL') : '',
+                ]),
+              ];
+              const ws = XLSX.utils.aoa_to_sheet(wsData);
+              ws['!cols'] = [{wch:5},{wch:15},{wch:12},{wch:12},{wch:30},{wch:12}];
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, 'Pomiary');
+              XLSX.writeFile(wb, `pomiary_${date}.xlsx`);
+              notify('Pomiary wyeksportowane do Excel');
+            } catch {
+              // fallback to CSV
+              const csv = measurements.map(m => `${m.type},${m.value},${m.unit},${m.label || ''}`).join('\n');
+              const blob = new Blob([`Typ,Wartosc,Jednostka,Etykieta\n${csv}`], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a'); a.href = url; a.download = 'pomiary.csv'; a.click();
+              URL.revokeObjectURL(url);
+            }
           }}
           // Errors tab
           onIgnoreError={(id) => setErrors(prev => prev.filter(e => e.id !== id))}
