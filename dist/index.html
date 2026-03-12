@@ -56,6 +56,72 @@
         -ms-overflow-style: none; /* IE and Edge */
         scrollbar-width: none; /* Firefox */
       }
+
+      /* ====== MOBILE ADAPTATIONS (375px) ====== */
+      
+      /* Responsive table wrapper */
+      .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Min tap target 44px */
+      .btn-mobile, button, a[role="button"] {
+        min-height: 44px;
+      }
+      
+      /* Mobile padding override */
+      @media (max-width: 640px) {
+        .p-6 { padding: 1rem !important; }
+        .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+        
+        /* Finance tabs scroll */
+        nav.flex.-mb-px {
+          overflow-x: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          flex-wrap: nowrap;
+          min-width: 0;
+        }
+        nav.flex.-mb-px::-webkit-scrollbar {
+          display: none;
+        }
+        
+        /* Stats grid: 2 cols on mobile */
+        .grid-cols-5 {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+        
+        /* Modals full width on mobile */
+        .max-w-lg, .max-w-md, .max-w-xl {
+          max-width: calc(100vw - 2rem) !important;
+        }
+        
+        /* Tables scroll horizontally */
+        table {
+          min-width: 600px;
+        }
+        .overflow-x-auto table {
+          min-width: auto;
+        }
+        
+        /* Card grids collapse on mobile */
+        .md\:grid-cols-2, .lg\:grid-cols-3, .md\:grid-cols-3 {
+          grid-template-columns: 1fr !important;
+        }
+        
+        /* Header search compact */
+        header .gap-4 {
+          gap: 0.5rem;
+        }
+      }
+      
+      /* Bottom nav spacing - ensure content doesn't hide behind bottom bar on iOS */
+      @supports (-webkit-touch-callout: none) {
+        main {
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+      }
     </style>
     <script>
       // Email confirmation redirect handler - runs BEFORE React loads
@@ -89,7 +155,7 @@
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-CwHeedPQ.js"></script>
+    <script type="module" crossorigin src="/assets/index-DCNE_T2N.js"></script>
   </head>
   <body class="bg-gray-50 text-slate-900 antialiased">
     <div id="root"></div>

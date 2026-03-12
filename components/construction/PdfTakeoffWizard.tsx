@@ -251,15 +251,45 @@ export default function PdfTakeoffWizard({
   onTakeoffCreated, onClose,
 }: PdfTakeoffWizardProps) {
   const navigate = useNavigate();
-  const [step, setStep] = useState<WizardStep>('scale');
+  const lsKey = `takeoff_wizard_${planId}_pg${pageNumber}`;
+
+  // Restore from localStorage on mount
+  const getInitialState = () => {
+    try {
+      const saved = localStorage.getItem(lsKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.positions?.length > 0 && parsed.step === 'result') {
+          return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  };
+  const savedState = getInitialState();
+
+  const [step, setStep] = useState<WizardStep>(savedState?.step || 'scale');
   const [statusMsg, setStatusMsg] = useState('');
-  const [positions, setPositions] = useState<TakeoffPosition[]>([]);
+  const [positions, setPositions] = useState<TakeoffPosition[]>(savedState?.positions || []);
   const [error, setError] = useState('');
-  const [claudeRaw, setClaudeRaw] = useState<unknown>(null);
-  const [geminiRaw, setGeminiRaw] = useState<unknown>(null);
+  const [claudeRaw, setClaudeRaw] = useState<unknown>(savedState?.claudeRaw || null);
+  const [geminiRaw, setGeminiRaw] = useState<unknown>(savedState?.geminiRaw || null);
   const [showScaleModal, setShowScaleModal] = useState(false);
   const [toast, setToast] = useState<ToastProps | null>(null);
   const [creatingOffer, setCreatingOffer] = useState(false);
+
+  // Persist to localStorage when positions change
+  React.useEffect(() => {
+    if (positions.length > 0) {
+      try {
+        localStorage.setItem(lsKey, JSON.stringify({ step, positions, claudeRaw, geminiRaw, savedAt: Date.now() }));
+      } catch {}
+    }
+  }, [positions, step]);
+
+  const clearSavedState = useCallback(() => {
+    try { localStorage.removeItem(lsKey); } catch {}
+  }, [lsKey]);
 
   const detectedScale = analysisExtra.scaleInfo?.scaleText || null;
   const [scaleConfirmed, setScaleConfirmed] = useState(false);
@@ -459,6 +489,7 @@ export default function PdfTakeoffWizard({
       }
 
       showToast(`Przedmiar zapisany: ${positions.filter(p => p.count > 0).length} pozycji z ilościami`, 'success');
+      clearSavedState();
       setStep('done');
       onTakeoffCreated(positions);
     } catch (e) {
@@ -779,11 +810,38 @@ export default function PdfTakeoffWizard({
               {step === 'result' && positions.length > 0 && (
                 <>
                   <button
+                    onClick={async () => {
+                      try {
+                        const XLSX = await import('xlsx');
+                        const date = new Date().toISOString().slice(0, 10);
+                        const wsData = [
+                          ['Lp.', 'Nazwa pozycji', 'Jednostka', 'Ilosc', 'Kategoria', 'Pewnosc', 'Wymaga przegladu'],
+                          ...positions.map((p, i) => [
+                            i + 1, p.name, p.unit, p.count, p.category,
+                            `${Math.round(p.confidence * 100)}%`,
+                            p.needsReview ? 'TAK' : 'NIE'
+                          ]),
+                        ];
+                        const ws = XLSX.utils.aoa_to_sheet(wsData);
+                        ws['!cols'] = [{wch:5},{wch:40},{wch:10},{wch:10},{wch:20},{wch:10},{wch:15}];
+                        const wb = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb, ws, 'Przedmiar AI');
+                        XLSX.writeFile(wb, `przedmiar_AI_str${pageNumber}_${date}.xlsx`);
+                        showToast('Excel pobrany!', 'success');
+                      } catch(e) { showToast('Blad eksportu', 'error'); }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                    title="Pobierz przedmiar jako Excel"
+                  >
+                    <FilePlus size={13} />
+                    Excel
+                  </button>
+                  <button
                     onClick={saveAndCreate}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
                   >
                     <Check size={13} />
-                    Zapisz przedmiar ({positions.filter(p => p.count > 0).length} poz.)
+                    Zapisz ({positions.filter(p => p.count > 0).length} poz.)
                   </button>
                   <button
                     onClick={createOffer}

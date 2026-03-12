@@ -1175,6 +1175,22 @@ export const PlansWorkspace: React.FC = () => {
     if (boqRows.length > 0) api.exportBoqCsv(boqRows);
   }, [boqRows]);
 
+  const handleExportXlsx = useCallback(() => {
+    if (boqRows.length > 0) {
+      api.exportBoqXlsx(boqRows, activeFile?.name || activeFile?.original_filename);
+    }
+  }, [boqRows, activeFile]);
+
+  const handleShareLink = useCallback(() => {
+    if (!selectedPlan) return;
+    const shareUrl = `${window.location.origin}/#/public/plan-view?planId=${selectedPlan.id}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      notify('Link skopiowany do schowka! (tylko do odczytu)');
+    }).catch(() => {
+      prompt('Skopiuj link do udostepnienia:', shareUrl);
+    });
+  }, [selectedPlan, notify]);
+
   // ---- Back to projects ----
 
   const doBackToProjects = useCallback(() => {
@@ -3240,6 +3256,7 @@ export const PlansWorkspace: React.FC = () => {
             onExport={handleExport}
             onUploadNewVersion={handleImport}
             onHistory={handleHistory}
+            onShare={handleShareLink}
             onDownload={async () => {
               if (!activeFile) return;
               // If there are annotations/measurements, capture viewer with overlays
@@ -3604,6 +3621,7 @@ export const PlansWorkspace: React.FC = () => {
             }
           }}
           onExportBoq={handleExport}
+          onExportBoqXlsx={handleExportXlsx}
           onGenerateBoq={handleGenerateBoq}
           onGenerateBoqAi={handleGenerateBoqAi}
           onAnalyze={handleAnalyze}

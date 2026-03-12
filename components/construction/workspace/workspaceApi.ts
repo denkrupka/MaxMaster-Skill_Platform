@@ -438,6 +438,54 @@ export function exportBoqCsv(rows: BoqRow[]): void {
   URL.revokeObjectURL(url);
 }
 
+export async function exportBoqXlsx(rows: BoqRow[], fileName?: string): Promise<void> {
+  try {
+    const XLSX = await import('xlsx');
+    const date = new Date().toISOString().slice(0, 10);
+    const wsData: (string | number)[][] = [
+      ['Lp.', 'Nazwa pozycji', 'Jednostka', 'Ilosc', 'Kategoria', 'Typ zrodla', 'Pewnosc AI', 'Status'],
+      ...rows.map((r, i) => [
+        i + 1,
+        r.name,
+        r.unit,
+        r.quantity,
+        r.category || '',
+        r.sourceType || '',
+        r.confidence ? `${Math.round(r.confidence * 100)}%` : '',
+        r.status === 'approved' ? 'Zatwierdzona' : r.status === 'rejected' ? 'Odrzucona' : 'Oczekuje',
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 45 }, { wch: 12 }, { wch: 10 },
+      { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 15 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Przedmiar');
+
+    // Summary sheet
+    const categories = [...new Set(rows.map(r => r.category || 'Inne'))];
+    const summaryData: (string | number)[][] = [
+      ['Kategoria', 'Liczba pozycji', 'Laczna ilosc'],
+      ...categories.map(cat => {
+        const catRows = rows.filter(r => (r.category || 'Inne') === cat);
+        return [cat, catRows.length, catRows.reduce((s, r) => s + (r.quantity || 0), 0)];
+      }),
+      [],
+      ['RAZEM', rows.length, rows.reduce((s, r) => s + (r.quantity || 0), 0)],
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    wsSummary['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Podsumowanie');
+
+    const baseName = fileName ? fileName.replace(/\.[^.]+$/, '') : 'przedmiar';
+    XLSX.writeFile(wb, `${baseName}_przedmiar_${date}.xlsx`);
+  } catch (err) {
+    console.error('XLSX export error:', err);
+    exportBoqCsv(rows);
+  }
+}
+
 // ============================================================
 // Additional API functions
 // ============================================================

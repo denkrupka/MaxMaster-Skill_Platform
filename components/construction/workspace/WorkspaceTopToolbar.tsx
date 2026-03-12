@@ -4,7 +4,7 @@ import {
   RefreshCw, Sparkles, BookOpen, GitCompare, Download, BarChart3,
   Filter, Layers, Eye, EyeOff, Upload, History, Loader2,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ChevronDown,
-  Pencil, Check, ArrowLeft, Box, Save,
+  Pencil, Check, ArrowLeft, Box, Save, Share2,
 } from 'lucide-react';
 import type { ViewerMode, AsyncStatus, WorkspaceFilters } from './WorkspaceTypes';
 
@@ -51,6 +51,7 @@ interface WorkspaceTopToolbarProps {
   onUploadNewVersion: () => void;
   onHistory: () => void;
   onDownload: () => void;
+  onShare?: () => void;
   // Filters
   filters: WorkspaceFilters;
   availableLayers: string[];
@@ -409,6 +410,11 @@ export const WorkspaceTopToolbar: React.FC<WorkspaceTopToolbarProps> = (props) =
       <button onClick={props.onDownload} className="p-1 hover:bg-slate-100 rounded-lg text-slate-500" title="Pobierz">
         <Download className="w-3.5 h-3.5" />
       </button>
+      {props.onShare && (
+        <button onClick={props.onShare} className="p-1 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-500" title="Udostepnij link (tylko do odczytu)">
+          <Share2 className="w-3.5 h-3.5" />
+        </button>
+      )}
 
       <div className="w-px h-5 bg-slate-200 mx-0.5" />
 
