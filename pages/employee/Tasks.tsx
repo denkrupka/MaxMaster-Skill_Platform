@@ -11,6 +11,7 @@ import {
   ProjectTask, Project, TaskTimeLog, TaskStatus_Project, TaskPriority
 } from '../../types';
 import { SectionTabs } from '../../components/SectionTabs';
+import { EmployeeBottomNav } from '../../components/EmployeeBottomNav';
 
 const STATUS_COLUMNS: { key: TaskStatus_Project; label: string; color: string; icon: React.ReactNode }[] = [
   { key: 'todo', label: 'Do zrobienia', color: 'bg-slate-100 border-slate-300', icon: <ClipboardList className="w-4 h-4 text-slate-500" /> },
@@ -523,7 +524,7 @@ export const EmployeeTasksPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto pb-24">
       <SectionTabs section="projekty" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -600,6 +601,7 @@ export const EmployeeTasksPage: React.FC = () => {
 
       {/* Detail Panel */}
       {renderDetailPanel()}
+      <EmployeeBottomNav />
     </div>
   );
 };

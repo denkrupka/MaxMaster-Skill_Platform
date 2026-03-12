@@ -33,7 +33,7 @@ import { SuperAdminDashboard as SuperAdminDashboardAdmin } from './pages/admin/S
 import { CompanyDashboard } from './pages/company/Dashboard';
 import { CompanyUsersPage } from './pages/company/Users';
 import { CompanySubscriptionPage } from './pages/company/Subscription';
-import { CompanySettingsPage } from './pages/company/Settings';
+const CompanySettingsPage = React.lazy(() => import('./pages/company/Settings').then(m => ({ default: m.CompanySettingsPage })));
 import { CompanyReferralsPage } from './pages/company/Referrals';
 
 // Moniti Integration Pages - Company
@@ -92,23 +92,23 @@ import { BrigadirTeamPage } from './pages/brigadir/TeamPage';
 import { BrigadirQualityPage } from './pages/brigadir/QualityPage';
 import { BrigadirDashboard } from './pages/brigadir/Dashboard';
 
-// Employee Pages (Post-Trial)
-import { EmployeeDashboard } from './pages/employee/Dashboard';
-import { EmployeeSkills } from './pages/employee/Skills';
-import { EmployeeTests } from './pages/employee/Tests';
-import { EmployeePractice } from './pages/employee/Practice';
-import { EmployeeLibrary } from './pages/employee/Library';
-import { EmployeeCareer } from './pages/employee/Career';
-import { EmployeeProfile } from './pages/employee/Profile';
-import { EmployeeSalaryPage } from './pages/employee/Salary';
-import { EmployeeQualityHistory } from './pages/employee/QualityHistory';
-import { EmployeeReferrals } from './pages/employee/Referrals';
+// Employee Pages (Post-Trial) — lazy-loaded for PWA performance
+const EmployeeDashboard = React.lazy(() => import('./pages/employee/Dashboard').then(m => ({ default: m.EmployeeDashboard })));
+const EmployeeSkills = React.lazy(() => import('./pages/employee/Skills').then(m => ({ default: m.EmployeeSkills })));
+const EmployeeTests = React.lazy(() => import('./pages/employee/Tests').then(m => ({ default: m.EmployeeTests })));
+const EmployeePractice = React.lazy(() => import('./pages/employee/Practice').then(m => ({ default: m.EmployeePractice })));
+const EmployeeLibrary = React.lazy(() => import('./pages/employee/Library').then(m => ({ default: m.EmployeeLibrary })));
+const EmployeeCareer = React.lazy(() => import('./pages/employee/Career').then(m => ({ default: m.EmployeeCareer })));
+const EmployeeProfile = React.lazy(() => import('./pages/employee/Profile').then(m => ({ default: m.EmployeeProfile })));
+const EmployeeSalaryPage = React.lazy(() => import('./pages/employee/Salary').then(m => ({ default: m.EmployeeSalaryPage })));
+const EmployeeQualityHistory = React.lazy(() => import('./pages/employee/QualityHistory').then(m => ({ default: m.EmployeeQualityHistory })));
+const EmployeeReferrals = React.lazy(() => import('./pages/employee/Referrals').then(m => ({ default: m.EmployeeReferrals })));
 
-// Moniti Integration Pages - Employee
-import { EmployeeAttendancePage } from './pages/employee/Attendance';
-import { EmployeeTimeOffPage } from './pages/employee/TimeOff';
-import { EmployeeSchedulePage } from './pages/employee/Schedule';
-import { EmployeeTasksPage } from './pages/employee/Tasks';
+// Moniti Integration Pages - Employee (lazy-loaded)
+const EmployeeAttendancePage = React.lazy(() => import('./pages/employee/Attendance').then(m => ({ default: m.EmployeeAttendancePage })));
+const EmployeeTimeOffPage = React.lazy(() => import('./pages/employee/TimeOff').then(m => ({ default: m.EmployeeTimeOffPage })));
+const EmployeeSchedulePage = React.lazy(() => import('./pages/employee/Schedule').then(m => ({ default: m.EmployeeSchedulePage })));
+const EmployeeTasksPage = React.lazy(() => import('./pages/employee/Tasks').then(m => ({ default: m.EmployeeTasksPage })));
 
 // Trial & Candidate Pages
 import { TrialDashboard } from './pages/trial/Dashboard';

@@ -1,19 +1,23 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2 } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2, Link2, Webhook, Bell, Shield, CheckCircle, AlertCircle, RefreshCw, Copy, Globe, Smartphone, Monitor, LogOut, Key, Zap, ExternalLink } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { WorkingHours, WorkingHoursDay, RoundTime, HolidayDay } from '../../types';
 import { supabase } from '../../lib/supabase';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-type TabKey = 'company' | 'working_time' | 'holidays' | 'construction';
+type TabKey = 'company' | 'working_time' | 'holidays' | 'construction' | 'integracje' | 'api_webhooks' | 'powiadomienia' | 'bezpieczenstwo';
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'company', label: 'Dane firmy', icon: <Building2 className="w-4 h-4" /> },
   { key: 'working_time', label: 'Czas pracy', icon: <Clock className="w-4 h-4" /> },
   { key: 'holidays', label: 'Dni wolne', icon: <CalendarDays className="w-4 h-4" /> },
   { key: 'construction', label: 'Budowlanka', icon: <HardHat className="w-4 h-4" /> },
+  { key: 'integracje', label: 'Integracje', icon: <Link2 className="w-4 h-4" /> },
+  { key: 'api_webhooks', label: 'API & Webhooks', icon: <Webhook className="w-4 h-4" /> },
+  { key: 'powiadomienia', label: 'Powiadomienia', icon: <Bell className="w-4 h-4" /> },
+  { key: 'bezpieczenstwo', label: 'Bezpieczeństwo', icon: <Shield className="w-4 h-4" /> },
 ];
 
 const TIMEZONES = [
@@ -140,6 +144,79 @@ export const CompanySettingsPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabKey>('company');
   const [isSaving, setIsSaving] = useState(false);
+
+  // ═══ Tab 5: Integracje ═══
+  const [integrations] = useState([
+    { key: 'gus', name: 'GUS', description: 'Główny Urząd Statystyczny — weryfikacja firm po NIP/REGON', connected: true, icon: '🏛️', color: 'blue' },
+    { key: 'stripe', name: 'Stripe', description: 'Płatności online i subskrypcje', connected: false, icon: '💳', color: 'purple' },
+    { key: 'olx', name: 'OLX', description: 'Ogłoszenia o pracę i przetargi', connected: false, icon: '🏪', color: 'orange', soon: true },
+    { key: 'cpl', name: 'CPL', description: 'Portal ogłoszeń budowlanych', connected: false, icon: '🔨', color: 'red', soon: true },
+  ]);
+
+  // ═══ Tab 6: API & Webhooks ═══
+  const [apiKey, setApiKey] = useState(() => {
+    const stored = localStorage.getItem('company_api_key');
+    if (stored) return stored;
+    const uuid = 'sk_' + Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    localStorage.setItem('company_api_key', uuid);
+    return uuid;
+  });
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [webhooks, setWebhooks] = useState([
+    { id: '1', url: 'https://example.com/webhooks/maxmaster', events: ['attendance.check_in', 'attendance.check_out'], active: true },
+  ]);
+  const [newWebhookUrl, setNewWebhookUrl] = useState('');
+  const [showAddWebhook, setShowAddWebhook] = useState(false);
+
+  const handleRegenerateApiKey = () => {
+    if (!confirm('Czy na pewno chcesz wygenerować nowy klucz API? Stary klucz przestanie działać natychmiast.')) return;
+    const uuid = 'sk_' + Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    localStorage.setItem('company_api_key', uuid);
+    setApiKey(uuid);
+  };
+
+  const handleCopyApiKey = () => {
+    navigator.clipboard.writeText(apiKey);
+    setApiKeyCopied(true);
+    setTimeout(() => setApiKeyCopied(false), 2000);
+  };
+
+  const handleAddWebhook = () => {
+    if (!newWebhookUrl.trim()) return;
+    setWebhooks(prev => [...prev, { id: Date.now().toString(), url: newWebhookUrl, events: ['attendance.check_in'], active: true }]);
+    setNewWebhookUrl('');
+    setShowAddWebhook(false);
+  };
+
+  // ═══ Tab 7: Powiadomienia ═══
+  const [notificationSettings, setNotificationSettings] = useState({
+    attendance_checkin: { email: true, push: true },
+    attendance_checkout: { email: true, push: true },
+    task_assigned: { email: true, push: true },
+    task_completed: { email: false, push: true },
+    invoice_paid: { email: true, push: false },
+    invoice_overdue: { email: true, push: true },
+    new_employee: { email: true, push: false },
+    quality_incident: { email: true, push: true },
+  });
+
+  const notificationTypes = [
+    { key: 'attendance_checkin', label: 'Wejście pracownika', icon: '👋' },
+    { key: 'attendance_checkout', label: 'Wyjście pracownika', icon: '🚪' },
+    { key: 'task_assigned', label: 'Nowe zadanie przypisane', icon: '📋' },
+    { key: 'task_completed', label: 'Zadanie ukończone', icon: '✅' },
+    { key: 'invoice_paid', label: 'Faktura opłacona', icon: '💰' },
+    { key: 'invoice_overdue', label: 'Faktura przeterminowana', icon: '⚠️' },
+    { key: 'new_employee', label: 'Nowy pracownik', icon: '👤' },
+    { key: 'quality_incident', label: 'Incydent jakościowy', icon: '🔴' },
+  ];
+
+  // ═══ Tab 8: Bezpieczeństwo ═══
+  const [activeSessions] = useState([
+    { id: '1', device: 'Chrome na Windows', location: 'Warszawa, PL', ip: '89.64.xx.xx', lastActive: new Date().toISOString(), current: true },
+    { id: '2', device: 'Safari na iPhone', location: 'Poznań, PL', ip: '78.133.xx.xx', lastActive: new Date(Date.now() - 2 * 3600000).toISOString(), current: false },
+    { id: '3', device: 'Chrome na Android', location: 'Kraków, PL', ip: '62.87.xx.xx', lastActive: new Date(Date.now() - 24 * 3600000).toISOString(), current: false },
+  ]);
 
   // ═══ Tab 1: Dane firmy ═══
   const [formData, setFormData] = useState({
@@ -1408,6 +1485,355 @@ export const CompanySettingsPage: React.FC = () => {
             </button>
           </div>
         </>
+      )}
+      {/* ════════════════════════════════════════════════════════════════════
+          Tab 5: Integracje
+          ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'integracje' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                <Link2 className="w-6 h-6 text-indigo-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Integracje zewnętrzne</h2>
+                <p className="text-sm text-slate-500">Połącz MaxMaster z innymi usługami</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {integrations.map(integration => (
+                <div key={integration.key} className="flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-slate-300 transition">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-2xl">
+                      {integration.icon}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-slate-900">{integration.name}</h3>
+                        {(integration as any).soon && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Wkrótce</span>
+                        )}
+                        {integration.connected && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                            <CheckCircle className="w-3 h-3" /> Połączono
+                          </span>
+                        )}
+                        {!integration.connected && !(integration as any).soon && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">
+                            <AlertCircle className="w-3 h-3" /> Niepołączono
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-500 mt-0.5">{integration.description}</p>
+                    </div>
+                  </div>
+                  <button
+                    disabled={(integration as any).soon}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg border transition ${
+                      (integration as any).soon
+                        ? 'border-slate-200 text-slate-400 cursor-not-allowed bg-slate-50'
+                        : integration.connected
+                          ? 'border-red-200 text-red-600 hover:bg-red-50'
+                          : 'border-blue-200 text-blue-600 hover:bg-blue-50 bg-white'
+                    }`}
+                  >
+                    {(integration as any).soon ? 'Wkrótce' : integration.connected ? 'Rozłącz' : 'Połącz'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════
+          Tab 6: API & Webhooks
+          ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'api_webhooks' && (
+        <div className="space-y-6">
+          {/* API Key */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center">
+                <Key className="w-6 h-6 text-violet-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Klucz API</h2>
+                <p className="text-sm text-slate-500">Używaj do integracji z zewnętrznymi systemami</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-700 truncate select-all">
+                {apiKey}
+              </div>
+              <button
+                onClick={handleCopyApiKey}
+                className="flex items-center gap-2 px-4 py-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition text-sm font-medium text-slate-700"
+              >
+                {apiKeyCopied ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                {apiKeyCopied ? 'Skopiowano!' : 'Kopiuj'}
+              </button>
+              <button
+                onClick={handleRegenerateApiKey}
+                className="flex items-center gap-2 px-4 py-3 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition text-sm font-medium"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Regeneruj
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-slate-400 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              Nie udostępniaj nikomu tego klucza. Regeneracja unieważni stary klucz natychmiast.
+            </p>
+          </div>
+
+          {/* Webhooks */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-cyan-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Webhooks</h2>
+                  <p className="text-sm text-slate-500">Powiadamiaj zewnętrzne systemy o zdarzeniach</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddWebhook(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj webhook
+              </button>
+            </div>
+
+            {showAddWebhook && (
+              <div className="mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200 flex gap-3">
+                <input
+                  type="url"
+                  placeholder="https://your-server.com/webhook"
+                  value={newWebhookUrl}
+                  onChange={e => setNewWebhookUrl(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <button onClick={handleAddWebhook} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Dodaj</button>
+                <button onClick={() => setShowAddWebhook(false)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Anuluj</button>
+              </div>
+            )}
+
+            {webhooks.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Webhook className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Brak zdefiniowanych webhooków</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {webhooks.map(wh => (
+                  <div key={wh.id} className="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${wh.active ? 'bg-green-500' : 'bg-slate-300'}`} />
+                      <div>
+                        <div className="font-mono text-sm text-slate-800">{wh.url}</div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {wh.events.map(ev => (
+                            <span key={ev} className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 border border-blue-100 rounded">{ev}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setWebhooks(prev => prev.filter(w => w.id !== wh.id))}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Available events reference */}
+            <div className="mt-6 pt-6 border-t border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Dostępne zdarzenia</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs font-mono text-slate-500">
+                {['attendance.check_in','attendance.check_out','task.created','task.completed','invoice.paid','invoice.overdue','employee.created','quality.incident'].map(ev => (
+                  <span key={ev} className="px-2 py-1 bg-slate-50 border border-slate-100 rounded">{ev}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════
+          Tab 7: Powiadomienia
+          ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'powiadomienia' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+              <Bell className="w-6 h-6 text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Ustawienia powiadomień</h2>
+              <p className="text-sm text-slate-500">Wybierz jak chcesz być powiadamiany o zdarzeniach</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left text-sm font-medium text-slate-500 pb-3 w-full">Zdarzenie</th>
+                  <th className="text-center text-sm font-medium text-slate-500 pb-3 px-6 whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1"><Mail className="w-4 h-4" /> Email</div>
+                  </th>
+                  <th className="text-center text-sm font-medium text-slate-500 pb-3 px-6 whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1"><Smartphone className="w-4 h-4" /> Push</div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {notificationTypes.map(type => (
+                  <tr key={type.key} className="hover:bg-slate-50 transition">
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{type.icon}</span>
+                        <span className="text-sm text-slate-700">{type.label}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      <input
+                        type="checkbox"
+                        checked={(notificationSettings as any)[type.key]?.email ?? false}
+                        onChange={e => setNotificationSettings(prev => ({
+                          ...prev,
+                          [type.key]: { ...(prev as any)[type.key], email: e.target.checked }
+                        }))}
+                        className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                      />
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      <input
+                        type="checkbox"
+                        checked={(notificationSettings as any)[type.key]?.push ?? false}
+                        onChange={e => setNotificationSettings(prev => ({
+                          ...prev,
+                          [type.key]: { ...(prev as any)[type.key], push: e.target.checked }
+                        }))}
+                        className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end mt-6">
+            <button className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+              <Save className="w-4 h-4" />
+              Zapisz ustawienia
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════
+          Tab 8: Bezpieczeństwo
+          ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'bezpieczenstwo' && (
+        <div className="space-y-6">
+          {/* Active Sessions */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                  <Monitor className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Aktywne sesje</h2>
+                  <p className="text-sm text-slate-500">Urządzenia aktualnie zalogowane do konta</p>
+                </div>
+              </div>
+              <button
+                onClick={() => alert('TODO: wyloguj wszystkie sesje poza aktualną')}
+                className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition text-sm font-medium"
+              >
+                <LogOut className="w-4 h-4" />
+                Wyloguj wszystkie
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {activeSessions.map(session => (
+                <div key={session.id} className={`flex items-center justify-between p-4 rounded-lg border ${session.current ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                      {session.device.includes('iPhone') || session.device.includes('Android')
+                        ? <Smartphone className="w-5 h-5 text-slate-500" />
+                        : <Monitor className="w-5 h-5 text-slate-500" />
+                      }
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-800">{session.device}</span>
+                        {session.current && <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded font-medium">Aktualna</span>}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {session.location} · {session.ip} · Ostatnio aktywna: {new Date(session.lastActive).toLocaleString('pl-PL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                  {!session.current && (
+                    <button
+                      onClick={() => alert(`TODO: wyloguj sesję ${session.id}`)}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 2FA */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <Shield className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Weryfikacja dwuetapowa (2FA)</h2>
+                <p className="text-sm text-slate-500">Dodaj dodatkową warstwę bezpieczeństwa do konta</p>
+              </div>
+            </div>
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Funkcja w przygotowaniu</p>
+                <p className="text-sm text-amber-700 mt-1">
+                  {/* TODO: Implement 2FA with TOTP (Google Authenticator / Authy) */}
+                  Wkrótce dostępna weryfikacja przez aplikacje TOTP (Google Authenticator, Authy). Funkcjonalność zostanie wdrożona w kolejnej aktualizacji.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 opacity-50 pointer-events-none">
+              {['Aplikacja Authenticator (TOTP)', 'Kod SMS', 'Klucz sprzętowy (FIDO2)'].map(method => (
+                <div key={method} className="p-4 border border-slate-200 rounded-lg text-center">
+                  <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Shield className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <div className="text-sm font-medium text-slate-700">{method}</div>
+                  <button className="mt-2 px-3 py-1 text-xs border border-slate-200 rounded-md text-slate-500">Włącz</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
