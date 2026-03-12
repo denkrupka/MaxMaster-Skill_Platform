@@ -1,20 +1,23 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Plus, Search, DollarSign, TrendingUp, TrendingDown, Wallet,
-  CreditCard, Loader2, Filter, Download, Calendar, Building2,
+  CreditCard, Loader2, Download, Calendar, Building2,
   FileText, ArrowUpRight, ArrowDownRight, PieChart, BarChart3,
   Receipt, CheckCircle, Clock, AlertCircle, X, Pencil, Save,
-  Trash2, AlertTriangle, Target, Layers
+  Trash2, AlertTriangle, Target, Layers, Brain,
+  Upload, Banknote, Info,
+  Activity, Lightbulb, Shield, Eye
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, PieChart as RPieChart, Pie, Cell
+  Legend, PieChart as RPieChart, Pie, Cell, LineChart, Line, Area, AreaChart,
+  ComposedChart, ReferenceLine
 } from 'recharts';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
   Project, FinanceAccount, FinanceOperation, FinanceAct,
-  FinanceOperationType, FinanceOperationStatus, ActStatus, Contractor
+  FinanceOperationType, FinanceOperationStatus, ActStatus, Contractor, Offer
 } from '../../types';
 import {
   FINANCE_OPERATION_TYPE_LABELS, FINANCE_OPERATION_TYPE_COLORS,
@@ -24,7 +27,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
-type TabType = 'operations' | 'acts' | 'accounts' | 'budget';
+type TabType = 'operations' | 'acts' | 'accounts' | 'budget' | 'cashflow' | 'ai';
 
 const BUDGET_CATEGORIES = [
   { code: 'materialy', label: 'Materiały', color: '#3b82f6' },
@@ -33,18 +36,34 @@ const BUDGET_CATEGORIES = [
   { code: 'inne', label: 'Inne', color: '#8b5cf6' },
 ];
 
-const MONTHS_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze',
-                   'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
+const MONTHS_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
+
+const INDUSTRY_BENCHMARKS: Record<string, { min: number; max: number; label: string }> = {
+  materialy: { min: 40, max: 60, label: 'Materiały' },
+  robocizna: { min: 25, max: 40, label: 'Robocizna' },
+  sprzet: { min: 5, max: 15, label: 'Sprzęt' },
+  inne: { min: 3, max: 10, label: 'Inne' },
+};
 
 interface BudgetItem {
   id?: string;
   project_id: string;
   company_id?: string;
-  category: string; // materialy | robocizna | sprzet | inne
+  category: string;
   name: string;
   planned_amount: number;
   actual_amount: number;
+  notes?: string;
   created_at?: string;
+}
+
+interface ReceiptFile {
+  id: string;
+  operation_id: string;
+  file_name: string;
+  file_url: string;
+  file_size?: number;
+  mime_type?: string;
 }
 
 export const FinancePage: React.FC = () => {
@@ -57,6 +76,7 @@ export const FinancePage: React.FC = () => {
   const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState<string>('all');
@@ -69,12 +89,23 @@ export const FinancePage: React.FC = () => {
   const [monthlyBudget, setMonthlyBudget] = useState<any[]>([]);
   const [savingBudget, setSavingBudget] = useState(false);
   const [showAddBudgetItemModal, setShowAddBudgetItemModal] = useState(false);
-  const [budgetItemForm, setBudgetItemForm] = useState({
-    category: 'materialy',
-    name: '',
-    planned_amount: 0,
-    actual_amount: 0,
-  });
+  const [budgetItemForm, setBudgetItemForm] = useState({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0, notes: '' });
+
+  // AI Analysis state
+  const [aiAnalysis, setAiAnalysis] = useState<string>('');
+  const [aiSavings, setAiSavings] = useState<string>('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSavingsLoading, setAiSavingsLoading] = useState(false);
+  const [aiProject, setAiProject] = useState<string>('');
+
+  // Cashflow state
+  const [cashflowPeriod, setCashflowPeriod] = useState<'6m' | '12m'>('6m');
+
+  // Receipt upload state
+  const [receipts, setReceipts] = useState<Record<string, ReceiptFile[]>>({});
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [uploadedReceiptUrl, setUploadedReceiptUrl] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modals
   const [showOperationModal, setShowOperationModal] = useState(false);
@@ -90,7 +121,7 @@ export const FinancePage: React.FC = () => {
     operation_type: 'expense' as FinanceOperationType,
     amount: 0, description: '',
     operation_date: new Date().toISOString().split('T')[0],
-    document_number: ''
+    document_number: '', budget_category: '',
   });
 
   const [actForm, setActForm] = useState({
@@ -113,7 +144,7 @@ export const FinancePage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [operationsRes, actsRes, accountsRes, projectsRes, contractorsRes] = await Promise.all([
+      const [operationsRes, actsRes, accountsRes, projectsRes, contractorsRes, offersRes] = await Promise.all([
         supabase.from('finance_operations')
           .select('*, project:projects(*), account:finance_accounts(*), contractor:contractors(*)')
           .eq('company_id', currentUser.company_id)
@@ -135,7 +166,12 @@ export const FinancePage: React.FC = () => {
         supabase.from('contractors')
           .select('*')
           .eq('company_id', currentUser.company_id)
+          .is('deleted_at', null),
+        supabase.from('offers')
+          .select('*')
+          .eq('company_id', currentUser.company_id)
           .is('deleted_at', null)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (operationsRes.data) setOperations(operationsRes.data);
@@ -145,9 +181,11 @@ export const FinancePage: React.FC = () => {
         setProjects(projectsRes.data);
         if (!budgetProject && projectsRes.data.length > 0) {
           setBudgetProject(projectsRes.data[0].id);
+          setAiProject(projectsRes.data[0].id);
         }
       }
       if (contractorsRes.data) setContractors(contractorsRes.data);
+      if (offersRes.data) setOffers(offersRes.data as unknown as Offer[]);
     } catch (err) {
       console.error('Error loading finance data:', err);
     } finally {
@@ -165,7 +203,6 @@ export const FinancePage: React.FC = () => {
         .order('created_at', { ascending: true });
       setBudgetItems(items || []);
 
-      // Load monthly project_budgets for the year (keep for bar chart)
       const { data: monthly } = await supabase
         .from('project_budgets')
         .select('*')
@@ -179,58 +216,114 @@ export const FinancePage: React.FC = () => {
   }, [budgetProject, budgetYear, currentUser]);
 
   useEffect(() => {
-    if (activeTab === 'budget' && budgetProject) {
-      loadBudgetData();
-    }
+    if (activeTab === 'budget' && budgetProject) loadBudgetData();
   }, [activeTab, budgetProject, budgetYear]);
 
+  const loadReceipts = useCallback(async (opIds: string[]) => {
+    if (!opIds.length) return;
+    try {
+      const { data } = await supabase.from('finance_receipts').select('*').in('operation_id', opIds);
+      if (data) {
+        const map: Record<string, ReceiptFile[]> = {};
+        data.forEach((r: ReceiptFile) => {
+          if (!map[r.operation_id]) map[r.operation_id] = [];
+          map[r.operation_id].push(r);
+        });
+        setReceipts(map);
+      }
+    } catch (err) {
+      // Table might not exist yet
+      console.warn('Receipts table not available:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (operations.length > 0) loadReceipts(operations.map(o => o.id));
+  }, [operations]);
+
+  // ==================== STATS ====================
   const stats = useMemo(() => {
     const completedOps = operations.filter(o => o.status === 'completed');
     const income = completedOps.filter(o => o.operation_type === 'income').reduce((s, o) => s + o.amount, 0);
     const expense = completedOps.filter(o => o.operation_type === 'expense').reduce((s, o) => s + o.amount, 0);
-    const totalBalance = accounts.reduce((s, a) => s + a.current_balance, 0);
-    const pendingActs = acts.filter(a => a.payment_status !== 'paid').reduce((s, a) => s + ((a.total || 0) - (a.paid_amount || 0)), 0);
+    const totalBalance = accounts.reduce((s, a) => s + (a.current_balance || (a as any).balance || 0), 0);
+    const pendingActs = acts.filter(a => a.payment_status !== 'paid').reduce((s, a) => s + ((a.total || a.amount || 0) - (a.paid_amount || 0)), 0);
 
-    // Monthly stats (last 6 months)
+    const months = cashflowPeriod === '12m' ? 12 : 6;
     const now = new Date();
-    const monthlyData = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    const monthlyData = Array.from({ length: months }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
       const y = d.getFullYear(), m = d.getMonth();
       const monthOps = completedOps.filter(op => {
         const od = new Date(op.operation_date);
         return od.getFullYear() === y && od.getMonth() === m;
       });
-      return {
-        name: MONTHS_PL[m],
-        Przychody: monthOps.filter(o => o.operation_type === 'income').reduce((s, o) => s + o.amount, 0),
-        Koszty: monthOps.filter(o => o.operation_type === 'expense').reduce((s, o) => s + o.amount, 0),
-      };
+      const inc = monthOps.filter(o => o.operation_type === 'income').reduce((s, o) => s + o.amount, 0);
+      const exp = monthOps.filter(o => o.operation_type === 'expense').reduce((s, o) => s + o.amount, 0);
+      return { name: `${MONTHS_PL[m]}`, Przychody: inc, Koszty: exp, Saldo: inc - exp };
     });
 
     return { income, expense, balance: income - expense, totalBalance, pendingActs, monthlyData };
-  }, [operations, accounts, acts]);
+  }, [operations, accounts, acts, cashflowPeriod]);
 
-  // Budget KPIs
+  // ==================== CASHFLOW ====================
+  const cashflowData = useMemo(() => {
+    const now = new Date();
+    const months = cashflowPeriod === '12m' ? 12 : 6;
+    const completedOps = operations.filter(o => o.status === 'completed');
+
+    const historical = Array.from({ length: months }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
+      const y = d.getFullYear(), m = d.getMonth();
+      const monthOps = completedOps.filter(op => {
+        const od = new Date(op.operation_date);
+        return od.getFullYear() === y && od.getMonth() === m;
+      });
+      const inc = monthOps.filter(o => o.operation_type === 'income').reduce((s, o) => s + o.amount, 0);
+      const exp = monthOps.filter(o => o.operation_type === 'expense').reduce((s, o) => s + o.amount, 0);
+      const paidOffers = offers.filter(of => {
+        if (of.status !== 'accepted') return false;
+        const od = of.accepted_at ? new Date(of.accepted_at) : null;
+        return od && od.getFullYear() === y && od.getMonth() === m;
+      }).reduce((s, of) => s + (of.final_amount || of.total_amount || 0), 0);
+      return { name: `${MONTHS_PL[m]}`, Przychody: inc, Koszty: exp, Oferty: paidOffers, Saldo: inc - exp, isForecast: false };
+    });
+
+    // Forecast next 3 months
+    const lastMonths = historical.slice(-3);
+    const avgInc = lastMonths.reduce((s, m) => s + m.Przychody, 0) / 3;
+    const avgExp = lastMonths.reduce((s, m) => s + m.Koszty, 0) / 3;
+    const pendingOffersTotal = offers.filter(of => ['sent', 'negotiation'].includes(of.status))
+      .reduce((s, of) => s + (of.final_amount || of.total_amount || 0), 0);
+    const pendingIncPerMonth = pendingOffersTotal / 3;
+
+    const forecast = Array.from({ length: 3 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() + 1 + i, 1);
+      const m = d.getMonth();
+      const forecastInc = avgInc + pendingIncPerMonth * (1 - i * 0.2);
+      const forecastExp = avgExp * (1 + i * 0.05);
+      return { name: `${MONTHS_PL[m]}*`, Przychody: Math.max(0, forecastInc), Koszty: Math.max(0, forecastExp), Oferty: 0, Saldo: forecastInc - forecastExp, isForecast: true };
+    });
+
+    const offersBreakdown = {
+      accepted: offers.filter(o => o.status === 'accepted'),
+      pending: offers.filter(o => ['sent', 'negotiation'].includes(o.status)),
+      draft: offers.filter(o => o.status === 'draft'),
+    };
+
+    return { historical, forecast, combined: [...historical, ...forecast], offersBreakdown };
+  }, [operations, offers, cashflowPeriod]);
+
+  // ==================== BUDGET KPIs ====================
   const budgetKPIs = useMemo(() => {
     const totalPlanned = budgetItems.reduce((s, c) => s + (c.planned_amount || 0), 0);
     const totalActual = budgetItems.reduce((s, c) => s + (c.actual_amount || 0), 0);
     const remaining = totalPlanned - totalActual;
     const pctSpent = totalPlanned > 0 ? totalActual / totalPlanned : 0;
-
-    // Overspend > 10% warning
     const overBudget = totalActual > totalPlanned && totalPlanned > 0;
     const overTenPct = totalPlanned > 0 && (totalActual - totalPlanned) / totalPlanned > 0.1;
     const warningThreshold = pctSpent > 0.8 && !overBudget && totalPlanned > 0;
 
-    const now = new Date();
-    const thisMonthOps = operations.filter(o => {
-      if (o.project_id !== budgetProject || o.operation_type !== 'expense' || o.status !== 'completed') return false;
-      const d = new Date(o.operation_date);
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    });
-    const thisMonthSpent = thisMonthOps.reduce((s, o) => s + o.amount, 0);
-
-    // Per-category >80% alerts
     const categoryAlerts = BUDGET_CATEGORIES.map(cat => {
       const catItems = budgetItems.filter(i => i.category === cat.code);
       const planned = catItems.reduce((s, i) => s + (i.planned_amount || 0), 0);
@@ -239,18 +332,17 @@ export const FinancePage: React.FC = () => {
       return { ...cat, planned, actual, pct, alert: planned > 0 && pct >= 0.8 && actual <= planned };
     }).filter(c => c.alert);
 
-    return { totalPlanned, totalActual, remaining, pctSpent, overBudget, overTenPct, warningThreshold, thisMonthSpent, categoryAlerts };
-  }, [budgetItems, operations, budgetProject]);
+    return { totalPlanned, totalActual, remaining, pctSpent, overBudget, overTenPct, warningThreshold, categoryAlerts };
+  }, [budgetItems]);
 
-  // Category aggregates for pie chart
   const categoryAggregates = useMemo(() => {
     return BUDGET_CATEGORIES.map(cat => {
       const items = budgetItems.filter(i => i.category === cat.code);
-      return {
-        ...cat,
-        planned: items.reduce((s, i) => s + (i.planned_amount || 0), 0),
-        actual: items.reduce((s, i) => s + (i.actual_amount || 0), 0),
-      };
+      const planned = items.reduce((s, i) => s + (i.planned_amount || 0), 0);
+      const actual = items.reduce((s, i) => s + (i.actual_amount || 0), 0);
+      const deviation = actual - planned;
+      const pct = planned > 0 ? actual / planned : 0;
+      return { ...cat, planned, actual, deviation, pct };
     });
   }, [budgetItems]);
 
@@ -272,123 +364,219 @@ export const FinancePage: React.FC = () => {
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(value);
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString('pl-PL');
+  const formatDate = (date: string) => new Date(date).toLocaleDateString('pl-PL');
 
-  // JPK Export
+  // ==================== AI ANALYSIS ====================
+  const handleAnalyzeAI = async () => {
+    setAiLoading(true);
+    setAiAnalysis('');
+    try {
+      const project = projects.find(p => p.id === (aiProject || budgetProject));
+      const catData = categoryAggregates.map(c => ({
+        category: c.label,
+        planned: c.planned, actual: c.actual, deviation: c.deviation,
+        pct: (c.pct * 100).toFixed(1) + '%',
+        benchmark: INDUSTRY_BENCHMARKS[c.code],
+      }));
+
+      const prompt = `Jesteś ekspertem analizy finansowej w budownictwie. Przeanalizuj budżet projektu i wskaż anomalie.
+
+PROJEKT: ${project?.name || 'Projekt budowlany'}
+BUDŻET: planowany ${budgetKPIs.totalPlanned} PLN, faktyczny ${budgetKPIs.totalActual} PLN
+
+ROZKŁAD KATEGORII:
+${catData.map(c => `- ${c.category}: plan ${c.planned} PLN, fakt ${c.actual} PLN, realizacja ${c.pct} (benchmark branżowy: ${c.benchmark?.min}-${c.benchmark?.max}% budżetu)`).join('\n')}
+
+POZYCJE BUDŻETOWE:
+${budgetItems.slice(0, 20).map(i => `- ${i.name} (${i.category}): plan ${i.planned_amount} PLN, fakt ${i.actual_amount} PLN`).join('\n')}
+
+OSTATNIE OPERACJE:
+${operations.slice(0, 10).map(o => `- ${o.description || 'Operacja'}: ${o.operation_type === 'expense' ? '-' : '+'}${o.amount} PLN`).join('\n')}
+
+Podaj:
+1. 🔍 ANOMALIE - co odbiega od normy branżowej
+2. ⚠️ RYZYKA - co zagraża budżetowi
+3. 📊 OCENA KONDYCJI FINANSOWEJ: X/10
+4. 💡 TOP 3 REKOMENDACJE
+
+Odpowiedź po polsku, zwięźle z emoji.`;
+
+      const geminiApiKey = 'AIzaSyC2eB-eTn0lxJc2-0iFLFkLxN9Wq5mXE_s';
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+          })
+        }
+      );
+      const data = await response.json();
+      setAiAnalysis(data.candidates?.[0]?.content?.parts?.[0]?.text || 'Brak odpowiedzi AI');
+    } catch (err) {
+      console.error('AI analysis error:', err);
+      setAiAnalysis('Błąd analizy AI. Sprawdź połączenie.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAISavings = async () => {
+    setAiSavingsLoading(true);
+    setAiSavings('');
+    try {
+      const project = projects.find(p => p.id === (aiProject || budgetProject));
+
+      const prompt = `Jesteś ekspertem optymalizacji kosztów w budownictwie.
+
+PROJEKT: ${project?.name || 'Projekt budowlany'}
+BUDŻET: ${formatCurrency(budgetKPIs.totalPlanned)} plan, ${formatCurrency(budgetKPIs.totalActual)} fakt
+
+KATEGORIE:
+${categoryAggregates.map(c => `- ${c.label}: ${formatCurrency(c.actual)} (${(c.pct * 100).toFixed(0)}% planu)`).join('\n')}
+
+WYDATKI:
+${operations.filter(o => o.operation_type === 'expense').slice(0, 15).map(o => `- ${o.description || 'Wydatek'}: ${formatCurrency(o.amount)}`).join('\n')}
+
+Odpowiedz konkretnie: "Gdzie można zaoszczędzić?"
+Podaj 5-7 propozycji z szacowanymi kwotami oszczędności.
+Format: 💰 [Propozycja] → oszczędność ~X PLN (Y%)
+
+Potem: ## Priorytetyzacja (3 działania od zaraz)
+
+Odpowiedź po polsku. Bardzo konkretnie.`;
+
+      const geminiApiKey = 'AIzaSyC2eB-eTn0lxJc2-0iFLFkLxN9Wq5mXE_s';
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 1200 }
+          })
+        }
+      );
+      const data = await response.json();
+      setAiSavings(data.candidates?.[0]?.content?.parts?.[0]?.text || 'Brak odpowiedzi AI');
+    } catch (err) {
+      console.error('AI savings error:', err);
+      setAiSavings('Błąd analizy AI.');
+    } finally {
+      setAiSavingsLoading(false);
+    }
+  };
+
+  // ==================== RECEIPT UPLOAD ====================
+  const handleReceiptUpload = async (file: File, operationId: string) => {
+    if (!currentUser || !file) return;
+    setUploadingReceipt(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `receipts/${currentUser.company_id}/${operationId}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('finance-receipts')
+        .upload(path, file, { contentType: file.type });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('finance-receipts').getPublicUrl(path);
+      const fileUrl = urlData.publicUrl;
+      await supabase.from('finance_receipts').insert({
+        company_id: currentUser.company_id,
+        operation_id: operationId,
+        file_name: file.name,
+        file_url: fileUrl,
+        file_size: file.size,
+        mime_type: file.type,
+        uploaded_by_id: currentUser.id,
+      });
+      setUploadedReceiptUrl(fileUrl);
+      await loadReceipts([operationId]);
+    } catch (err) {
+      // Fallback: data URL for preview
+      const reader = new FileReader();
+      reader.onload = (e) => setUploadedReceiptUrl(e.target?.result as string);
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
+  // ==================== JPK ====================
   const handleExportJPK = () => {
     const now = new Date();
     const periodStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
     const company = currentUser?.company_id || '';
-
     const jpkXml = `<?xml version="1.0" encoding="UTF-8"?>
-<JPK xmlns="http://jpk.mf.gov.pl/wzor/2022/02/17/02172/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2018/08/24/eD/DefinicjeTypy/">
+<JPK xmlns="http://jpk.mf.gov.pl/wzor/2022/02/17/02172/">
   <Naglowek>
     <KodFormularza kodSystemowy="JPK_V7M" wersjaSchemy="1-2">JPK_VAT</KodFormularza>
-    <WariantFormularza>2</WariantFormularza>
     <DataWytworzeniaJPK>${now.toISOString()}</DataWytworzeniaJPK>
     <NazwaSystemu>MaxMaster Portal</NazwaSystemu>
-    <CelZlozenia poz="P_7">1</CelZlozenia>
     <DataOd>${periodStart}</DataOd>
     <DataDo>${periodEnd}</DataDo>
-    <NazwaFirmy>MaxMaster</NazwaFirmy>
     <NIP>${company}</NIP>
   </Naglowek>
-  <Podmiot1>
-    <IdentyfikatorPodmiotu>
-      <NIP>${company}</NIP>
-    </IdentyfikatorPodmiotu>
-  </Podmiot1>
   <SprzedazWiersz>
-    ${acts
-      .filter(a => {
-        const d = new Date(a.act_date || a.date);
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-      })
-      .map((a, i) => `
+    ${acts.filter(a => {
+      const d = new Date(a.act_date || a.date);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).map((a, i) => `
     <LpSprzedazy>${i + 1}</LpSprzedazy>
-    <NrKontrahenta>${(a as any).contractor?.tax_id || ''}</NrKontrahenta>
     <NazwaKontrahenta>${(a as any).contractor?.name || ''}</NazwaKontrahenta>
     <DowodSprzedazy>${a.number}</DowodSprzedazy>
     <DataWystawienia>${a.act_date || a.date}</DataWystawienia>
     <K_19>${((a.total || 0) - (a.nds_amount || 0)).toFixed(2)}</K_19>
-    <K_20>${(a.nds_amount || 0).toFixed(2)}</K_20>`)
-      .join('\n')}
+    <K_20>${(a.nds_amount || 0).toFixed(2)}</K_20>`).join('\n')}
   </SprzedazWiersz>
-  <SprzedazCtrl>
-    <LiczbaWierszy>${acts.length}</LiczbaWierszy>
-    <PodatekNalezny>${acts.reduce((s, a) => s + (a.nds_amount || 0), 0).toFixed(2)}</PodatekNalezny>
-  </SprzedazCtrl>
 </JPK>`;
-
     const blob = new Blob([jpkXml], { type: 'application/xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `JPK_V7M_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}.xml`;
-    a.click();
-    URL.revokeObjectURL(url);
+    a.href = url; a.download = `JPK_V7M_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}.xml`;
+    a.click(); URL.revokeObjectURL(url);
   };
 
-  // Faktura from Act
   const handleCreateInvoiceFromAct = (act: FinanceAct) => {
-    const actName = act.name || `Akt nr ${act.number}`;
-    const contractor = (act as any).contractor;
-    const project = (act as any).project;
     setActForm({
-      project_id: act.project_id || '',
-      contractor_id: act.contractor_id || '',
-      number: `FV/${act.number}`,
-      name: `Faktura za: ${actName}`,
+      project_id: act.project_id || '', contractor_id: act.contractor_id || '',
+      number: `FV/${act.number}`, name: `Faktura za: ${act.name || `Akt nr ${act.number}`}`,
       act_date: new Date().toISOString().split('T')[0],
       period_start: act.period_start?.split('T')[0] || '',
       period_end: act.period_end?.split('T')[0] || '',
-      total: act.total || act.amount || 0,
-      nds_amount: act.nds_amount || 0,
-      payment_status: 'pending'
+      total: act.total || act.amount || 0, nds_amount: act.nds_amount || 0, payment_status: 'pending'
     });
-    setEditingAct(null);
-    setShowActModal(true);
+    setEditingAct(null); setShowActModal(true);
   };
 
-  // Add budget item
+  // ==================== BUDGET CRUD ====================
   const handleAddBudgetItem = async () => {
     if (!currentUser || !budgetProject || !budgetItemForm.name) return;
     setSavingBudget(true);
     try {
-      const { data, error } = await supabase
-        .from('budget_items')
-        .insert({
-          project_id: budgetProject,
-          company_id: currentUser.company_id,
-          category: budgetItemForm.category,
-          name: budgetItemForm.name,
-          planned_amount: budgetItemForm.planned_amount,
-          actual_amount: budgetItemForm.actual_amount,
-        })
-        .select()
-        .single();
-      if (!error && data) {
-        setBudgetItems(prev => [...prev, data]);
-      }
+      const { data, error } = await supabase.from('budget_items').insert({
+        project_id: budgetProject, company_id: currentUser.company_id,
+        category: budgetItemForm.category, name: budgetItemForm.name,
+        planned_amount: budgetItemForm.planned_amount, actual_amount: budgetItemForm.actual_amount,
+        notes: budgetItemForm.notes || null,
+      }).select().single();
+      if (!error && data) setBudgetItems(prev => [...prev, data]);
       setShowAddBudgetItemModal(false);
-      setBudgetItemForm({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0 });
-    } catch (err) {
-      console.error('Error adding budget item:', err);
-    } finally {
-      setSavingBudget(false);
-    }
+      setBudgetItemForm({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0, notes: '' });
+    } catch (err) { console.error('Error adding budget item:', err); }
+    finally { setSavingBudget(false); }
   };
 
-  // Delete budget item
   const handleDeleteBudgetItem = async (id: string) => {
     if (!confirm('Usunąć pozycję budżetową?')) return;
     await supabase.from('budget_items').delete().eq('id', id);
     setBudgetItems(prev => prev.filter(i => i.id !== id));
   };
 
-  // Operation CRUD
+  // ==================== OPERATION CRUD ====================
   const handleSaveOperation = async () => {
     if (!currentUser || !operationForm.amount) return;
     setSaving(true);
@@ -399,8 +587,7 @@ export const FinancePage: React.FC = () => {
         account_id: operationForm.account_id || null,
         contractor_id: operationForm.contractor_id || null,
         operation_type: operationForm.operation_type,
-        amount: operationForm.amount,
-        description: operationForm.description,
+        amount: operationForm.amount, description: operationForm.description,
         operation_date: operationForm.operation_date,
         document_number: operationForm.document_number || null,
         status: 'completed' as FinanceOperationStatus,
@@ -411,15 +598,10 @@ export const FinancePage: React.FC = () => {
       } else {
         await supabase.from('finance_operations').insert(data);
       }
-      setShowOperationModal(false);
-      setEditingOperation(null);
-      resetOperationForm();
-      await loadData();
-    } catch (err) {
-      console.error('Error saving operation:', err);
-    } finally {
-      setSaving(false);
-    }
+      setShowOperationModal(false); setEditingOperation(null); setUploadedReceiptUrl('');
+      resetOperationForm(); await loadData();
+    } catch (err) { console.error('Error saving operation:', err); }
+    finally { setSaving(false); }
   };
 
   const handleDeleteOperation = async (op: FinanceOperation) => {
@@ -430,43 +612,28 @@ export const FinancePage: React.FC = () => {
 
   const resetOperationForm = () => setOperationForm({
     project_id: '', account_id: '', contractor_id: '', operation_type: 'expense',
-    amount: 0, description: '', operation_date: new Date().toISOString().split('T')[0], document_number: ''
+    amount: 0, description: '', operation_date: new Date().toISOString().split('T')[0],
+    document_number: '', budget_category: '',
   });
 
-  // Act CRUD
+  // ==================== ACT CRUD ====================
   const handleSaveAct = async () => {
     if (!currentUser || !actForm.number || !actForm.total) return;
     setSaving(true);
     try {
       const data = {
-        company_id: currentUser.company_id,
-        project_id: actForm.project_id || null,
-        contractor_id: actForm.contractor_id || null,
-        number: actForm.number,
-        name: actForm.name,
-        act_date: actForm.act_date,
-        period_start: actForm.period_start || null,
-        period_end: actForm.period_end || null,
-        total: actForm.total,
-        nds_amount: actForm.nds_amount,
-        payment_status: actForm.payment_status,
-        status: 'draft' as ActStatus,
+        company_id: currentUser.company_id, project_id: actForm.project_id || null,
+        contractor_id: actForm.contractor_id || null, number: actForm.number, name: actForm.name,
+        act_date: actForm.act_date, period_start: actForm.period_start || null,
+        period_end: actForm.period_end || null, total: actForm.total, nds_amount: actForm.nds_amount,
+        payment_status: actForm.payment_status, status: 'draft' as ActStatus,
         created_by_id: currentUser.id
       };
-      if (editingAct) {
-        await supabase.from('finance_acts').update(data).eq('id', editingAct.id);
-      } else {
-        await supabase.from('finance_acts').insert(data);
-      }
-      setShowActModal(false);
-      setEditingAct(null);
-      resetActForm();
-      await loadData();
-    } catch (err) {
-      console.error('Error saving act:', err);
-    } finally {
-      setSaving(false);
-    }
+      if (editingAct) await supabase.from('finance_acts').update(data).eq('id', editingAct.id);
+      else await supabase.from('finance_acts').insert(data);
+      setShowActModal(false); setEditingAct(null); resetActForm(); await loadData();
+    } catch (err) { console.error('Error saving act:', err); }
+    finally { setSaving(false); }
   };
 
   const handleDeleteAct = async (act: FinanceAct) => {
@@ -477,293 +644,214 @@ export const FinancePage: React.FC = () => {
 
   const resetActForm = () => setActForm({
     project_id: '', contractor_id: '', number: '', name: '',
-    act_date: new Date().toISOString().split('T')[0],
-    period_start: '', period_end: '', total: 0, nds_amount: 0, payment_status: 'pending'
+    act_date: new Date().toISOString().split('T')[0], period_start: '', period_end: '',
+    total: 0, nds_amount: 0, payment_status: 'pending'
   });
 
-  // Account CRUD
+  // ==================== ACCOUNT CRUD ====================
   const handleSaveAccount = async () => {
     if (!currentUser || !accountForm.name) return;
     setSaving(true);
     try {
       const data = {
-        company_id: currentUser.company_id,
-        name: accountForm.name,
-        account_type: accountForm.account_type,
-        bank_name: accountForm.bank_name || null,
-        account_number: accountForm.account_number || null,
-        current_balance: accountForm.current_balance
+        company_id: currentUser.company_id, name: accountForm.name,
+        account_type: accountForm.account_type, bank_name: accountForm.bank_name || null,
+        account_number: accountForm.account_number || null, current_balance: accountForm.current_balance
       };
-      if (editingAccount) {
-        await supabase.from('finance_accounts').update(data).eq('id', editingAccount.id);
-      } else {
-        await supabase.from('finance_accounts').insert({ ...data, is_active: true });
-      }
-      setShowAccountModal(false);
-      setEditingAccount(null);
-      resetAccountForm();
-      await loadData();
-    } catch (err) {
-      console.error('Error saving account:', err);
-    } finally {
-      setSaving(false);
-    }
+      if (editingAccount) await supabase.from('finance_accounts').update(data).eq('id', editingAccount.id);
+      else await supabase.from('finance_accounts').insert({ ...data, is_active: true });
+      setShowAccountModal(false); setEditingAccount(null); resetAccountForm(); await loadData();
+    } catch (err) { console.error('Error saving account:', err); }
+    finally { setSaving(false); }
   };
 
   const resetAccountForm = () => setAccountForm({
     name: '', account_type: 'bank', bank_name: '', account_number: '', current_balance: 0
   });
 
-  // ===== EXPORT FUNCTIONS =====
+  // ==================== EXPORTS ====================
   const handleExportPDF = () => {
     const doc = new jsPDF();
     const now = new Date();
-    const projectName = projects.find(p => p.id === (projectFilter !== 'all' ? projectFilter : ''))?.name || 'Wszystkie projekty';
-    
-    doc.setFontSize(18);
-    doc.setTextColor(30, 58, 138);
+    doc.setFontSize(18); doc.setTextColor(30, 58, 138);
     doc.text('Raport Finansowy', 14, 20);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
+    doc.setFontSize(11); doc.setTextColor(100);
     doc.text(`MaxMaster Portal | ${now.toLocaleDateString('pl-PL')}`, 14, 28);
-    doc.text(`Projekt: ${projectName}`, 14, 35);
-
-    // Summary table
-    doc.setFontSize(13);
-    doc.setTextColor(30);
-    doc.text('Podsumowanie', 14, 46);
     autoTable(doc, {
-      startY: 50,
+      startY: 38,
       head: [['Wskaźnik', 'Wartość']],
       body: [
-        ['Przychody łącznie', formatCurrency(stats.income)],
-        ['Koszty łącznie', formatCurrency(stats.expense)],
-        ['Marża (Bilans)', formatCurrency(stats.balance)],
+        ['Przychody', formatCurrency(stats.income)],
+        ['Koszty', formatCurrency(stats.expense)],
+        ['Bilans', formatCurrency(stats.balance)],
         ['Marża %', stats.income > 0 ? `${((stats.balance / stats.income) * 100).toFixed(1)}%` : '0%'],
         ['Saldo kont', formatCurrency(stats.totalBalance)],
         ['Należności', formatCurrency(stats.pendingActs)],
       ],
-      styles: { fontSize: 10 },
       headStyles: { fillColor: [30, 58, 138] },
     });
-
-    // Operations table
-    const ops = projectFilter !== 'all' 
-      ? filteredOperations 
-      : operations.filter(o => o.status === 'completed');
+    const ops = filteredOperations.filter(o => o.status === 'completed');
     if (ops.length > 0) {
-      const prevY = (doc as any).lastAutoTable?.finalY || 120;
-      doc.setFontSize(13);
-      doc.setTextColor(30);
-      doc.text('Operacje finansowe', 14, prevY + 12);
+      const prevY = (doc as any).lastAutoTable?.finalY || 110;
+      doc.setFontSize(13); doc.text('Operacje finansowe', 14, prevY + 12);
       autoTable(doc, {
         startY: prevY + 16,
         head: [['Data', 'Opis', 'Typ', 'Kwota']],
         body: ops.slice(0, 50).map(op => [
-          formatDate(op.operation_date),
-          op.description || '-',
+          formatDate(op.operation_date), op.description || '-',
           op.operation_type === 'income' ? 'Przychód' : 'Wydatek',
           `${op.operation_type === 'income' ? '+' : '-'}${formatCurrency(op.amount)}`,
         ]),
-        styles: { fontSize: 9 },
-        headStyles: { fillColor: [30, 58, 138] },
-        columnStyles: { 3: { halign: 'right' } },
+        styles: { fontSize: 9 }, headStyles: { fillColor: [30, 58, 138] },
       });
     }
-
+    if (budgetItems.length > 0) {
+      const prevY2 = (doc as any).lastAutoTable?.finalY || 170;
+      if (prevY2 < 250) {
+        doc.setFontSize(13); doc.text('Budżet projektu', 14, prevY2 + 12);
+        autoTable(doc, {
+          startY: prevY2 + 16,
+          head: [['Kategoria', 'Pozycja', 'Plan PLN', 'Fakt PLN', 'Odchylenie']],
+          body: budgetItems.map(i => {
+            const dev = (i.actual_amount || 0) - (i.planned_amount || 0);
+            return [
+              BUDGET_CATEGORIES.find(c => c.code === i.category)?.label || i.category,
+              i.name, formatCurrency(i.planned_amount), formatCurrency(i.actual_amount),
+              `${dev >= 0 ? '+' : ''}${formatCurrency(dev)}`,
+            ];
+          }),
+          styles: { fontSize: 9 }, headStyles: { fillColor: [30, 58, 138] },
+        });
+      }
+    }
     doc.save(`Raport_Finansowy_${now.toISOString().split('T')[0]}.pdf`);
   };
 
   const handleExportXLSX = () => {
     const now = new Date();
     const wb = XLSX.utils.book_new();
-
-    // Summary sheet
-    const summaryData = [
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Raport Finansowy MaxMaster', ''],
       ['Data:', now.toLocaleDateString('pl-PL')],
       [''],
       ['Wskaźnik', 'Wartość PLN'],
-      ['Przychody łącznie', stats.income],
-      ['Koszty łącznie', stats.expense],
-      ['Marża (Bilans)', stats.balance],
+      ['Przychody', stats.income], ['Koszty', stats.expense], ['Bilans', stats.balance],
       ['Marża %', stats.income > 0 ? (stats.balance / stats.income) * 100 : 0],
-      ['Saldo kont', stats.totalBalance],
-      ['Należności', stats.pendingActs],
-    ];
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Podsumowanie');
-
-    // Operations sheet
-    const opsData = [
+      ['Saldo kont', stats.totalBalance], ['Należności', stats.pendingActs],
+    ]), 'Podsumowanie');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Data', 'Opis', 'Typ', 'Projekt', 'Kwota PLN', 'Nr dokumentu'],
       ...filteredOperations.map(op => [
-        formatDate(op.operation_date),
-        op.description || '',
+        formatDate(op.operation_date), op.description || '',
         op.operation_type === 'income' ? 'Przychód' : 'Wydatek',
         (op as any).project?.name || '',
         op.operation_type === 'income' ? op.amount : -op.amount,
         op.document_number || '',
       ])
-    ];
-    const wsOps = XLSX.utils.aoa_to_sheet(opsData);
-    XLSX.utils.book_append_sheet(wb, wsOps, 'Operacje');
-
-    // Acts sheet
-    const actsData = [
+    ]), 'Operacje');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ['Nr', 'Nazwa', 'Data', 'Projekt', 'Kontrahent', 'Suma PLN', 'VAT PLN', 'Status'],
       ...filteredActs.map(act => [
-        act.number,
-        act.name || '',
-        formatDate(act.act_date || act.date),
-        (act as any).project?.name || '',
-        (act as any).contractor?.name || '',
-        act.total || act.amount || 0,
-        act.nds_amount || 0,
-        act.payment_status,
+        act.number, act.name || '', formatDate(act.act_date || act.date),
+        (act as any).project?.name || '', (act as any).contractor?.name || '',
+        act.total || act.amount || 0, act.nds_amount || 0, act.payment_status,
       ])
-    ];
-    const wsActs = XLSX.utils.aoa_to_sheet(actsData);
-    XLSX.utils.book_append_sheet(wb, wsActs, 'Akty');
-
+    ]), 'Akty');
+    if (budgetItems.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['Projekt:', projects.find(p => p.id === budgetProject)?.name || ''],
+        [''],
+        ['Kategoria', 'Pozycja', 'Planowane PLN', 'Faktyczne PLN', 'Odchylenie PLN', 'Odchylenie %'],
+        ...budgetItems.map(i => {
+          const dev = (i.actual_amount || 0) - (i.planned_amount || 0);
+          const pct = i.planned_amount > 0 ? (dev / i.planned_amount * 100).toFixed(1) + '%' : '0%';
+          return [BUDGET_CATEGORIES.find(c => c.code === i.category)?.label || i.category, i.name, i.planned_amount, i.actual_amount, dev, pct];
+        }),
+        ['', 'ŁĄCZNIE', budgetKPIs.totalPlanned, budgetKPIs.totalActual, budgetKPIs.totalActual - budgetKPIs.totalPlanned, ''],
+      ]), 'Budżet');
+    }
+    // Cashflow sheet
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Miesiąc', 'Przychody PLN', 'Koszty PLN', 'Saldo PLN', 'Prognoza'],
+      ...cashflowData.combined.map(m => [m.name, m.Przychody, m.Koszty, m.Saldo, m.isForecast ? 'TAK' : 'NIE']),
+    ]), 'Cashflow');
     XLSX.writeFile(wb, `Raport_Finansowy_${now.toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleGenerateActPDF = (act: FinanceAct) => {
     const doc = new jsPDF();
     const contractor = (act as any).contractor;
-    const project = (act as any).project;
-    const now = new Date();
     const actDate = new Date(act.act_date || act.date);
     const netAmount = (act.total || 0) - (act.nds_amount || 0);
-
-    doc.setFontSize(20);
-    doc.setTextColor(30, 58, 138);
+    doc.setFontSize(20); doc.setTextColor(30, 58, 138);
     doc.text('FAKTURA VAT', 105, 25, { align: 'center' });
-    doc.setFontSize(12);
-    doc.setTextColor(60);
+    doc.setFontSize(12); doc.setTextColor(60);
     doc.text(`Nr: ${act.number}`, 105, 33, { align: 'center' });
-
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Data wystawienia: ${actDate.toLocaleDateString('pl-PL')}`, 14, 45);
-    if (act.period_start && act.period_end) {
-      doc.text(`Okres: ${new Date(act.period_start).toLocaleDateString('pl-PL')} – ${new Date(act.period_end).toLocaleDateString('pl-PL')}`, 14, 52);
-    }
-
-    doc.setFontSize(11);
-    doc.setTextColor(30);
-    doc.text('Sprzedawca:', 14, 65);
-    doc.setFontSize(10);
-    doc.setTextColor(60);
-    doc.text('MaxMaster', 14, 72);
-
-    doc.setFontSize(11);
-    doc.setTextColor(30);
+    doc.setFontSize(10); doc.setTextColor(100);
+    doc.text(`Data: ${actDate.toLocaleDateString('pl-PL')}`, 14, 45);
+    doc.setFontSize(11); doc.setTextColor(30);
     doc.text('Nabywca:', 120, 65);
-    doc.setFontSize(10);
-    doc.setTextColor(60);
+    doc.setFontSize(10); doc.setTextColor(60);
     doc.text(contractor?.name || '—', 120, 72);
     if (contractor?.tax_id) doc.text(`NIP: ${contractor.tax_id}`, 120, 79);
-    if (contractor?.address) doc.text(contractor.address, 120, 86);
-
-    if (project?.name) {
-      doc.setFontSize(11);
-      doc.setTextColor(30);
-      doc.text(`Projekt: ${project.name}`, 14, 98);
-    }
-
     autoTable(doc, {
-      startY: 105,
-      head: [['Lp.', 'Nazwa usługi/towaru', 'Netto PLN', 'VAT PLN', 'Brutto PLN']],
-      body: [
-        ['1', act.name || `Usługi budowlane – ${act.number}`,
-         formatCurrency(netAmount), formatCurrency(act.nds_amount || 0), formatCurrency(act.total || 0)],
-      ],
+      startY: 95,
+      head: [['Lp.', 'Nazwa', 'Netto PLN', 'VAT PLN', 'Brutto PLN']],
+      body: [['1', act.name || `Usługi – ${act.number}`, formatCurrency(netAmount), formatCurrency(act.nds_amount || 0), formatCurrency(act.total || 0)]],
       foot: [['', 'RAZEM:', formatCurrency(netAmount), formatCurrency(act.nds_amount || 0), formatCurrency(act.total || 0)]],
-      styles: { fontSize: 10 },
       headStyles: { fillColor: [30, 58, 138] },
-      footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249] },
     });
-
-    const finalY = (doc as any).lastAutoTable?.finalY || 150;
-    doc.setFontSize(11);
-    doc.setTextColor(30);
-    doc.text(`Do zapłaty: ${formatCurrency(act.total || 0)}`, 14, finalY + 15);
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text(`Status: ${act.payment_status === 'paid' ? 'Zapłacono' : act.payment_status === 'partial' ? 'Częściowo zapłacono' : 'Oczekuje na płatność'}`, 14, finalY + 23);
-
-    doc.save(`Faktura_${act.number.replace(/[\/]/g, '_')}.pdf`);
+    doc.save(`Faktura_${act.number.replace(/\//g, '_')}.pdf`);
   };
 
-  const tabs: { key: TabType; label: string; icon: React.ElementType }[] = [
+  const tabs: { key: TabType; label: string; icon: React.ElementType; badge?: string }[] = [
     { key: 'operations', label: 'Operacje', icon: DollarSign },
     { key: 'acts', label: 'Akty', icon: FileText },
     { key: 'accounts', label: 'Konta', icon: Wallet },
-    { key: 'budget', label: 'Budżet', icon: PieChart }
+    { key: 'budget', label: 'Budżet', icon: PieChart },
+    { key: 'cashflow', label: 'Cashflow', icon: Activity },
+    { key: 'ai', label: 'AI Analiza', icon: Brain, badge: 'AI' },
   ];
 
-  const budgetPieData = categoryAggregates
-    .filter(c => c.planned > 0)
+  const budgetPieData = categoryAggregates.filter(c => c.planned > 0)
     .map(c => ({ name: c.label, value: c.planned, color: c.color }));
-
-  const budgetBarData = categoryAggregates.map(cat => ({
-    name: cat.label,
-    Plan: cat.planned,
-    Faktura: cat.actual,
-  }));
+  const budgetBarData = categoryAggregates.map(cat => ({ name: cat.label, Plan: cat.planned, Fakt: cat.actual }));
 
   return (
     <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="mb-6 flex flex-wrap justify-between items-center gap-2">
-        <div></div>
-        <div className="flex gap-2">
+        <div />
+        <div className="flex flex-wrap gap-2">
           {activeTab === 'acts' && (
-            <button
-              onClick={handleExportJPK}
-              className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 min-h-[44px] text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Eksport JPK
+            <button onClick={handleExportJPK}
+              className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 min-h-[44px] text-sm">
+              <Download className="w-4 h-4" /> Eksport JPK
             </button>
           )}
-          <button
-            onClick={handleExportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-          >
-            <Download className="w-4 h-4" />
-            Raport PDF
+          <button onClick={handleExportPDF}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+            <Download className="w-4 h-4" /> Raport PDF
           </button>
-          <button
-            onClick={handleExportXLSX}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            <Download className="w-4 h-4" />
-            Raport XLSX
+          <button onClick={handleExportXLSX}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+            <Download className="w-4 h-4" /> Raport XLSX
           </button>
           {activeTab === 'operations' && (
-            <button
-              onClick={() => { resetOperationForm(); setEditingOperation(null); setShowOperationModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
+            <button onClick={() => { resetOperationForm(); setEditingOperation(null); setShowOperationModal(true); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               <Plus className="w-5 h-5" /> Nowa operacja
             </button>
           )}
           {activeTab === 'acts' && (
-            <button
-              onClick={() => { resetActForm(); setEditingAct(null); setShowActModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
+            <button onClick={() => { resetActForm(); setEditingAct(null); setShowActModal(true); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               <Plus className="w-5 h-5" /> Nowy akt
             </button>
           )}
           {activeTab === 'accounts' && (
-            <button
-              onClick={() => { resetAccountForm(); setEditingAccount(null); setShowAccountModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
+            <button onClick={() => { resetAccountForm(); setEditingAccount(null); setShowAccountModal(true); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               <Plus className="w-5 h-5" /> Nowe konto
             </button>
           )}
@@ -779,7 +867,7 @@ export const FinancePage: React.FC = () => {
           { label: 'Na kontach', value: stats.totalBalance, icon: Wallet, color: 'text-purple-600', bg: 'bg-purple-50' },
           { label: 'Należności', value: stats.pendingActs, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-white p-4 rounded-xl border border-slate-200">
+          <div key={label} className={`${bg} p-4 rounded-xl border border-slate-200`}>
             <div className={`flex items-center gap-2 ${color} mb-2`}>
               <Icon className="w-5 h-5" />
               <span className="text-sm font-medium">{label}</span>
@@ -792,7 +880,7 @@ export const FinancePage: React.FC = () => {
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="border-b border-slate-200">
-          <nav className="flex -mb-px overflow-x-auto scrollbar-hide">
+          <nav className="flex -mb-px overflow-x-auto">
             {tabs.map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm whitespace-nowrap min-h-[44px] ${
@@ -800,6 +888,7 @@ export const FinancePage: React.FC = () => {
                 }`}>
                 <tab.icon className="w-4 h-4" />
                 {tab.label}
+                {tab.badge && <span className="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-600 text-xs rounded-full">{tab.badge}</span>}
               </button>
             ))}
           </nav>
@@ -807,10 +896,9 @@ export const FinancePage: React.FC = () => {
 
         {(activeTab === 'operations' || activeTab === 'acts') && (
           <div className="p-4 border-b border-slate-200 flex flex-wrap gap-4">
-            <div className="flex-1 min-w-64 relative">
+            <div className="flex-1 min-w-48 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input type="text" placeholder="Szukaj..." value={search}
-                onChange={e => setSearch(e.target.value)}
+              <input type="text" placeholder="Szukaj..." value={search} onChange={e => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg" />
             </div>
             <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
@@ -840,53 +928,56 @@ export const FinancePage: React.FC = () => {
                 <DollarSign className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500 mb-4">Brak operacji finansowych</p>
                 <button onClick={() => { resetOperationForm(); setShowOperationModal(true); }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                  Dodaj pierwszą operację
-                </button>
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Dodaj pierwszą operację</button>
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredOperations.map(op => (
-                  <div key={op.id}
-                    className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer group">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      op.operation_type === 'income' ? 'bg-green-100' : 'bg-red-100'
-                    }`}>
-                      {op.operation_type === 'income' ? <ArrowUpRight className="w-5 h-5 text-green-600" /> : <ArrowDownRight className="w-5 h-5 text-red-600" />}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{op.description || 'Operacja finansowa'}</p>
-                      <p className="text-sm text-slate-500">
-                        {formatDate(op.operation_date)} • {(op as any).project?.name || 'Bez projektu'}
-                        {op.document_number && ` • ${op.document_number}`}
+                {filteredOperations.map(op => {
+                  const opReceipts = receipts[op.id] || [];
+                  return (
+                    <div key={op.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 group">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${op.operation_type === 'income' ? 'bg-green-100' : 'bg-red-100'}`}>
+                        {op.operation_type === 'income' ? <ArrowUpRight className="w-5 h-5 text-green-600" /> : <ArrowDownRight className="w-5 h-5 text-red-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-slate-900 truncate">{op.description || 'Operacja finansowa'}</p>
+                          {opReceipts.length > 0 && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 text-xs rounded flex-shrink-0">
+                              <Receipt className="w-3 h-3" /> {opReceipts.length}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-500 truncate">
+                          {formatDate(op.operation_date)} • {(op as any).project?.name || 'Bez projektu'}
+                          {op.document_number && ` • ${op.document_number}`}
+                        </p>
+                      </div>
+                      <p className={`text-lg font-semibold flex-shrink-0 ${op.operation_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                        {op.operation_type === 'income' ? '+' : '-'}{formatCurrency(op.amount)}
                       </p>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 flex-shrink-0">
+                        <button onClick={e => {
+                          e.stopPropagation();
+                          setUploadedReceiptUrl('');
+                          setEditingOperation(op);
+                          setOperationForm({
+                            project_id: op.project_id || '', account_id: op.account_id || '',
+                            contractor_id: op.contractor_id || '',
+                            operation_type: op.operation_type as FinanceOperationType,
+                            amount: op.amount, description: op.description || '',
+                            operation_date: op.operation_date?.split('T')[0] || '',
+                            document_number: op.document_number || '',
+                            budget_category: (op as any).budget_category || '',
+                          });
+                          setShowOperationModal(true);
+                        }} className="p-1.5 hover:bg-slate-200 rounded"><Pencil className="w-4 h-4 text-slate-400" /></button>
+                        <button onClick={e => { e.stopPropagation(); handleDeleteOperation(op); }}
+                          className="p-1.5 hover:bg-red-100 rounded"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                      </div>
                     </div>
-                    <p className={`text-lg font-semibold ${op.operation_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {op.operation_type === 'income' ? '+' : '-'}{formatCurrency(op.amount)}
-                    </p>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                      <button onClick={e => {
-                        e.stopPropagation();
-                        setEditingOperation(op);
-                        setOperationForm({
-                          project_id: op.project_id || '', account_id: op.account_id || '',
-                          contractor_id: op.contractor_id || '',
-                          operation_type: op.operation_type as FinanceOperationType,
-                          amount: op.amount, description: op.description || '',
-                          operation_date: op.operation_date?.split('T')[0] || '',
-                          document_number: op.document_number || ''
-                        });
-                        setShowOperationModal(true);
-                      }} className="p-1 hover:bg-slate-200 rounded">
-                        <Pencil className="w-4 h-4 text-slate-400" />
-                      </button>
-                      <button onClick={e => { e.stopPropagation(); handleDeleteOperation(op); }}
-                        className="p-1 hover:bg-red-100 rounded">
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           ) : activeTab === 'acts' ? (
@@ -895,44 +986,34 @@ export const FinancePage: React.FC = () => {
                 <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500 mb-4">Brak aktów wykonawczych</p>
                 <button onClick={() => { resetActForm(); setShowActModal(true); }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                  Dodaj pierwszy akt
-                </button>
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Dodaj pierwszy akt</button>
               </div>
             ) : (
               <div className="space-y-2">
                 {filteredActs.map(act => (
-                  <div key={act.id}
-                    className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer group">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <div key={act.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 group">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Receipt className="w-5 h-5 text-blue-600" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900">Akt nr {act.number}</p>
-                      <p className="text-sm text-slate-500">
+                      <p className="text-sm text-slate-500 truncate">
                         {formatDate(act.act_date || act.date)} • {(act as any).project?.name}
                         {(act as any).contractor?.name && ` • ${(act as any).contractor?.name}`}
                       </p>
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${ACT_STATUS_COLORS[act.status as ActStatus] || 'bg-slate-100 text-slate-700'}`}>
-                      {ACT_STATUS_LABELS[act.status as ActStatus] || act.status}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
+                      act.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                      act.payment_status === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {act.payment_status === 'paid' ? '✓ Opłacony' : act.payment_status === 'partial' ? '~ Częściowo' : '⏳ Oczekuje'}
                     </span>
-                    <p className="text-lg font-semibold text-slate-900">{formatCurrency(act.total || act.amount || 0)}</p>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                      <button
-                        onClick={e => { e.stopPropagation(); handleCreateInvoiceFromAct(act); }}
-                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                        title="Wystaw fakturę"
-                      >
-                        Wystaw fakturę
-                      </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleGenerateActPDF(act); }}
-                        className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-                        title="Pobierz PDF"
-                      >
-                        PDF
-                      </button>
+                    <p className="text-lg font-semibold text-slate-900 flex-shrink-0">{formatCurrency(act.total || act.amount || 0)}</p>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 flex-shrink-0">
+                      <button onClick={e => { e.stopPropagation(); handleCreateInvoiceFromAct(act); }}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Faktura</button>
+                      <button onClick={e => { e.stopPropagation(); handleGenerateActPDF(act); }}
+                        className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200">PDF</button>
                       <button onClick={e => {
                         e.stopPropagation(); setEditingAct(act);
                         setActForm({
@@ -945,13 +1026,9 @@ export const FinancePage: React.FC = () => {
                           payment_status: (act.payment_status || 'pending') as any
                         });
                         setShowActModal(true);
-                      }} className="p-1 hover:bg-slate-200 rounded">
-                        <Pencil className="w-4 h-4 text-slate-400" />
-                      </button>
+                      }} className="p-1 hover:bg-slate-200 rounded"><Pencil className="w-4 h-4 text-slate-400" /></button>
                       <button onClick={e => { e.stopPropagation(); handleDeleteAct(act); }}
-                        className="p-1 hover:bg-red-100 rounded">
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
+                        className="p-1 hover:bg-red-100 rounded"><Trash2 className="w-4 h-4 text-red-400" /></button>
                     </div>
                   </div>
                 ))}
@@ -963,19 +1040,14 @@ export const FinancePage: React.FC = () => {
                 <Wallet className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500 mb-4">Brak kont finansowych</p>
                 <button onClick={() => { resetAccountForm(); setShowAccountModal(true); }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                  Dodaj pierwsze konto
-                </button>
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Dodaj pierwsze konto</button>
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {accounts.map(account => (
                   <div key={account.id} className="p-4 bg-slate-50 rounded-lg group">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        account.account_type === 'bank' ? 'bg-blue-100' :
-                        account.account_type === 'cash' ? 'bg-green-100' : 'bg-purple-100'
-                      }`}>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${account.account_type === 'bank' ? 'bg-blue-100' : account.account_type === 'cash' ? 'bg-green-100' : 'bg-purple-100'}`}>
                         {account.account_type === 'bank' ? <Building2 className="w-5 h-5 text-blue-600" /> :
                          account.account_type === 'cash' ? <DollarSign className="w-5 h-5 text-green-600" /> :
                          <CreditCard className="w-5 h-5 text-purple-600" />}
@@ -989,23 +1061,22 @@ export const FinancePage: React.FC = () => {
                         setAccountForm({
                           name: account.name, account_type: (account.account_type || 'bank') as any,
                           bank_name: account.bank_name || '', account_number: account.account_number || '',
-                          current_balance: account.current_balance
+                          current_balance: (account.current_balance || (account as any).balance || 0),
                         });
                         setShowAccountModal(true);
                       }} className="p-1 hover:bg-slate-200 rounded opacity-0 group-hover:opacity-100">
                         <Pencil className="w-4 h-4 text-slate-400" />
                       </button>
                     </div>
-                    <p className="text-2xl font-bold text-slate-900">{formatCurrency(account.current_balance)}</p>
+                    <p className="text-2xl font-bold text-slate-900">{formatCurrency(account.current_balance || (account as any).balance || 0)}</p>
                     {account.account_number && <p className="text-xs text-slate-400 mt-1">{account.account_number}</p>}
                   </div>
                 ))}
               </div>
             )
-          ) : (
-            /* ========== BUDGET TAB ========== */
+          ) : activeTab === 'budget' ? (
+            /* ======= BUDGET TAB ======= */
             <div className="space-y-6">
-              {/* Budget Controls */}
               <div className="flex flex-wrap gap-4 items-center">
                 <select value={budgetProject} onChange={e => setBudgetProject(e.target.value)}
                   className="px-3 py-2 border border-slate-200 rounded-lg font-medium">
@@ -1025,14 +1096,13 @@ export const FinancePage: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  {/* Alerts */}
                   {budgetKPIs.overTenPct && (
                     <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
                       <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                       <div>
                         <p className="font-semibold text-red-800">🚨 Budżet przekroczony o ponad 10%!</p>
                         <p className="text-sm text-red-700">
-                          Faktyczne: {formatCurrency(budgetKPIs.totalActual)} z planowanych {formatCurrency(budgetKPIs.totalPlanned)}.
+                          Faktyczne: {formatCurrency(budgetKPIs.totalActual)} z {formatCurrency(budgetKPIs.totalPlanned)}.
                           Przekroczenie: {formatCurrency(budgetKPIs.totalActual - budgetKPIs.totalPlanned)} ({((budgetKPIs.pctSpent - 1) * 100).toFixed(1)}%)
                         </p>
                       </div>
@@ -1041,199 +1111,467 @@ export const FinancePage: React.FC = () => {
                   {budgetKPIs.overBudget && !budgetKPIs.overTenPct && (
                     <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl">
                       <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-orange-800">⚠️ Budżet nieznacznie przekroczony</p>
-                        <p className="text-sm text-orange-700">
-                          Faktyczne: {formatCurrency(budgetKPIs.totalActual)} z {formatCurrency(budgetKPIs.totalPlanned)}.
-                        </p>
-                      </div>
+                      <p className="font-semibold text-orange-800">⚠️ Budżet nieznacznie przekroczony: {formatCurrency(budgetKPIs.totalActual)} z {formatCurrency(budgetKPIs.totalPlanned)}</p>
                     </div>
                   )}
                   {budgetKPIs.warningThreshold && (
                     <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                       <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-amber-800">⚠️ Uwaga: wykorzystano ponad 80% budżetu</p>
-                        <p className="text-sm text-amber-700">
-                          Faktyczne: {formatCurrency(budgetKPIs.totalActual)} z {formatCurrency(budgetKPIs.totalPlanned)}.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Per-category AI alerts */}
-                  {budgetKPIs.categoryAlerts && budgetKPIs.categoryAlerts.length > 0 && (
-                    <div className="space-y-2">
-                      {budgetKPIs.categoryAlerts.map(cat => (
-                        <div key={cat.code} className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
-                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="font-semibold text-yellow-800">
-                              ⚠️ {cat.label}: {(cat.pct * 100).toFixed(0)}% budżetu wykorzystane
-                            </p>
-                            <p className="text-sm text-yellow-700">
-                              Wydano {formatCurrency(cat.actual)} z {formatCurrency(cat.planned)}.
-                              Pozostało: {formatCurrency(cat.planned - cat.actual)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                      <p className="font-semibold text-amber-800">⚠️ Ponad 80% budżetu wykorzystane!</p>
                     </div>
                   )}
 
                   {/* KPI Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                      { label: 'Budżet projektu', value: budgetKPIs.totalPlanned, color: 'text-blue-600', bg: 'bg-blue-50' },
-                      { label: 'Faktyczne (actual)', value: budgetKPIs.totalActual, color: budgetKPIs.overBudget ? 'text-red-600' : 'text-slate-900', bg: budgetKPIs.overBudget ? 'bg-red-50' : 'bg-slate-50' },
-                      { label: 'Pozostało', value: budgetKPIs.remaining, color: budgetKPIs.remaining < 0 ? 'text-red-600' : 'text-green-600', bg: 'bg-green-50' },
-                      { label: 'Realizacja', value: budgetKPIs.pctSpent * 100, color: budgetKPIs.overBudget ? 'text-red-600' : 'text-purple-600', bg: 'bg-purple-50', isPercent: true },
-                    ].map(({ label, value, color, bg, isPercent }) => (
+                      { label: 'Budżet planowany', value: formatCurrency(budgetKPIs.totalPlanned), color: 'text-blue-600', bg: 'bg-blue-50' },
+                      { label: 'Faktyczne wydatki', value: formatCurrency(budgetKPIs.totalActual), color: budgetKPIs.overBudget ? 'text-red-600' : 'text-slate-900', bg: budgetKPIs.overBudget ? 'bg-red-50' : 'bg-slate-50' },
+                      { label: 'Pozostało', value: formatCurrency(budgetKPIs.remaining), color: budgetKPIs.remaining < 0 ? 'text-red-600' : 'text-green-600', bg: 'bg-green-50' },
+                      { label: 'Realizacja', value: `${(budgetKPIs.pctSpent * 100).toFixed(1)}%`, color: budgetKPIs.overBudget ? 'text-red-600' : 'text-purple-600', bg: 'bg-purple-50' },
+                    ].map(({ label, value, color, bg }) => (
                       <div key={label} className={`p-4 rounded-xl border border-slate-200 ${bg}`}>
                         <p className="text-xs text-slate-500 mb-1">{label}</p>
-                        <p className={`text-xl font-bold ${color}`}>{isPercent ? `${value.toFixed(1)}%` : formatCurrency(value)}</p>
+                        <p className={`text-xl font-bold ${color}`}>{value}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Budget vs Actual Bar Chart by category */}
+                  {/* Category Progress Bars */}
                   <div className="bg-white rounded-xl border border-slate-200 p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5 text-blue-600" />
-                        Plan vs Realizacja wg kategorii
-                      </h3>
-                      <button
-                        onClick={() => { setBudgetItemForm({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0 }); setShowAddBudgetItemModal(true); }}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                      >
-                        <Plus className="w-4 h-4" /> Dodaj pozycję budżetową
-                      </button>
+                    <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                      <Layers className="w-5 h-5 text-blue-600" /> Realizacja wg kategorii
+                    </h3>
+                    <div className="space-y-4">
+                      {categoryAggregates.map(cat => {
+                        const overBudget = cat.actual > cat.planned && cat.planned > 0;
+                        const benchmark = INDUSTRY_BENCHMARKS[cat.code];
+                        const budgetShare = budgetKPIs.totalPlanned > 0 ? (cat.planned / budgetKPIs.totalPlanned * 100) : 0;
+                        return (
+                          <div key={cat.code}>
+                            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                                <span className="font-medium text-slate-800 text-sm">{cat.label}</span>
+                                {benchmark && (
+                                  <span className="text-xs text-slate-400 hidden sm:inline">
+                                    (norma: {benchmark.min}–{benchmark.max}%, udział: {budgetShare.toFixed(0)}%)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-slate-500">{formatCurrency(cat.actual)} / {formatCurrency(cat.planned)}</span>
+                                <span className={`font-semibold ${overBudget ? 'text-red-600' : 'text-slate-700'}`}>
+                                  {(cat.pct * 100).toFixed(0)}%
+                                  {cat.deviation !== 0 && (
+                                    <span className={`ml-1 text-xs ${overBudget ? 'text-red-500' : 'text-green-500'}`}>
+                                      ({overBudget ? '+' : ''}{formatCurrency(cat.deviation)})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${Math.min(cat.pct * 100, 100)}%`,
+                                  backgroundColor: cat.pct > 1 ? '#ef4444' : cat.pct > 0.8 ? '#f59e0b' : cat.color
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={budgetBarData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                        <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} tick={{ fontSize: 12 }} />
-                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                        <Legend />
-                        <Bar dataKey="Plan" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Faktura" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Charts */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                          <BarChart3 className="w-5 h-5 text-blue-600" /> Plan vs Realizacja
+                        </h3>
+                        <button onClick={() => { setBudgetItemForm({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0, notes: '' }); setShowAddBudgetItemModal(true); }}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+                          <Plus className="w-4 h-4" /> Dodaj
+                        </button>
+                      </div>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={budgetBarData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                          <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                          <Legend />
+                          <Bar dataKey="Plan" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="Fakt" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                      <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                        <PieChart className="w-5 h-5 text-purple-600" /> Struktura budżetu
+                      </h3>
+                      {budgetPieData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={220}>
+                          <RPieChart>
+                            <Pie data={budgetPieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name"
+                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                              {budgetPieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                            </Pie>
+                            <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                          </RPieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[220px] text-slate-400 text-sm">
+                          Dodaj pozycje budżetowe
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Budget Items Table */}
                   <div className="bg-white rounded-xl border border-slate-200 p-4">
                     <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                      <Layers className="w-5 h-5 text-purple-600" />
-                      Pozycje budżetowe
+                      <FileText className="w-5 h-5 text-slate-600" /> Pozycje budżetowe
                     </h3>
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div>
-                        {budgetItems.length === 0 ? (
-                          <div className="text-center py-8 text-slate-400">
-                            <Target className="w-10 h-10 mx-auto mb-2" />
-                            <p className="text-sm">Brak pozycji. Dodaj pierwszą pozycję budżetową.</p>
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-xs text-slate-500 border-b border-slate-100">
-                                  <th className="text-left pb-2 pr-2">Nazwa</th>
-                                  <th className="text-left pb-2 pr-2">Kategoria</th>
-                                  <th className="text-right pb-2 pr-2">Plan</th>
-                                  <th className="text-right pb-2 pr-2">Fakt</th>
-                                  <th className="text-right pb-2 pr-2">Odchyl.</th>
-                                  <th className="pb-2"></th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-50">
-                                {budgetItems.map(item => {
-                                  const deviation = (item.actual_amount || 0) - (item.planned_amount || 0);
-                                  const over = deviation > 0;
-                                  const catInfo = BUDGET_CATEGORIES.find(c => c.code === item.category);
-                                  return (
-                                    <tr key={item.id} className="hover:bg-slate-50">
-                                      <td className="py-2 pr-2 font-medium text-slate-800">{item.name}</td>
-                                      <td className="py-2 pr-2">
-                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-                                          style={{ backgroundColor: catInfo?.color + '22', color: catInfo?.color }}>
-                                          {catInfo?.label || item.category}
-                                        </span>
-                                      </td>
-                                      <td className="py-2 pr-2 text-right text-slate-600">{formatCurrency(item.planned_amount || 0)}</td>
-                                      <td className="py-2 pr-2 text-right font-medium">{formatCurrency(item.actual_amount || 0)}</td>
-                                      <td className={`py-2 pr-2 text-right font-semibold ${over ? 'text-red-600' : 'text-green-600'}`}>
-                                        {over ? '+' : ''}{formatCurrency(deviation)}
-                                      </td>
-                                      <td className="py-2">
-                                        <button onClick={() => handleDeleteBudgetItem(item.id!)}
-                                          className="p-1 hover:bg-red-100 rounded text-red-400 opacity-0 group-hover:opacity-100">
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                              <tfoot className="border-t-2 border-slate-200">
-                                <tr className="font-bold text-slate-900">
-                                  <td className="pt-2 pr-2" colSpan={2}>Łącznie</td>
-                                  <td className="pt-2 pr-2 text-right">{formatCurrency(budgetKPIs.totalPlanned)}</td>
-                                  <td className="pt-2 pr-2 text-right">{formatCurrency(budgetKPIs.totalActual)}</td>
-                                  <td className={`pt-2 pr-2 text-right ${budgetKPIs.remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                    {budgetKPIs.remaining < 0 ? '+' : ''}{formatCurrency(-budgetKPIs.remaining)}
-                                  </td>
-                                  <td></td>
-                                </tr>
-                              </tfoot>
-                            </table>
-                          </div>
-                        )}
+                    {budgetItems.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400">
+                        <Target className="w-10 h-10 mx-auto mb-2" />
+                        <p className="text-sm">Brak pozycji. Kliknij "Dodaj" aby rozpocząć.</p>
                       </div>
-
-                      {/* Pie Chart */}
-                      {budgetPieData.length > 0 ? (
-                        <div>
-                          <ResponsiveContainer width="100%" height={220}>
-                            <RPieChart>
-                              <Pie data={budgetPieData} cx="50%" cy="50%" outerRadius={80}
-                                dataKey="value" nameKey="name"
-                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                labelLine={true}>
-                                {budgetPieData.map((entry, i) => (
-                                  <Cell key={i} fill={entry.color} />
-                                ))}
-                              </Pie>
-                              <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                            </RPieChart>
-                          </ResponsiveContainer>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center text-slate-400 text-sm">
-                          Dodaj pozycje budżetowe aby zobaczyć wykres
-                        </div>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-xs text-slate-500 border-b border-slate-100">
+                              <th className="text-left pb-2 pr-3">Nazwa</th>
+                              <th className="text-left pb-2 pr-3">Kategoria</th>
+                              <th className="text-right pb-2 pr-3">Plan</th>
+                              <th className="text-right pb-2 pr-3">Fakt</th>
+                              <th className="text-right pb-2 pr-3">Odchylenie</th>
+                              <th className="pb-2"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {budgetItems.map(item => {
+                              const deviation = (item.actual_amount || 0) - (item.planned_amount || 0);
+                              const over = deviation > 0;
+                              const catInfo = BUDGET_CATEGORIES.find(c => c.code === item.category);
+                              return (
+                                <tr key={item.id} className="hover:bg-slate-50 group">
+                                  <td className="py-2 pr-3 font-medium text-slate-800">{item.name}</td>
+                                  <td className="py-2 pr-3">
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                                      style={{ backgroundColor: catInfo?.color + '22', color: catInfo?.color }}>
+                                      {catInfo?.label || item.category}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 pr-3 text-right text-slate-600">{formatCurrency(item.planned_amount || 0)}</td>
+                                  <td className="py-2 pr-3 text-right font-medium">{formatCurrency(item.actual_amount || 0)}</td>
+                                  <td className={`py-2 pr-3 text-right font-semibold ${over ? 'text-red-600' : 'text-green-600'}`}>
+                                    {over ? '+' : ''}{formatCurrency(deviation)}
+                                    {item.planned_amount > 0 && (
+                                      <span className="text-xs ml-1 opacity-60">({(deviation / item.planned_amount * 100).toFixed(0)}%)</span>
+                                    )}
+                                  </td>
+                                  <td className="py-2">
+                                    <button onClick={() => handleDeleteBudgetItem(item.id!)}
+                                      className="p-1 hover:bg-red-100 rounded text-red-400 opacity-0 group-hover:opacity-100">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="border-t-2 border-slate-200">
+                            <tr className="font-bold text-slate-900">
+                              <td className="pt-2 pr-3" colSpan={2}>Łącznie</td>
+                              <td className="pt-2 pr-3 text-right">{formatCurrency(budgetKPIs.totalPlanned)}</td>
+                              <td className="pt-2 pr-3 text-right">{formatCurrency(budgetKPIs.totalActual)}</td>
+                              <td className={`pt-2 pr-3 text-right ${budgetKPIs.remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {budgetKPIs.remaining < 0 ? '+' : ''}{formatCurrency(-budgetKPIs.remaining)}
+                              </td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
+            </div>
+          ) : activeTab === 'cashflow' ? (
+            /* ======= CASHFLOW TAB ======= */
+            <div className="space-y-6">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2 text-lg">
+                  <Activity className="w-5 h-5 text-blue-600" /> Cashflow — przepływy pieniężne
+                </h3>
+                <div className="flex gap-2">
+                  {(['6m', '12m'] as const).map(p => (
+                    <button key={p} onClick={() => setCashflowPeriod(p)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium ${cashflowPeriod === p ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                      {p === '6m' ? 'Ostatnie 6M' : 'Ostatnie 12M'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Main Cashflow Chart */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <h4 className="font-medium text-slate-900">Przychody vs Koszty miesięcznie</h4>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">* = prognoza</span>
+                </div>
+                <ResponsiveContainer width="100%" height={280}>
+                  <ComposedChart data={cashflowData.combined}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                    <Legend />
+                    <Bar dataKey="Przychody" fill="#10b981" radius={[4, 4, 0, 0]} opacity={0.9} />
+                    <Bar dataKey="Koszty" fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.9} />
+                    <Line type="monotone" dataKey="Saldo" stroke="#6366f1" strokeWidth={2.5}
+                      dot={{ fill: '#6366f1', r: 4 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Cumulative Balance */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <h4 className="font-medium text-slate-900 mb-4">Skumulowane saldo</h4>
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={cashflowData.combined.reduce((acc, d, i, arr) => {
+                    const prevCum = i > 0 ? acc[i - 1].Skumulowane : 0;
+                    return [...acc, { ...d, Skumulowane: prevCum + d.Saldo }];
+                  }, [] as any[])}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                    <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+                    <Area type="monotone" dataKey="Skumulowane" stroke="#6366f1" fill="#e0e7ff" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Quarterly Forecast */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
+                <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-blue-600" /> Prognoza następnego kwartału
+                </h4>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  {cashflowData.forecast.map((f, i) => (
+                    <div key={i} className="bg-white rounded-lg p-3 border border-blue-100">
+                      <p className="text-xs text-slate-500 mb-1 font-medium">{f.name}</p>
+                      <p className="text-sm font-medium text-green-600">+{formatCurrency(f.Przychody)}</p>
+                      <p className="text-sm font-medium text-red-600">-{formatCurrency(f.Koszty)}</p>
+                      <div className="mt-2 pt-2 border-t border-slate-100">
+                        <p className={`text-sm font-bold ${f.Saldo >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          {f.Saldo >= 0 ? '▲' : '▼'} {formatCurrency(Math.abs(f.Saldo))}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5" />
+                  Prognoza na podstawie średniej z ostatnich 3 miesięcy + oferty oczekujące
+                </p>
+              </div>
+
+              {/* Offers Integration */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <h4 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-green-600" /> Integracja z ofertami
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'Zaakceptowane', items: cashflowData.offersBreakdown.accepted, icon: CheckCircle, color: 'green', desc: 'Potwierdzone przychody' },
+                    { label: 'Oczekujące', items: cashflowData.offersBreakdown.pending, icon: Clock, color: 'amber', desc: 'Potencjalne przychody' },
+                    { label: 'Robocze', items: cashflowData.offersBreakdown.draft, icon: FileText, color: 'slate', desc: 'W przygotowaniu' },
+                  ].map(({ label, items, icon: Icon, color, desc }) => (
+                    <div key={label} className={`bg-${color}-50 rounded-lg p-3 border border-${color}-100`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Icon className={`w-4 h-4 text-${color}-600`} />
+                        <span className={`text-sm font-semibold text-${color}-800`}>{label}</span>
+                        <span className={`ml-auto bg-${color}-200 text-${color}-800 text-xs px-2 py-0.5 rounded-full`}>{items.length}</span>
+                      </div>
+                      <p className={`text-xl font-bold text-${color}-700`}>
+                        {formatCurrency(items.reduce((s, o) => s + (o.final_amount || o.total_amount || 0), 0))}
+                      </p>
+                      <p className={`text-xs text-${color}-600 mt-1`}>{desc}</p>
+                    </div>
+                  ))}
+                </div>
+                {offers.length > 0 && (
+                  <div className="mt-4 space-y-2 max-h-52 overflow-y-auto">
+                    {offers.slice(0, 12).map(offer => (
+                      <div key={offer.id} className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg text-sm">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          offer.status === 'accepted' ? 'bg-green-500' :
+                          offer.status === 'sent' ? 'bg-blue-500' :
+                          offer.status === 'negotiation' ? 'bg-amber-500' :
+                          offer.status === 'rejected' ? 'bg-red-500' : 'bg-slate-400'
+                        }`} />
+                        <span className="flex-1 truncate font-medium text-slate-800">{offer.name}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                          offer.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                          offer.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                          offer.status === 'negotiation' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {offer.status === 'accepted' ? 'Zaakceptowana' : offer.status === 'sent' ? 'Wysłana' :
+                           offer.status === 'negotiation' ? 'Negocjacje' : offer.status === 'draft' ? 'Robocza' : offer.status}
+                        </span>
+                        <span className="font-semibold text-slate-900 flex-shrink-0">
+                          {formatCurrency(offer.final_amount || offer.total_amount || 0)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* ======= AI ANALYSIS TAB ======= */
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-6 h-6 text-purple-600" />
+                  <h3 className="text-lg font-semibold text-slate-900">Analiza AI</h3>
+                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">Gemini Flash</span>
+                </div>
+                <select value={aiProject} onChange={e => setAiProject(e.target.value)}
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                  <option value="">-- Wszystkie projekty --</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Analiza AI */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Shield className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-slate-900">Analiza AI</h4>
+                      <p className="text-sm text-slate-500">Anomalie, ryzyka, ocena kondycji finansowej projektu</p>
+                    </div>
+                  </div>
+                  <button onClick={handleAnalyzeAI} disabled={aiLoading}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium">
+                    {aiLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Brain className="w-5 h-5" />}
+                    {aiLoading ? 'Analizuję...' : '🔍 Uruchom Analizę AI'}
+                  </button>
+                  {aiAnalysis && (
+                    <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Brain className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-semibold text-purple-800">Wyniki analizy</span>
+                        <button onClick={() => setAiAnalysis('')} className="ml-auto p-0.5 hover:bg-purple-100 rounded">
+                          <X className="w-3.5 h-3.5 text-purple-400" />
+                        </button>
+                      </div>
+                      <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{aiAnalysis}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Gdzie można zaoszczędzić */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Lightbulb className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-slate-900">Gdzie można zaoszczędzić?</h4>
+                      <p className="text-sm text-slate-500">Konkretne propozycje optymalizacji z szacowanymi kwotami</p>
+                    </div>
+                  </div>
+                  <button onClick={handleAISavings} disabled={aiSavingsLoading}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium">
+                    {aiSavingsLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lightbulb className="w-5 h-5" />}
+                    {aiSavingsLoading ? 'Szukam oszczędności...' : '💰 Znajdź oszczędności'}
+                  </button>
+                  {aiSavings && (
+                    <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lightbulb className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-semibold text-green-800">Propozycje oszczędności</span>
+                        <button onClick={() => setAiSavings('')} className="ml-auto p-0.5 hover:bg-green-100 rounded">
+                          <X className="w-3.5 h-3.5 text-green-400" />
+                        </button>
+                      </div>
+                      <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{aiSavings}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Industry Benchmarks */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5">
+                <h4 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-blue-600" /> Normy branżowe — budownictwo
+                </h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {Object.entries(INDUSTRY_BENCHMARKS).map(([code, bench]) => {
+                    const catData = categoryAggregates.find(c => c.code === code);
+                    const share = budgetKPIs.totalPlanned > 0 && catData ? (catData.planned / budgetKPIs.totalPlanned * 100) : 0;
+                    const inRange = share >= bench.min && share <= bench.max;
+                    const cat = BUDGET_CATEGORIES.find(c => c.code === code);
+                    return (
+                      <div key={code} className={`p-3 rounded-lg border ${
+                        inRange ? 'border-green-200 bg-green-50' :
+                        budgetKPIs.totalPlanned > 0 ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'
+                      }`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm" style={{ color: cat?.color }}>{bench.label}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            inRange ? 'bg-green-200 text-green-800' :
+                            budgetKPIs.totalPlanned > 0 ? 'bg-amber-200 text-amber-800' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {inRange ? '✓ W normie' : budgetKPIs.totalPlanned > 0 ? '⚠ Poza normą' : 'Brak danych'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-slate-600">
+                          <span>Norma: <strong>{bench.min}–{bench.max}%</strong></span>
+                          {budgetKPIs.totalPlanned > 0 && (
+                            <span className={`font-semibold ${inRange ? 'text-green-700' : 'text-amber-700'}`}>
+                              Twój: {share.toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-400 mt-3 flex items-center gap-1">
+                  <Info className="w-3 h-3" /> Normy dla projektów budowlanych w Polsce (GUS/PIB 2024)
+                </p>
+              </div>
             </div>
           )}
         </div>
       </div>
 
+      {/* ============ MODALS ============ */}
+
       {/* Operation Modal */}
       {showOperationModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg">
+          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
               <h2 className="text-lg font-semibold">{editingOperation ? 'Edytuj operację' : 'Nowa operacja'}</h2>
-              <button onClick={() => setShowOperationModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setShowOperationModal(false); setUploadedReceiptUrl(''); }} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4">
                 {(['income', 'expense'] as FinanceOperationType[]).map(type => (
                   <button key={type} type="button"
@@ -1252,7 +1590,7 @@ export const FinancePage: React.FC = () => {
                 ))}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Kwota *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kwota (PLN) *</label>
                 <input type="number" value={operationForm.amount || ''} step="0.01" min="0"
                   onChange={e => setOperationForm({ ...operationForm, amount: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-lg" />
@@ -1261,7 +1599,7 @@ export const FinancePage: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
                 <input type="text" value={operationForm.description}
                   onChange={e => setOperationForm({ ...operationForm, description: e.target.value })}
-                  placeholder="np. Faktura za materiały"
+                  placeholder="np. Faktura za materiały budowlane"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -1275,10 +1613,21 @@ export const FinancePage: React.FC = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nr dokumentu</label>
                   <input type="text" value={operationForm.document_number}
                     onChange={e => setOperationForm({ ...operationForm, document_number: e.target.value })}
-                    placeholder="FV/2024/001"
+                    placeholder="FV/2026/001"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
                 </div>
               </div>
+              {operationForm.operation_type === 'expense' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria budżetowa</label>
+                  <select value={operationForm.budget_category}
+                    onChange={e => setOperationForm({ ...operationForm, budget_category: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                    <option value="">-- Bez kategorii --</option>
+                    {BUDGET_CATEGORIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
@@ -1305,9 +1654,51 @@ export const FinancePage: React.FC = () => {
                   {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+
+              {/* Receipt Upload */}
+              <div className="border border-dashed border-slate-300 rounded-lg p-3">
+                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-slate-500" /> Paragon / Faktura (zdjęcie)
+                </label>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <input ref={fileInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (editingOperation) {
+                        await handleReceiptUpload(file, editingOperation.id);
+                      } else {
+                        const reader = new FileReader();
+                        reader.onload = ev => setUploadedReceiptUrl(ev.target?.result as string);
+                        reader.readAsDataURL(file);
+                      }
+                    }} />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingReceipt}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm">
+                    {uploadingReceipt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {uploadingReceipt ? 'Wgrywam...' : 'Wgraj plik'}
+                  </button>
+                  {uploadedReceiptUrl && (
+                    <div className="flex items-center gap-2">
+                      <a href={uploadedReceiptUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-600 text-sm hover:underline flex items-center gap-1">
+                        <Eye className="w-3.5 h-3.5" /> Podgląd
+                      </a>
+                      <button onClick={() => setUploadedReceiptUrl('')} className="text-slate-400 hover:text-slate-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {editingOperation && (receipts[editingOperation.id] || []).length > 0 && (
+                    <span className="text-xs text-blue-600">
+                      {(receipts[editingOperation.id] || []).length} plik(ów) załączono
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
-              <button onClick={() => setShowOperationModal(false)}
+              <button onClick={() => { setShowOperationModal(false); setUploadedReceiptUrl(''); }}
                 className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">Anuluj</button>
               <button onClick={handleSaveOperation} disabled={!operationForm.amount || saving}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
@@ -1322,12 +1713,12 @@ export const FinancePage: React.FC = () => {
       {/* Act Modal */}
       {showActModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg">
+          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
               <h2 className="text-lg font-semibold">{editingAct ? 'Edytuj akt' : 'Nowy akt wykonawczy'}</h2>
               <button onClick={() => setShowActModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Numer *</label>
@@ -1424,16 +1815,14 @@ export const FinancePage: React.FC = () => {
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria *</label>
-                <select value={budgetItemForm.category}
-                  onChange={e => setBudgetItemForm({ ...budgetItemForm, category: e.target.value })}
+                <select value={budgetItemForm.category} onChange={e => setBudgetItemForm({ ...budgetItemForm, category: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg">
                   {BUDGET_CATEGORIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa pozycji *</label>
-                <input type="text" value={budgetItemForm.name}
-                  onChange={e => setBudgetItemForm({ ...budgetItemForm, name: e.target.value })}
+                <input type="text" value={budgetItemForm.name} onChange={e => setBudgetItemForm({ ...budgetItemForm, name: e.target.value })}
                   placeholder="np. Cement, piasek, robocizna elektryczna..."
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
               </div>
@@ -1442,16 +1831,20 @@ export const FinancePage: React.FC = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Kwota planowana (PLN)</label>
                   <input type="number" value={budgetItemForm.planned_amount || ''}
                     onChange={e => setBudgetItemForm({ ...budgetItemForm, planned_amount: parseFloat(e.target.value) || 0 })}
-                    min="0" step="0.01"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                    min="0" step="0.01" className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Kwota faktyczna (PLN)</label>
                   <input type="number" value={budgetItemForm.actual_amount || ''}
                     onChange={e => setBudgetItemForm({ ...budgetItemForm, actual_amount: parseFloat(e.target.value) || 0 })}
-                    min="0" step="0.01"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                    min="0" step="0.01" className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notatki</label>
+                <input type="text" value={budgetItemForm.notes} onChange={e => setBudgetItemForm({ ...budgetItemForm, notes: e.target.value })}
+                  placeholder="Opcjonalne uwagi..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
               </div>
             </div>
             <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
@@ -1478,8 +1871,7 @@ export const FinancePage: React.FC = () => {
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa konta *</label>
-                <input type="text" value={accountForm.name}
-                  onChange={e => setAccountForm({ ...accountForm, name: e.target.value })}
+                <input type="text" value={accountForm.name} onChange={e => setAccountForm({ ...accountForm, name: e.target.value })}
                   placeholder="np. Konto główne PKO"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
               </div>
@@ -1496,22 +1888,18 @@ export const FinancePage: React.FC = () => {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa banku</label>
-                    <input type="text" value={accountForm.bank_name}
-                      onChange={e => setAccountForm({ ...accountForm, bank_name: e.target.value })}
-                      placeholder="np. PKO BP"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                    <input type="text" value={accountForm.bank_name} onChange={e => setAccountForm({ ...accountForm, bank_name: e.target.value })}
+                      placeholder="np. PKO BP" className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Numer konta</label>
-                    <input type="text" value={accountForm.account_number}
-                      onChange={e => setAccountForm({ ...accountForm, account_number: e.target.value })}
-                      placeholder="PL 00 0000 0000 0000 0000 0000 0000"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                    <input type="text" value={accountForm.account_number} onChange={e => setAccountForm({ ...accountForm, account_number: e.target.value })}
+                      placeholder="PL 00 0000 0000..." className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
                   </div>
                 </>
               )}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Saldo początkowe</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Saldo początkowe (PLN)</label>
                 <input type="number" value={accountForm.current_balance || ''} step="0.01"
                   onChange={e => setAccountForm({ ...accountForm, current_balance: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
