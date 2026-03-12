@@ -270,28 +270,34 @@ export const Toast = () => {
 
     if (!state.toast) return null;
 
+    const type = state.toast.type || 'info';
+    const colors = {
+        success: { bg: 'bg-green-100', icon: 'text-green-600', bar: 'bg-green-500' },
+        error: { bg: 'bg-red-100', icon: 'text-red-600', bar: 'bg-red-500' },
+        info: { bg: 'bg-blue-100', icon: 'text-blue-600', bar: 'bg-blue-500' },
+    };
+    const c = colors[type];
+
     return (
-        <div className="fixed top-4 right-4 z-[100] max-w-sm w-full bg-white rounded-lg shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300">
+        <div className="fixed top-4 right-4 z-[100] max-w-sm w-full bg-white rounded-lg shadow-2xl border border-slate-200 overflow-hidden" style={{animation: 'slideInRight 0.3s ease'}}>
             <div className="p-4 flex items-start">
                 <div className="flex-shrink-0 pt-0.5">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
-                        <Info size={18} />
+                    <div className={`w-8 h-8 ${c.bg} rounded-full flex items-center justify-center ${c.icon}`}>
+                        {type === 'success' ? <Check size={18} /> : type === 'error' ? <X size={18} /> : <Info size={18} />}
                     </div>
                 </div>
                 <div className="ml-3 flex-1">
                     <p className="text-sm font-bold text-slate-900">{state.toast.title}</p>
-                    <p className="text-xs text-slate-500 mt-1">{state.toast.message}</p>
+                    {state.toast.message && <p className="text-xs text-slate-500 mt-1">{state.toast.message}</p>}
                 </div>
                 <button onClick={clearToast} className="ml-4 flex-shrink-0 text-slate-400 hover:text-slate-600">
                     <X size={18} />
                 </button>
             </div>
-            <div className="h-1 bg-blue-500 w-full animate-[shrink_5s_linear_forwards]" />
+            <div className={`h-1 ${c.bar} w-full`} style={{animation: 'shrinkBar 5s linear forwards'}} />
             <style>{`
-                @keyframes shrink {
-                    from { width: 100%; }
-                    to { width: 0%; }
-                }
+                @keyframes shrinkBar { from { width: 100%; } to { width: 0%; } }
+                @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
             `}</style>
         </div>
     );

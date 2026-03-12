@@ -30,7 +30,7 @@ interface AppState {
   qualityIncidents: QualityIncident[];
   employeeNotes: EmployeeNote[];
   employeeBadges: EmployeeBadge[];
-  toast: { title: string, message: string } | null;
+  toast: { title: string, message: string, type?: 'success' | 'error' | 'info' } | null;
   libraryResources: LibraryResource[];
 
   // Multi-company data
@@ -99,6 +99,7 @@ interface AppContextType {
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
   clearToast: () => void;
+  showToast: (title: string, message?: string, type?: 'success' | 'error' | 'info') => void;
   inviteFriend: (firstName: string, lastName: string, phone: string, targetPosition: string) => void;
   confirmSkillPractice: (userSkillId: string, brigadirId: string) => Promise<void>;
   saveSkillChecklistProgress: (userSkillId: string, progress: any) => Promise<void>;
@@ -1239,6 +1240,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, toast: null }));
   };
 
+  const showToast = (title: string, message: string = "", type: 'success' | 'error' | 'info' = 'success') => {
+    setState(prev => ({ ...prev, toast: { title, message, type } }));
+    setTimeout(() => setState(prev => ({ ...prev, toast: null })), 4000);
+  };
+
   const inviteFriend = async (firstName: string, lastName: string, phone: string, targetPosition: string) => {
     if (state.currentUser) logCandidateAction(state.currentUser.id, `Zaproszono znajomego: ${firstName} ${lastName} (${targetPosition})`);
 
@@ -1852,6 +1858,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     markNotificationAsRead,
     markAllNotificationsAsRead,
     clearToast,
+    showToast,
     inviteFriend,
     confirmSkillPractice,
     saveSkillChecklistProgress,

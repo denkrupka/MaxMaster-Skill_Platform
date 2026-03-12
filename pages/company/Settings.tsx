@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2, Link2, Webhook, Bell, Shield, CheckCircle, AlertCircle, RefreshCw, Copy, Globe, Smartphone, Monitor, LogOut, Key, Zap, ExternalLink } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { useConfirm } from '../../components/ConfirmDialog';
 import { WorkingHours, WorkingHoursDay, RoundTime, HolidayDay } from '../../types';
 import { supabase } from '../../lib/supabase';
 
@@ -139,11 +140,12 @@ function getPolishMovableHolidays(year: number): { date: string; name: string }[
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export const CompanySettingsPage: React.FC = () => {
-  const { state, updateCompany } = useAppContext();
+  const { state, updateCompany, showToast } = useAppContext();
   const { currentCompany, currentUser } = state;
 
   const [activeTab, setActiveTab] = useState<TabKey>('company');
   const [isSaving, setIsSaving] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   // ═══ Tab 5: Integracje ═══
   const [integrations] = useState([
@@ -168,8 +170,9 @@ export const CompanySettingsPage: React.FC = () => {
   const [newWebhookUrl, setNewWebhookUrl] = useState('');
   const [showAddWebhook, setShowAddWebhook] = useState(false);
 
-  const handleRegenerateApiKey = () => {
-    if (!confirm('Czy na pewno chcesz wygenerować nowy klucz API? Stary klucz przestanie działać natychmiast.')) return;
+  const handleRegenerateApiKey = async () => {
+    const ok = await confirm('Regeneruj klucz API', 'Stary klucz przestanie działać natychmiast. Czy na pewno?', 'Regeneruj', 'warning');
+    if (!ok) return;
     const uuid = 'sk_' + Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
     localStorage.setItem('company_api_key', uuid);
     setApiKey(uuid);
@@ -257,11 +260,11 @@ export const CompanySettingsPage: React.FC = () => {
   const handleLogoUpload = async (file: File) => {
     if (!currentCompany) return;
     if (!file.type.startsWith('image/')) {
-      alert('Wybierz plik obrazu (PNG, JPG, SVG)');
+      showToast('Nieprawidłowy format', 'Wybierz plik obrazu (PNG, JPG, SVG)', 'error');
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      alert('Maksymalny rozmiar pliku to 2 MB');
+      showToast('Plik za duży', 'Maksymalny rozmiar pliku to 2 MB', 'error');
       return;
     }
     setLogoUploading(true);
@@ -286,7 +289,7 @@ export const CompanySettingsPage: React.FC = () => {
       setLogoUrl(publicUrl);
     } catch (err) {
       console.error('Error uploading logo:', err);
-      alert('Błąd podczas przesyłania logotypu');
+      showToast('Błąd', 'Błąd podczas przesyłania logotypu', 'error');
     } finally {
       setLogoUploading(false);
     }
@@ -311,10 +314,10 @@ export const CompanySettingsPage: React.FC = () => {
         .update({ first_name: contactFirstName, last_name: contactLastName, phone: contactPhone })
         .eq('id', currentUser.id);
       if (error) throw error;
-      alert('Dane kontaktowe zapisane pomyślnie');
+      showToast('Zapisano ✓', 'Dane kontaktowe zaktualizowane', 'success');
     } catch (err) {
       console.error('Error saving contact data:', err);
-      alert('Błąd podczas zapisywania danych kontaktowych');
+      showToast('Błąd', 'Nie udało się zapisać danych kontaktowych', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -330,10 +333,10 @@ export const CompanySettingsPage: React.FC = () => {
     setIsSaving(true);
     try {
       await updateCompany(currentCompany.id, formData);
-      alert('Dane zapisane pomyślnie');
+      showToast('Zapisano ✓', 'Dane firmy zaktualizowane', 'success');
     } catch (error) {
       console.error('Error saving company data:', error);
-      alert('Błąd podczas zapisywania danych');
+      showToast('Błąd', 'Nie udało się zapisać danych firmy', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -404,10 +407,10 @@ export const CompanySettingsPage: React.FC = () => {
         .eq('id', currentCompany.id);
 
       if (error) throw error;
-      alert('Ustawienia czasu pracy zapisane pomyślnie');
+      showToast('Zapisano ✓', 'Ustawienia czasu pracy zaktualizowane', 'success');
     } catch (error) {
       console.error('Error saving working time settings:', error);
-      alert('Błąd podczas zapisywania ustawień czasu pracy');
+      showToast('Błąd', 'Nie udało się zapisać ustawień czasu pracy', 'error');
     } finally {
       setIsSavingWorkTime(false);
     }
@@ -466,12 +469,13 @@ export const CompanySettingsPage: React.FC = () => {
       await fetchHolidays();
     } catch (error) {
       console.error('Error adding holiday:', error);
-      alert('Błąd podczas dodawania dnia wolnego');
+      showToast('Błąd', 'Nie udało się dodać dnia wolnego', 'error');
     }
   };
 
   const handleDeleteHoliday = async (id: string) => {
-    if (!confirm('Czy na pewno chcesz usunąć ten dzień wolny?')) return;
+    const ok = await confirm('Usuń dzień wolny', 'Czy na pewno chcesz usunąć ten dzień wolny? Tej operacji nie można cofnąć.');
+    if (!ok) return;
     try {
       const { error } = await supabase
         .from('holiday_days')
@@ -482,13 +486,14 @@ export const CompanySettingsPage: React.FC = () => {
       await fetchHolidays();
     } catch (error) {
       console.error('Error deleting holiday:', error);
-      alert('Błąd podczas usuwania dnia wolnego');
+      showToast('Błąd', 'Nie udało się usunąć dnia wolnego', 'error');
     }
   };
 
   const handleLoadPolishHolidays = async () => {
     if (!currentCompany) return;
-    if (!confirm(`Załadować polskie dni wolne na rok ${holidayYear}? Istniejące wpisy nie zostaną duplikowane.`)) return;
+    const ok = await confirm('Załaduj polskie święta', `Załadować polskie dni wolne na rok ${holidayYear}? Istniejące wpisy nie zostaną duplikowane.`, 'Załaduj', 'info');
+    if (!ok) return;
 
     try {
       // Fixed holidays
@@ -522,7 +527,7 @@ export const CompanySettingsPage: React.FC = () => {
       const toInsert = allHolidays.filter(h => !existingDates.has(h.date));
 
       if (toInsert.length === 0) {
-        alert(`Wszystkie polskie święta na rok ${holidayYear} już istnieją.`);
+        showToast('Już dodane', `Wszystkie polskie święta na rok ${holidayYear} już istnieją`, 'info');
         return;
       }
 
@@ -531,11 +536,11 @@ export const CompanySettingsPage: React.FC = () => {
         .insert(toInsert);
 
       if (error) throw error;
-      alert(`Dodano ${toInsert.length} dni wolnych na rok ${holidayYear}.`);
+      showToast('Dodano ✓', `Dodano ${toInsert.length} dni wolnych na rok ${holidayYear}`, 'success');
       await fetchHolidays();
     } catch (error) {
       console.error('Error loading Polish holidays:', error);
-      alert('Błąd podczas ładowania polskich dni wolnych');
+      showToast('Błąd', 'Nie udało się załadować polskich dni wolnych', 'error');
     }
   };
 
@@ -561,7 +566,8 @@ export const CompanySettingsPage: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-slate-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-slate-100 rounded-lg p-1 overflow-x-auto w-full lg:w-fit">
+        <div className="flex gap-1 min-w-max">
         {TABS.map(tab => (
           <button
             key={tab.key}
@@ -1759,7 +1765,7 @@ export const CompanySettingsPage: React.FC = () => {
                 </div>
               </div>
               <button
-                onClick={() => alert('TODO: wyloguj wszystkie sesje poza aktualną')}
+                onClick={() => showToast('Wkrótce', 'Wylogowanie wszystkich sesji zostanie wdrożone wkrótce', 'info')}
                 className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition text-sm font-medium"
               >
                 <LogOut className="w-4 h-4" />
@@ -1789,7 +1795,7 @@ export const CompanySettingsPage: React.FC = () => {
                   </div>
                   {!session.current && (
                     <button
-                      onClick={() => alert(`TODO: wyloguj sesję ${session.id}`)}
+                      onClick={() => showToast('Wkrótce', 'Wylogowanie sesji zostanie wdrożone wkrótce', 'info')}
                       className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                     >
                       <LogOut className="w-4 h-4" />
@@ -1835,6 +1841,7 @@ export const CompanySettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 };
