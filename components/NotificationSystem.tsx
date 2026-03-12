@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, X, Circle, Info, ArrowRight, Calendar } from 'lucide-react';
+import { Bell, Check, X, Circle, Info, ArrowRight, Calendar, ChevronRight } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { AppNotification } from '../types';
+import { AppNotification, NotificationHub } from '../types';
+import { supabase } from '../lib/supabase';
 import { Button } from './Button';
 
 export const NotificationBell = () => {
@@ -12,7 +13,66 @@ export const NotificationBell = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedNotification, setSelectedNotification] = useState<AppNotification | null>(null);
 
-    const unreadCount = state.appNotifications.filter(n => !n.isRead).length;
+    // Hub notifications (from Supabase notifications table)
+    const [hubNotifications, setHubNotifications] = useState<NotificationHub[]>([]);
+    const channelRef = useRef<any>(null);
+
+    const userId = state.currentUser?.id;
+
+    // Load unread hub notifications count + recent ones for dropdown
+    useEffect(() => {
+        if (!userId) return;
+        const load = async () => {
+            const { data } = await supabase
+                .from('notifications')
+                .select('id, title, message, link, is_read, created_at, type')
+                .eq('user_id', userId)
+                .eq('is_read', false)
+                .order('created_at', { ascending: false })
+                .limit(15);
+            if (data) setHubNotifications(data as NotificationHub[]);
+        };
+        load();
+    }, [userId]);
+
+    // Realtime subscription for new hub notifications
+    useEffect(() => {
+        if (!userId) return;
+        if (channelRef.current) supabase.removeChannel(channelRef.current);
+        const channel = supabase
+            .channel(`nb_notifications_${userId}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${userId}`
+            }, (payload) => {
+                setHubNotifications(prev => [payload.new as NotificationHub, ...prev]);
+            })
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${userId}`
+            }, (payload) => {
+                const updated = payload.new as NotificationHub;
+                if (updated.is_read) {
+                    setHubNotifications(prev => prev.filter(n => n.id !== updated.id));
+                }
+            })
+            .subscribe();
+        channelRef.current = channel;
+        return () => {
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+                channelRef.current = null;
+            }
+        };
+    }, [userId]);
+
+    const hubUnreadCount = hubNotifications.filter(n => !n.is_read).length;
+    const appUnreadCount = state.appNotifications.filter(n => !n.isRead).length;
+    const unreadCount = hubUnreadCount + appUnreadCount;
 
     const handleNotificationClick = (notification: AppNotification) => {
         markNotificationAsRead(notification.id);
@@ -25,6 +85,29 @@ export const NotificationBell = () => {
             navigate(selectedNotification.link);
         }
         setSelectedNotification(null);
+    };
+
+    const markAllHubAsRead = async () => {
+        if (!userId) return;
+        await supabase
+            .from('notifications')
+            .update({ is_read: true, read_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .eq('is_read', false);
+        setHubNotifications([]);
+        markAllNotificationsAsRead();
+    };
+
+    const handleHubNotificationClick = async (notif: NotificationHub) => {
+        setIsOpen(false);
+        if (!notif.is_read) {
+            await supabase
+                .from('notifications')
+                .update({ is_read: true, read_at: new Date().toISOString() })
+                .eq('id', notif.id);
+            setHubNotifications(prev => prev.filter(n => n.id !== notif.id));
+        }
+        if (notif.link) navigate(notif.link);
     };
 
     const renderDetailModal = () => {
@@ -94,7 +177,7 @@ export const NotificationBell = () => {
                             <h3 className="font-bold text-slate-800 text-sm">Powiadomienia</h3>
                             {unreadCount > 0 && (
                                 <button 
-                                    onClick={markAllNotificationsAsRead}
+                                    onClick={markAllHubAsRead}
                                     className="text-blue-600 hover:text-blue-700 text-xs font-medium flex items-center"
                                     title="Oznacz wszystkie jako przeczytane"
                                 >
@@ -103,19 +186,44 @@ export const NotificationBell = () => {
                             )}
                         </div>
                         <div className="max-h-96 overflow-y-auto">
-                            {state.appNotifications.length > 0 ? (
+                            {hubNotifications.length > 0 || state.appNotifications.filter(n => !n.isRead).length > 0 ? (
                                 <div className="divide-y divide-slate-50">
-                                    {state.appNotifications.map(notification => (
+                                    {/* Hub notifications (from Supabase) */}
+                                    {hubNotifications.map(notif => (
+                                        <div
+                                            key={notif.id}
+                                            onClick={() => handleHubNotificationClick(notif)}
+                                            className="p-4 hover:bg-slate-50 cursor-pointer transition-colors bg-blue-50/50"
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h4 className="text-sm font-bold text-slate-900 line-clamp-1">{notif.title}</h4>
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5 flex-shrink-0 ml-2" />
+                                            </div>
+                                            <p className="text-xs text-slate-500 line-clamp-2 mb-2">{notif.message}</p>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] text-slate-400">
+                                                    {new Date(notif.created_at).toLocaleDateString('pl-PL')} {new Date(notif.created_at).toLocaleTimeString('pl-PL', {hour: '2-digit', minute:'2-digit'})}
+                                                </span>
+                                                {notif.link && (
+                                                    <span className="text-[10px] text-blue-500 flex items-center gap-0.5">
+                                                        Przejdź <ChevronRight size={10} />
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {/* App notifications (in-memory) */}
+                                    {state.appNotifications.filter(n => !n.isRead).map(notification => (
                                         <div 
                                             key={notification.id}
                                             onClick={() => handleNotificationClick(notification)}
-                                            className={`p-4 hover:bg-slate-50 cursor-pointer transition-colors ${!notification.isRead ? 'bg-blue-50/50' : ''}`}
+                                            className="p-4 hover:bg-slate-50 cursor-pointer transition-colors bg-blue-50/50"
                                         >
                                             <div className="flex justify-between items-start mb-1">
-                                                <h4 className={`text-sm ${!notification.isRead ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
+                                                <h4 className="text-sm font-bold text-slate-900">
                                                     {notification.title}
                                                 </h4>
-                                                {!notification.isRead && <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5" />}
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5" />
                                             </div>
                                             <p className="text-xs text-slate-500 line-clamp-2 mb-2">{notification.message}</p>
                                             <div className="text-[10px] text-slate-400">
@@ -126,9 +234,18 @@ export const NotificationBell = () => {
                                 </div>
                             ) : (
                                 <div className="p-8 text-center text-slate-400 text-sm">
-                                    Brak powiadomień
+                                    Brak nieprzeczytanych powiadomień
                                 </div>
                             )}
+                        </div>
+                        {/* Footer: link to full notifications page */}
+                        <div className="border-t border-slate-100 px-4 py-2 text-center">
+                            <button
+                                onClick={() => { setIsOpen(false); navigate('/notifications'); }}
+                                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                                Zobacz wszystkie powiadomienia →
+                            </button>
                         </div>
                     </div>
                 </>

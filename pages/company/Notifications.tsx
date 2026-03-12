@@ -108,6 +108,44 @@ const NOTIFICATION_TYPE_CONFIG: Record<NotificationType_Hub, NotificationTypeCon
   }
 };
 
+// ---------------------------------------------------------------
+// Group notifications by date
+// ---------------------------------------------------------------
+
+type DateGroup = 'Dziś' | 'Wczoraj' | 'Wcześniej';
+
+const getDateGroup = (dateStr: string): DateGroup => {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+
+  if (date >= todayStart) return 'Dziś';
+  if (date >= yesterdayStart) return 'Wczoraj';
+  return 'Wcześniej';
+};
+
+interface GroupedNotifications {
+  group: DateGroup;
+  items: NotificationHub[];
+}
+
+const groupNotifications = (notifications: NotificationHub[]): GroupedNotifications[] => {
+  const groups: Record<DateGroup, NotificationHub[]> = {
+    'Dziś': [],
+    'Wczoraj': [],
+    'Wcześniej': [],
+  };
+
+  for (const n of notifications) {
+    groups[getDateGroup(n.created_at)].push(n);
+  }
+
+  return (['Dziś', 'Wczoraj', 'Wcześniej'] as DateGroup[])
+    .filter(g => groups[g].length > 0)
+    .map(g => ({ group: g, items: groups[g] }));
+};
+
 const ALL_NOTIFICATION_TYPES: NotificationType_Hub[] = [
   'attendance_reminder', 'day_request_new', 'day_request_approved', 'day_request_rejected',
   'time_off_new', 'time_off_approved', 'time_off_rejected',
@@ -447,54 +485,63 @@ export const NotificationsPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {notifications.map(notification => {
-              const config = NOTIFICATION_TYPE_CONFIG[notification.type] || NOTIFICATION_TYPE_CONFIG.general;
-              const colorParts = config.color.split(' ');
-
-              return (
-                <div
-                  key={notification.id}
-                  onClick={() => markAsRead(notification)}
-                  className={`flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors hover:bg-blue-50/50 ${
-                    !notification.is_read ? 'bg-blue-50/30' : ''
-                  }`}
-                >
-                  {/* Unread dot */}
-                  <div className="flex-shrink-0 mt-1.5 w-2">
-                    {!notification.is_read && (
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    )}
-                  </div>
-
-                  {/* Icon */}
-                  <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${config.color}`}>
-                    {config.icon}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className={`text-sm ${!notification.is_read ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>
-                        {notification.title}
-                      </h4>
-                      <span className="text-xs text-slate-400 flex-shrink-0 whitespace-nowrap">
-                        {timeAgo(notification.created_at)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">
-                      {notification.message}
-                    </p>
-                    {notification.link && (
-                      <div className="flex items-center gap-1 text-xs text-blue-500 mt-1">
-                        <span>Przejdz do szczegolbw</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </div>
-                    )}
-                  </div>
+          <div>
+            {groupNotifications(notifications).map(({ group, items }) => (
+              <div key={group}>
+                {/* Date group header */}
+                <div className="px-4 py-2 bg-slate-50 border-y border-slate-100">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{group}</span>
                 </div>
-              );
-            })}
+                <div className="divide-y divide-slate-100">
+                  {items.map(notification => {
+                    const config = NOTIFICATION_TYPE_CONFIG[notification.type] || NOTIFICATION_TYPE_CONFIG.general;
+
+                    return (
+                      <div
+                        key={notification.id}
+                        onClick={() => markAsRead(notification)}
+                        className={`flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors hover:bg-blue-50/50 ${
+                          !notification.is_read ? 'bg-blue-50/30' : ''
+                        }`}
+                      >
+                        {/* Unread dot */}
+                        <div className="flex-shrink-0 mt-1.5 w-2">
+                          {!notification.is_read && (
+                            <div className="w-2 h-2 rounded-full bg-blue-500" />
+                          )}
+                        </div>
+
+                        {/* Icon */}
+                        <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${config.color}`}>
+                          {config.icon}
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className={`text-sm ${!notification.is_read ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>
+                              {notification.title}
+                            </h4>
+                            <span className="text-xs text-slate-400 flex-shrink-0 whitespace-nowrap">
+                              {timeAgo(notification.created_at)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">
+                            {notification.message}
+                          </p>
+                          {notification.link && (
+                            <div className="flex items-center gap-1 text-xs text-blue-500 mt-1">
+                              <span>Przejdź do szczegółów</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
