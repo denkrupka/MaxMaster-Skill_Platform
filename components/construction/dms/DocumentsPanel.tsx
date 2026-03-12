@@ -62,6 +62,32 @@ export const DocumentsPanel: React.FC = () => {
     if (currentUser) loadDocuments();
   }, [currentUser]);
 
+  // Realtime: refresh when document status changes (e.g. counterparty signs)
+  useEffect(() => {
+    if (!currentUser) return;
+    const channel = supabase
+      .channel('dms_doc_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'document_instances',
+          filter: `company_id=eq.${currentUser.company_id}`,
+        },
+        (payload) => {
+          // Update the changed document in state
+          const updated = payload.new as DocumentInstance;
+          setDocuments(prev => 
+            prev.map(d => d.id === updated.id ? { ...d, ...updated } : d)
+          );
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser]);
+
   const loadDocuments = async () => {
     if (!currentUser) return;
     setLoading(true);

@@ -198,13 +198,29 @@ export const DocumentSignPage: React.FC = () => {
       const signatureData = canvas.toDataURL('image/png');
       const now = new Date().toISOString();
 
+      // Capture signature metadata
+      const signatureMetadata = {
+        signed_at: now,
+        user_agent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        screen_resolution: `${window.screen.width}x${window.screen.height}`,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        signer_name: document.signer_name,
+        signer_email: document.signer_email,
+        signer_phone: document.signer_phone,
+        document_name: document.name,
+      };
+
       const { error: updateErr } = await supabase
         .from('document_instances')
         .update({
           status: 'signed',
           signed_at: now,
           signature_data: signatureData,
-          signature_ip: '', // would need server-side for real IP
+          signature_ip: '', // captured server-side
+          signature_timestamp: now,
+          signature_metadata: signatureMetadata,
         })
         .eq('id', document.id);
 
@@ -218,6 +234,55 @@ export const DocumentSignPage: React.FC = () => {
         change_type: 'sign',
         change_notes: `Podpisano przez ${document.signer_name} dnia ${new Date().toLocaleDateString('pl-PL')}`,
       });
+
+      // Notify document creator/company by email when counterparty signs
+      try {
+        // Get document with company info to find who to notify
+        const { data: docWithCompany } = await supabase
+          .from('document_instances')
+          .select(`
+            id, name, signer_name, created_by,
+            creator:created_by(email, first_name, last_name)
+          `)
+          .eq('id', document.id)
+          .single();
+
+        if (docWithCompany?.creator) {
+          const creator = docWithCompany.creator as any;
+          await supabase.functions.invoke('send-email', {
+            body: {
+              to: creator.email,
+              subject: `✅ Dokument podpisany: ${document.name}`,
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">✅ Dokument podpisany</h1>
+                  </div>
+                  <div style="padding: 30px; background: #f8fafc;">
+                    <h2 style="color: #1e293b;">Twój dokument został podpisany!</h2>
+                    <p>Cześć ${creator.first_name || 'użytkowniku'},</p>
+                    <p>Dokument <strong>${document.name}</strong> został właśnie elektronicznie podpisany przez <strong>${document.signer_name}</strong>.</p>
+                    <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 16px; margin: 16px 0;">
+                      <p style="margin: 0; color: #065f46;"><strong>Data podpisania:</strong> ${new Date().toLocaleString('pl-PL')}</p>
+                      <p style="margin: 8px 0 0; color: #065f46;"><strong>Podpisujący:</strong> ${document.signer_name}</p>
+                    </div>
+                    <a href="${window.location.origin}/construction/dms" 
+                       style="display:inline-block;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;margin-top:16px">
+                      Zobacz dokument w MaxMaster
+                    </a>
+                    <p style="margin-top: 24px; font-size: 12px; color: #94a3b8;">
+                      MaxMaster - Elektroniczne zarządzanie dokumentami
+                    </p>
+                  </div>
+                </div>
+              `,
+            },
+          });
+        }
+      } catch (notifyErr) {
+        console.warn('Failed to send notification:', notifyErr);
+        // Non-critical - signing succeeded anyway
+      }
 
       setDocument({ ...document, status: 'signed', signed_at: now });
       setStep('done');

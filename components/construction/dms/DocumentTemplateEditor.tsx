@@ -164,11 +164,14 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
         if (v.name === 'nazwa_inwestycji' || v.name === 'nazwa_projektu') {
           projFills[v.name] = projData.name;
         }
-        if (v.name === 'adres_inwestycji' || v.name === 'miejsce_pracy' || v.name === 'miejsce') {
+        if (v.name === 'adres_inwestycji' || v.name === 'miejsce_pracy' || v.name === 'miejsce' || v.name === 'adres_obiektu') {
           projFills[v.name] = projData.address || projData.city || '';
         }
-        if (v.name === 'nr_projektu') {
+        if (v.name === 'nr_projektu' || v.name === 'nr_umowy') {
           projFills[v.name] = projData.code || '';
+        }
+        if (v.name === 'opis_robot' && !projFills[v.name]) {
+          projFills[v.name] = `Roboty budowlane na obiekcie ${projData.name || ''}`.trim();
         }
       });
       setValues(prev => ({ ...prev, ...projFills }));
@@ -183,7 +186,7 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
 
     const ctFills: Record<string, string> = {};
     selectedTemplate.variables.forEach(v => {
-      if (v.name === 'kontrahent_nazwa' || v.name === 'wykonawca_nazwa') {
+      if (v.name === 'kontrahent_nazwa' || v.name === 'wykonawca_nazwa' || v.name === 'firma_nazwa') {
         ctFills[v.name] = ct.name;
       }
       if (v.name === 'kontrahent_nip' || v.name === 'wykonawca_nip') {
