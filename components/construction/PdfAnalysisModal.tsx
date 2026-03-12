@@ -63,13 +63,21 @@ interface PdfAnalysisModalProps {
   companyId: string;
   drawingId: string;
   scaleRatio?: number;
+  currentScaleRatio?: number;
   onAnalysisComplete: (analysis: DxfAnalysis, extra?: PdfAnalysisExtra) => void;
   onTakeoffPositionsReady?: (positions: import('./PdfTakeoffWizard').TakeoffPosition[]) => void;
+  onScaleChange?: (scaleRatio: number) => void;
+  onCalibrateScale?: () => void;
+  onAiScaleDetect?: () => void;
+  aiScaleLoading?: boolean;
   onClose: () => void;
 }
 
 export default function PdfAnalysisModal({
-  pdfDoc, pageNumber, companyId, drawingId, scaleRatio, onAnalysisComplete, onTakeoffPositionsReady, onClose,
+  pdfDoc, pageNumber, companyId, drawingId, scaleRatio, currentScaleRatio,
+  onAnalysisComplete, onTakeoffPositionsReady,
+  onScaleChange, onCalibrateScale, onAiScaleDetect, aiScaleLoading,
+  onClose,
 }: PdfAnalysisModalProps) {
   const [step, setStep] = useState<PdfAnalysisStep>('idle');
   const [classification, setClassification] = useState<PdfClassification | null>(null);
@@ -596,6 +604,11 @@ export default function PdfAnalysisModal({
         planId={drawingId}
         companyId={companyId}
         analysisExtra={extra}
+        currentScaleRatio={currentScaleRatio}
+        onScaleChange={onScaleChange}
+        onCalibrateScale={onCalibrateScale ? () => { setShowTakeoffWizard(false); onCalibrateScale(); } : undefined}
+        onAiScaleDetect={onAiScaleDetect}
+        aiScaleLoading={aiScaleLoading}
         onTakeoffCreated={(positions) => {
           setShowTakeoffWizard(false);
           if (onTakeoffPositionsReady) {
