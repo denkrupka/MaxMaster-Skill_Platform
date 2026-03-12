@@ -449,6 +449,7 @@ export const OffersPage: React.FC = () => {
   const [kartotekaLoading, setKartotekaLoading] = useState(false);
   const [kartotekaMode, setKartotekaMode] = useState<'fill_item' | 'add_component'>('add_component');
   const [kartotekaCategories, setKartotekaCategories] = useState<any[]>([]);
+  const [kartotekaSystemCategories, setKartotekaSystemCategories] = useState<any[]>([]);
   const [kartotekaSelectedCategory, setKartotekaSelectedCategory] = useState<string | null>(null);
   const [kartotekaExpandedCats, setKartotekaExpandedCats] = useState<Set<string>>(new Set());
   const [kartotekaViewMode, setKartotekaViewMode] = useState<'list' | 'grid'>('list');
@@ -3514,23 +3515,27 @@ export const OffersPage: React.FC = () => {
     setAiFillProgress('Przygotowywanie pozycji...');
 
     try {
-      // Collect all items that need components
+      // Collect all items from all sections (including nested children)
       const positions: any[] = [];
       const itemRefs: { sectionId: string; itemId: string }[] = [];
 
-      for (const sec of sections) {
-        for (const item of sec.items) {
-          const hasComponents = item.components && item.components.length > 0;
-          if (aiFillMode === 'empty' && hasComponents) continue;
-          positions.push({
-            id: item.id,
-            name: item.name || '',
-            base: '',
-            unit: item.unit || 'szt.',
-          });
-          itemRefs.push({ sectionId: sec.id, itemId: item.id });
+      const collectFromSections = (secs: LocalOfferSection[]) => {
+        for (const sec of secs) {
+          for (const item of sec.items) {
+            const hasComponents = item.components && item.components.length > 0;
+            if (aiFillMode === 'empty' && hasComponents) continue;
+            positions.push({
+              id: item.id,
+              name: item.name || '',
+              base: '',
+              unit: item.unit || 'szt.',
+            });
+            itemRefs.push({ sectionId: sec.id, itemId: item.id });
+          }
+          if (sec.children) collectFromSections(sec.children);
         }
-      }
+      };
+      collectFromSections(sections);
 
       if (positions.length === 0) {
         setAiFillError('Brak pozycji do wypełnienia');
@@ -3559,29 +3564,42 @@ export const OffersPage: React.FC = () => {
       setAiFillProgress('Wypełnianie składników...');
       let filledCount = 0;
 
+      // AI returns: {"r":[[posIdx, [["type","name","unit",norm,"index"], ...]], ...]}
+      // Each component is an array: [type, name, unit, norm, index]
       const results = data.data?.r || [];
       for (const [posIdx, components] of results) {
         if (posIdx >= itemRefs.length) continue;
         const ref = itemRefs[posIdx];
-        const comps = Array.isArray(components?.[0]) ? components : [components];
 
-        for (const compArr of comps) {
-          if (!Array.isArray(compArr)) continue;
-          for (const comp of compArr) {
-            if (!comp || !comp.name) continue;
-            const compType = comp.type || 'material';
-            if (!resourceTypes.includes(compType)) continue;
-            addComponent(ref.sectionId, ref.itemId, {
-              type: compType,
-              name: comp.name,
-              code: comp.code || '',
-              unit: comp.unit || 'szt.',
-              quantity: comp.norm || comp.quantity || 1,
-              unit_price: comp.unit_price || 0,
-              total_price: (comp.norm || comp.quantity || 1) * (comp.unit_price || 0)
-            });
-            filledCount++;
+        if (!Array.isArray(components)) continue;
+        for (const comp of components) {
+          if (!comp) continue;
+
+          // Support both array format [type, name, unit, norm, index] and object format
+          let compType: string, compName: string, compUnit: string, compNorm: number, compCode: string;
+          if (Array.isArray(comp)) {
+            [compType, compName, compUnit, compNorm, compCode] = comp;
+          } else {
+            compType = comp.type || 'material';
+            compName = comp.name || '';
+            compUnit = comp.unit || 'szt.';
+            compNorm = comp.norm || comp.quantity || 1;
+            compCode = comp.code || comp.index || '';
           }
+
+          if (!compName) continue;
+          if (!resourceTypes.includes(compType)) continue;
+
+          addComponent(ref.sectionId, ref.itemId, {
+            type: compType as 'labor' | 'material' | 'equipment',
+            name: compName,
+            code: compCode || '',
+            unit: compUnit || 'szt.',
+            quantity: compNorm || 1,
+            unit_price: 0,
+            total_price: 0
+          });
+          filledCount++;
         }
       }
 
@@ -3605,47 +3623,47 @@ export const OffersPage: React.FC = () => {
       const positions: any[] = [];
       const positionMap: { sectionId: string; itemId: string; componentIds?: string[] }[] = [];
 
-      if (aiFillPriceTarget === 'position') {
-        // Fill unit_price on the item itself
-        for (const sec of sections) {
-          for (const item of sec.items) {
-            if (aiFillMode === 'empty' && item.unit_price > 0) continue;
-            positions.push({
-              id: item.id,
-              name: item.name || '',
-              base: '',
-              unit: item.unit || 'szt.',
-              resources: []
-            });
-            positionMap.push({ sectionId: sec.id, itemId: item.id });
+      const collectFromSections = (secs: LocalOfferSection[]) => {
+        for (const sec of secs) {
+          if (aiFillPriceTarget === 'position') {
+            for (const item of sec.items) {
+              if (aiFillMode === 'empty' && item.unit_price > 0) continue;
+              positions.push({
+                id: item.id,
+                name: item.name || '',
+                base: '',
+                unit: item.unit || 'szt.',
+                resources: []
+              });
+              positionMap.push({ sectionId: sec.id, itemId: item.id });
+            }
+          } else {
+            for (const item of sec.items) {
+              const comps = (item.components || []).filter((c: any) => {
+                if (c.type !== aiFillPriceTarget) return false;
+                if (aiFillMode === 'empty' && c.unit_price > 0) return false;
+                return true;
+              });
+              if (comps.length === 0) continue;
+              positions.push({
+                id: item.id,
+                name: item.name || '',
+                base: '',
+                unit: item.unit || 'szt.',
+                resources: comps.map((c: any) => ({
+                  type: c.type,
+                  name: c.name,
+                  unit: c.unit || 'szt.',
+                  norm: c.quantity || 1
+                }))
+              });
+              positionMap.push({ sectionId: sec.id, itemId: item.id, componentIds: comps.map((c: any) => c.id) });
+            }
           }
+          if (sec.children) collectFromSections(sec.children);
         }
-      } else {
-        // Fill component prices
-        for (const sec of sections) {
-          for (const item of sec.items) {
-            const comps = (item.components || []).filter((c: any) => {
-              if (c.type !== aiFillPriceTarget) return false;
-              if (aiFillMode === 'empty' && c.unit_price > 0) return false;
-              return true;
-            });
-            if (comps.length === 0) continue;
-            positions.push({
-              id: item.id,
-              name: item.name || '',
-              base: '',
-              unit: item.unit || 'szt.',
-              resources: comps.map((c: any) => ({
-                type: c.type,
-                name: c.name,
-                unit: c.unit || 'szt.',
-                norm: c.quantity || 1
-              }))
-            });
-            positionMap.push({ sectionId: sec.id, itemId: item.id, componentIds: comps.map((c: any) => c.id) });
-          }
-        }
-      }
+      };
+      collectFromSections(sections);
 
       if (positions.length === 0) {
         setAiFillError('Brak pozycji do wyceny');
@@ -3669,28 +3687,49 @@ export const OffersPage: React.FC = () => {
       setAiFillProgress('Wypełnianie cen...');
       let filledCount = 0;
 
+      // AI returns: {"r":[[posIdx, [[resource_index, price_PLN], ...]], ...]}
       const results = data.data?.r || [];
       for (const [posIdx, priceData] of results) {
         if (posIdx >= positionMap.length) continue;
         const ref = positionMap[posIdx];
 
         if (aiFillPriceTarget === 'position') {
-          // Set item unit_price directly
-          const price = typeof priceData === 'number' ? priceData :
-            (priceData?.unit_price || priceData?.price || priceData?.[0]?.unit_price || 0);
+          // For position prices, AI returns [[0, price]] format or just a number
+          let price = 0;
+          if (typeof priceData === 'number') {
+            price = priceData;
+          } else if (Array.isArray(priceData)) {
+            // Could be [[0, 52.50]] or [52.50]
+            if (Array.isArray(priceData[0])) {
+              price = priceData[0][1] || 0; // [[resource_index, price]]
+            } else {
+              price = priceData[0] || 0;
+            }
+          } else {
+            price = priceData?.unit_price || priceData?.price || 0;
+          }
           if (price > 0) {
             updateItem(ref.sectionId, ref.itemId, { unit_price: +price.toFixed(2) });
             filledCount++;
           }
         } else {
-          // Set component prices
-          const prices = Array.isArray(priceData) ? priceData : [priceData];
+          // Component prices: [[resource_index, price], ...]
           const compIds = ref.componentIds || [];
-          for (let ci = 0; ci < compIds.length && ci < prices.length; ci++) {
-            const p = typeof prices[ci] === 'number' ? prices[ci] : (prices[ci]?.unit_price || prices[ci]?.price || 0);
-            if (p > 0) {
-              updateComponent(ref.sectionId, ref.itemId, compIds[ci], { unit_price: +p.toFixed(2) });
-              filledCount++;
+          if (Array.isArray(priceData)) {
+            for (const entry of priceData) {
+              let resIdx: number, p: number;
+              if (Array.isArray(entry)) {
+                [resIdx, p] = entry;
+              } else if (typeof entry === 'number') {
+                resIdx = priceData.indexOf(entry);
+                p = entry;
+              } else {
+                continue;
+              }
+              if (p > 0 && resIdx < compIds.length) {
+                updateComponent(ref.sectionId, ref.itemId, compIds[resIdx], { unit_price: +p.toFixed(2) });
+                filledCount++;
+              }
             }
           }
         }
@@ -3898,19 +3937,40 @@ export const OffersPage: React.FC = () => {
       try {
         const tableName = showSearchLabourModal ? 'kosztorys_own_labours' :
           showSearchMaterialModal ? 'kosztorys_materials' : 'kosztorys_equipment';
-        const systemTableName = showSearchLabourModal ? 'kosztorys_system_labours' :
-          showSearchMaterialModal ? 'kosztorys_materials' : 'kosztorys_equipment';
 
-        const [ownRes, systemRes, categoriesRes] = await Promise.all([
+        // Load own data + own categories
+        const [ownRes, categoriesRes] = await Promise.all([
           supabase.from(tableName).select('*').eq('company_id', currentUser.company_id).order('name'),
-          showSearchLabourModal
-            ? supabase.from(systemTableName).select('*').eq('is_active', true).order('name').limit(500)
-            : Promise.resolve({ data: [] }),
           supabase.from('kosztorys_custom_categories').select('*').eq('company_id', currentUser.company_id).order('sort_order')
         ]);
         setKartotekaOwnData(ownRes.data || []);
-        setKartotekaData((systemRes as any).data || []);
         setKartotekaCategories(categoriesRes.data || []);
+
+        // Load system labours catalog with pagination (large dataset) + system categories
+        if (showSearchLabourModal) {
+          const [systemRes, systemCatRes] = await Promise.all([
+            (async () => {
+              const allData: any[] = [];
+              let from = 0;
+              const pageSize = 1000;
+              while (true) {
+                const { data: batch } = await supabase.from('kosztorys_system_labours')
+                  .select('*').eq('is_active', true).order('name').range(from, from + pageSize - 1);
+                if (!batch || batch.length === 0) break;
+                allData.push(...batch);
+                if (batch.length < pageSize) break;
+                from += pageSize;
+              }
+              return allData;
+            })(),
+            supabase.from('kosztorys_system_labour_categories').select('*').order('sort_order')
+          ]);
+          setKartotekaData(systemRes || []);
+          setKartotekaSystemCategories(systemCatRes.data || []);
+        } else {
+          setKartotekaData([]);
+          setKartotekaSystemCategories([]);
+        }
       } catch (err) {
         console.error('Error loading kartoteka:', err);
       } finally {
@@ -9385,24 +9445,46 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           closeKartoteka();
         };
 
-        // Build category tree
-        const rootCats = kartotekaCategories.filter(c => !c.parent_id);
-        const childCatsOf = (parentId: string) => kartotekaCategories.filter(c => c.parent_id === parentId);
+        // Build category tree — use system categories for system tab, own categories for own tab
+        const activeCats = kartotekaTab === 'system' ? kartotekaSystemCategories : kartotekaCategories;
+        const rootCats = activeCats.filter((c: any) => !c.parent_id);
+        const childCatsOf = (parentId: string) => activeCats.filter((c: any) => c.parent_id === parentId);
 
         // Filter items by search + category
         const currentData = kartotekaTab === 'own' ? kartotekaOwnData : kartotekaData;
-        const filteredKartotekaItems = currentData.filter(item => {
+
+        // System labours use category_path for matching, own use category_id
+        const getSelectedCategoryPath = (): string | null => {
+          if (!kartotekaSelectedCategory || kartotekaTab !== 'system') return null;
+          const cat = kartotekaSystemCategories.find((c: any) => c.id === kartotekaSelectedCategory);
+          return cat?.path || cat?.name || null;
+        };
+        const selectedCatPath = getSelectedCategoryPath();
+
+        const filteredKartotekaItems = currentData.filter((item: any) => {
           const matchesSearch = !kartotekaSearchText ||
             (item.name || '').toLowerCase().includes(kartotekaSearchText.toLowerCase()) ||
-            (item.code || '').toLowerCase().includes(kartotekaSearchText.toLowerCase());
-          const matchesCategory = !kartotekaSelectedCategory ||
-            item.category_id === kartotekaSelectedCategory;
+            (item.code || '').toLowerCase().includes(kartotekaSearchText.toLowerCase()) ||
+            (item.tags || '').toLowerCase().includes(kartotekaSearchText.toLowerCase());
+          let matchesCategory = true;
+          if (kartotekaSelectedCategory) {
+            if (kartotekaTab === 'system') {
+              matchesCategory = selectedCatPath ? (item.category_path || '').startsWith(selectedCatPath) : false;
+            } else {
+              matchesCategory = item.category_id === kartotekaSelectedCategory;
+            }
+          }
           return matchesSearch && matchesCategory;
         }).slice(0, 100);
 
         // Count items per category
-        const catCounts = kartotekaCategories.reduce((acc: Record<string, number>, cat: any) => {
-          acc[cat.id] = currentData.filter(i => i.category_id === cat.id).length;
+        const catCounts = activeCats.reduce((acc: Record<string, number>, cat: any) => {
+          if (kartotekaTab === 'system') {
+            const catPath = cat.path || cat.name || '';
+            acc[cat.id] = currentData.filter((i: any) => (i.category_path || '').startsWith(catPath)).length;
+          } else {
+            acc[cat.id] = currentData.filter((i: any) => i.category_id === cat.id).length;
+          }
           return acc;
         }, {} as Record<string, number>);
 
@@ -9471,9 +9553,17 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             <div className="px-6 pt-4 pb-3 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-1">
                 <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                  {showSearchLabourModal && (
+                    <button
+                      onClick={() => { setKartotekaMainTab('katalog'); setKartotekaTab('system'); setKartotekaSelectedCategory(null); }}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition ${kartotekaMainTab === 'katalog' && kartotekaTab === 'system' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Katalog Systemowy
+                    </button>
+                  )}
                   <button
-                    onClick={() => { setKartotekaMainTab('katalog'); setKartotekaTab('own'); }}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition ${kartotekaMainTab === 'katalog' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    onClick={() => { setKartotekaMainTab('katalog'); setKartotekaTab('own'); setKartotekaSelectedCategory(null); }}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition ${kartotekaMainTab === 'katalog' && kartotekaTab === 'own' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                   >
                     Własny katalog
                   </button>
