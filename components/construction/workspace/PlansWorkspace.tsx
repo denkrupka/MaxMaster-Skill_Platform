@@ -1,5 +1,5 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload, Ruler, Sparkles, PanelLeftOpen } from 'lucide-react';
+import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload, Ruler, Sparkles, PanelLeftOpen, Share2, ExternalLink, Link, Copy, Check } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../../../context/AppContext';
@@ -697,6 +697,10 @@ export const PlansWorkspace: React.FC = () => {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
   const [uploadFileName, setUploadFileName] = React.useState('');
+  const [showShareModal, setShowShareModal] = React.useState(false);
+  const [shareUrl, setShareUrl] = React.useState('');
+  const [linkAnnotModal, setLinkAnnotModal] = React.useState<{ annotId: string } | null>(null);
+  const [copyConfirm, setCopyConfirm] = React.useState(false);
 
   const handleDropFile = useCallback(async (file: File) => {
     if (!selectedProject || !currentUser) {
@@ -1306,13 +1310,11 @@ export const PlansWorkspace: React.FC = () => {
 
   const handleShareLink = useCallback(() => {
     if (!selectedPlan) return;
-    const shareUrl = `${window.location.origin}/#/public/plan-view?planId=${selectedPlan.id}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      notify('Link skopiowany do schowka! (tylko do odczytu)');
-    }).catch(() => {
-      prompt('Skopiuj link do udostepnienia:', shareUrl);
-    });
-  }, [selectedPlan, notify]);
+    const url = `${window.location.origin}/#/public/plan-view?planId=${selectedPlan.id}`;
+    setShareUrl(url);
+    setShowShareModal(true);
+    setCopyConfirm(false);
+  }, [selectedPlan]);
 
   // ---- Back to projects ----
 
@@ -4009,21 +4011,10 @@ export const PlansWorkspace: React.FC = () => {
           }}
           onLinkAnnotationToBoq={(id) => {
             if (boqRows.length === 0) {
-              notify('Brak pozycji BOQ do polaczenia. Najpierw wygeneruj BOQ.', 'error');
+              notify('Brak pozycji BOQ do połączenia. Najpierw wygeneruj BOQ.', 'error');
               return;
             }
-            // Show selection dialog
-            const options = boqRows.map(r => `${r.code || r.id.slice(0, 8)} — ${r.name} (${r.quantity} ${r.unit})`).join('\n');
-            const input = window.prompt(`Wybierz pozycję BOQ (1-${boqRows.length}):\n${options}`, '1');
-            if (!input) return;
-            const idx = parseInt(input, 10) - 1;
-            if (idx < 0 || idx >= boqRows.length) {
-              notify('Nieprawidłowy numer pozycji', 'error');
-              return;
-            }
-            const row = boqRows[idx];
-            setAnnotations(prev => prev.map(a => a.id === id ? { ...a, linkedBoqRowId: row.id } : a));
-            notify(`Adnotacja połączona z: ${row.name}`);
+            setLinkAnnotModal({ annotId: id });
           }}
           // Measurements tab
           onRenameMeasurement={(id) => {
@@ -4613,6 +4604,94 @@ export const PlansWorkspace: React.FC = () => {
           notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
         }`}>
           {notification.msg}
+        </div>
+      )}
+
+      {/* ── Share Link Modal ───────────────────────────────────────── */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl w-[480px] p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-blue-600" />
+                Udostępnij rysunek (tylko do odczytu)
+              </h3>
+              <button onClick={() => setShowShareModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Każdy z tym linkiem może przeglądać rysunek bez możliwości edycji.
+            </p>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={shareUrl}
+                className="flex-1 text-xs px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-600 font-mono"
+                onClick={e => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(shareUrl).then(() => {
+                    setCopyConfirm(true);
+                    setTimeout(() => setCopyConfirm(false), 2000);
+                  });
+                }}
+                className={`px-3 py-2 text-xs font-medium rounded-lg transition flex items-center gap-1.5 ${
+                  copyConfirm ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                {copyConfirm ? <><Check className="w-3.5 h-3.5" /> Skopiowano!</> : <><Copy className="w-3.5 h-3.5" /> Kopiuj</>}
+              </button>
+            </div>
+            <div className="flex justify-between items-center pt-1">
+              <a href={shareUrl} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <ExternalLink className="w-3 h-3" /> Otwórz w nowej karcie
+              </a>
+              <button onClick={() => setShowShareModal(false)} className="text-xs text-slate-500 hover:text-slate-700">Zamknij</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Link Annotation → BOQ Modal ───────────────────────────── */}
+      {linkAnnotModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <h3 className="font-semibold text-slate-800 text-sm">Połącz adnotację z pozycją BOQ</h3>
+              <button onClick={() => setLinkAnnotModal(null)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {boqRows.map((row, i) => (
+                <button
+                  key={row.id}
+                  onClick={() => {
+                    setAnnotations(prev => prev.map(a =>
+                      a.id === linkAnnotModal.annotId ? { ...a, linkedBoqRowId: row.id } : a
+                    ));
+                    notify(`Adnotacja połączona z: ${row.name}`);
+                    setLinkAnnotModal(null);
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-slate-50 flex items-center gap-3 transition"
+                >
+                  <span className="text-xs font-mono text-slate-400 w-6 flex-shrink-0">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{row.name}</p>
+                    <p className="text-xs text-slate-400">{row.quantity} {row.unit} · {row.category || 'Inne'}</p>
+                  </div>
+                  <Link className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+            <div className="px-4 py-3 border-t">
+              <button onClick={() => setLinkAnnotModal(null)} className="w-full text-xs text-slate-500 hover:text-slate-700">Anuluj</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
