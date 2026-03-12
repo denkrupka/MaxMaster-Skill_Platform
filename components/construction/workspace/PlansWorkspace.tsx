@@ -2239,6 +2239,20 @@ export const PlansWorkspace: React.FC = () => {
         return;
       }
 
+      // PDF page navigation
+      if (fileFormat === 'pdf' && pdfTotalPages > 1) {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+          e.preventDefault();
+          setPdfPage(p => Math.min(pdfTotalPages, p + 1));
+          return;
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          e.preventDefault();
+          setPdfPage(p => Math.max(1, p - 1));
+          return;
+        }
+      }
+
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         switch (e.key.toLowerCase()) {
           case 'v': dispatch({ type: 'SET_ACTIVE_TOOL', tool: 'select' }); break;
@@ -2261,7 +2275,7 @@ export const PlansWorkspace: React.FC = () => {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [ws.isFullscreen, textInput, isDrawing, ws.activeTool, finalizeMeasurement, handleSave]);
+  }, [ws.isFullscreen, textInput, isDrawing, ws.activeTool, finalizeMeasurement, handleSave, fileFormat, pdfTotalPages]);
 
   // ---- SVG Overlay Rendering ----
 
