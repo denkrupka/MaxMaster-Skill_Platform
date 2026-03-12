@@ -694,6 +694,56 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Import ----
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = React.useState(false);
+
+  const handleDropFile = useCallback(async (file: File) => {
+    if (!selectedProject || !currentUser) {
+      notify('Wybierz projekt przed wczytaniem pliku', 'error');
+      return;
+    }
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `plans/${selectedProject.id}/${Date.now()}_${safeName}`;
+      const { error: uploadErr } = await supabase.storage.from('plan-files').upload(path, file);
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from('plan-files').getPublicUrl(path);
+
+      let componentId: string;
+      const { data: existingComp } = await supabase.from('plan_components').select('id')
+        .eq('project_id', selectedProject.id).limit(1).single();
+      if (existingComp) {
+        componentId = existingComp.id;
+      } else {
+        const { data: newComp, error: compErr } = await supabase.from('plan_components').insert({
+          project_id: selectedProject.id,
+          name: 'Glowny',
+          sort_order: 0,
+          created_by_id: currentUser.id,
+        }).select('id').single();
+        if (compErr || !newComp) throw compErr || new Error('Nie udalo sie utworzyc komponentu');
+        componentId = newComp.id;
+      }
+
+      const { error: insertErr } = await supabase.from('plans').insert({
+        project_id: selectedProject.id,
+        component_id: componentId,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        file_url: urlData.publicUrl,
+        original_filename: file.name,
+        mime_type: file.type,
+        file_size: file.size,
+        version: 1,
+        is_current_version: true,
+        sort_order: allPlans.length,
+        created_by_id: currentUser.id,
+      });
+      if (insertErr) throw insertErr;
+      notify('Plik zostal wczytany z przesuniecia');
+      loadPlansData();
+    } catch (err: any) {
+      notify(err.message || 'Blad przesylania pliku', 'error');
+    }
+  }, [selectedProject, currentUser, allPlans.length, notify]);
 
   const handleImport = useCallback(() => {
     fileInputRef.current?.click();
@@ -3579,7 +3629,7 @@ export const PlansWorkspace: React.FC = () => {
                 {imgNaturalSize.w > 0 && renderOverlaySvg(imgNaturalSize.w, imgNaturalSize.h)}
               </div>
             </div>
-          ) : (
+          ) : needsConversion ? (
             <div className="w-full h-full flex items-center justify-center p-8 text-center">
               <div>
                 <p className="text-sm text-slate-500 mb-4">Ten format pliku wymaga konwersji.</p>
@@ -3587,6 +3637,40 @@ export const PlansWorkspace: React.FC = () => {
                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
                   Konwertuj i otworz
                 </button>
+              </div>
+            </div>
+          ) : !activeFile ? (
+            <div
+              className={`w-full h-full flex items-center justify-center transition-colors ${isDragOver ? 'bg-blue-50' : 'bg-slate-50'}`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragOver(false);
+                const f = e.dataTransfer.files[0];
+                if (f) handleDropFile(f);
+              }}
+            >
+              <div className="text-center max-w-sm">
+                <div className={`w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center transition-colors ${isDragOver ? 'bg-blue-100' : 'bg-slate-100'}`}>
+                  <Upload className={`w-8 h-8 ${isDragOver ? 'text-blue-600' : 'text-slate-400'}`} />
+                </div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                  {isDragOver ? 'Upuść plik tutaj' : 'Wybierz plik z panelu lub przeciągnij tutaj'}
+                </h3>
+                <p className="text-xs text-slate-400 mb-4">PDF, DWG, DXF, IFC, RVT, obrazy</p>
+                <button
+                  onClick={handleImport}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                >
+                  Wczytaj plik
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center p-8 text-center">
+              <div>
+                <p className="text-sm text-slate-500 mb-4">Nieobsługiwany format pliku.</p>
               </div>
             </div>
           )}
