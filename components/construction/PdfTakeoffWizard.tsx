@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react';
-import { Sparkles, Loader2, CheckCircle, AlertTriangle, Play, X, Scale, Ruler, Settings2 } from 'lucide-react';
+import React, { useState, useCallback, useRef } from 'react';
+import { Sparkles, Loader2, CheckCircle, AlertTriangle, Play, X, Scale, Ruler, Settings2, FilePlus, Edit2, Check } from 'lucide-react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { supabase } from '../../lib/supabase';
 import type { PdfAnalysisExtra } from '../../lib/pdfAnalyzer';
+import { useNavigate } from 'react-router-dom';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,41 @@ interface PdfTakeoffWizardProps {
 }
 
 type WizardStep = 'scale' | 'rendering' | 'analyzing' | 'result' | 'saving' | 'done';
+
+// ─── Toast notification (internal) ────────────────────────────────────────────
+
+interface ToastProps {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+function Toast({ message, type }: ToastProps) {
+  const bg = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+  return (
+    <div className={`fixed bottom-6 right-6 z-[500] flex items-center gap-2 px-4 py-2.5 rounded-lg text-white text-sm shadow-xl ${bg}`}>
+      {type === 'success' && <CheckCircle size={14} />}
+      {type === 'error' && <AlertTriangle size={14} />}
+      {type === 'info' && <Sparkles size={14} />}
+      <span>{message}</span>
+    </div>
+  );
+}
+
+// ─── Progress bar ─────────────────────────────────────────────────────────────
+
+function ProgressBar({ step }: { step: WizardStep }) {
+  const steps: WizardStep[] = ['scale', 'rendering', 'analyzing', 'result', 'saving', 'done'];
+  const idx = steps.indexOf(step);
+  const progress = Math.min(100, Math.round((idx / (steps.length - 1)) * 100));
+  return (
+    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+      <div
+        className="h-1.5 rounded-full transition-all duration-500"
+        style={{ width: `${progress}%`, background: step === 'done' ? '#16a34a' : step === 'analyzing' ? '#7c3aed' : '#2563eb' }}
+      />
+    </div>
+  );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -165,6 +201,48 @@ function ScaleSettingsModal({ currentScaleRatio, aiScaleLoading, onScaleChange, 
   );
 }
 
+// ─── Editable quantity cell ────────────────────────────────────────────────────
+
+function EditableQty({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const commit = () => {
+    const n = parseFloat(draft);
+    if (!isNaN(n) && n >= 0) onChange(n);
+    else setDraft(String(value));
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        autoFocus
+        type="number"
+        min="0"
+        step="1"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(String(value)); setEditing(false); } }}
+        className="w-16 text-right text-xs font-mono border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      />
+    );
+  }
+  return (
+    <button
+      onClick={() => { setDraft(String(value)); setEditing(true); }}
+      className="flex items-center gap-0.5 text-right font-mono text-gray-800 hover:text-blue-700 group"
+      title="Kliknij aby edytowac"
+    >
+      <span>{value > 0 ? value : <span className="text-gray-300">—</span>}</span>
+      <Edit2 size={9} className="text-gray-300 group-hover:text-blue-500 ml-0.5" />
+    </button>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function PdfTakeoffWizard({
@@ -172,13 +250,16 @@ export default function PdfTakeoffWizard({
   currentScaleRatio, onScaleChange, onCalibrateScale, onAiScaleDetect, aiScaleLoading,
   onTakeoffCreated, onClose,
 }: PdfTakeoffWizardProps) {
+  const navigate = useNavigate();
   const [step, setStep] = useState<WizardStep>('scale');
   const [statusMsg, setStatusMsg] = useState('');
   const [positions, setPositions] = useState<TakeoffPosition[]>([]);
   const [error, setError] = useState('');
-  const [claudeRaw, setClaudeRaw] = useState<any>(null);
-  const [geminiRaw, setGeminiRaw] = useState<any>(null);
+  const [claudeRaw, setClaudeRaw] = useState<unknown>(null);
+  const [geminiRaw, setGeminiRaw] = useState<unknown>(null);
   const [showScaleModal, setShowScaleModal] = useState(false);
+  const [toast, setToast] = useState<ToastProps | null>(null);
+  const [creatingOffer, setCreatingOffer] = useState(false);
 
   const detectedScale = analysisExtra.scaleInfo?.scaleText || null;
   const [scaleConfirmed, setScaleConfirmed] = useState(false);
@@ -191,6 +272,15 @@ export default function PdfTakeoffWizard({
   const isLoading = step === 'rendering' || step === 'analyzing' || step === 'saving';
   const reviewCount = positions.filter(p => p.needsReview).length;
 
+  const showToast = useCallback((message: string, type: ToastProps['type'] = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const updatePositionCount = useCallback((index: number, newCount: number) => {
+    setPositions(prev => prev.map((p, i) => i === index ? { ...p, count: newCount, needsReview: newCount === 0 || p.needsReview } : p));
+  }, []);
+
   const run = useCallback(async () => {
     setError('');
     setStep('rendering');
@@ -201,13 +291,15 @@ export default function PdfTakeoffWizard({
       const page = await pdfDoc.getPage(pageNumber);
       pageBase64 = await renderPageToBase64(page);
     } catch (e) {
-      setError(`Błąd renderowania: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = `Błąd renderowania: ${e instanceof Error ? e.message : String(e)}`;
+      setError(msg);
+      showToast(msg, 'error');
       setStep('scale');
       return;
     }
 
     setStep('analyzing');
-    setStatusMsg('Claude analizuje rysunek i liczy elementy…');
+    setStatusMsg('AI analizuje rysunek — proszę czekać…');
 
     const [claudeRes, geminiRes] = await Promise.allSettled([
       supabase.functions.invoke('pdf-analyze-raster', {
@@ -224,23 +316,40 @@ export default function PdfTakeoffWizard({
       }),
     ]);
 
-    const claudeData = claudeRes.status === 'fulfilled' ? (claudeRes.value.data?.data || claudeRes.value.data || {}) : {};
-    const geminiData = geminiRes.status === 'fulfilled' ? (geminiRes.value.data?.data || geminiRes.value.data || {}) : {};
-
-    setClaudeRaw(claudeData);
-    setGeminiRaw(geminiData);
-
-    const claudeSymbols: any[] = claudeData.symbols || [];
-    const claudeRoutes: any[] = claudeData.routes || [];
-    const geminiEntries: any[] = geminiData.entries || [];
-
-    if (!claudeSymbols.length && !geminiEntries.length) {
-      setError('AI nie wykryło żadnych elementów. Sprawdź czy rysunek zawiera legendę i elementy instalacji.');
+    if (claudeRes.status === 'rejected' && geminiRes.status === 'rejected') {
+      const msg = `Błąd AI: ${claudeRes.reason?.message || 'Nieznany błąd'}`;
+      setError(msg);
+      showToast(msg, 'error');
       setStep('scale');
       return;
     }
 
-    const geminiMap = new Map<string, any>();
+    const claudeData = claudeRes.status === 'fulfilled' ? (claudeRes.value.data?.data || claudeRes.value.data || {}) : {};
+    const geminiData = geminiRes.status === 'fulfilled' ? (geminiRes.value.data?.data || geminiRes.value.data || {}) : {};
+
+    if (claudeRes.status === 'rejected') {
+      showToast('Claude nie odpowiedział — używam tylko danych z legendy', 'info');
+    }
+    if (geminiRes.status === 'rejected') {
+      showToast('Analiza legendy nie powiodła się — liczę tylko z Claude', 'info');
+    }
+
+    setClaudeRaw(claudeData);
+    setGeminiRaw(geminiData);
+
+    const claudeSymbols: Array<{ type?: string; name?: string; legendRef?: string; category?: string; count?: number; description?: string }> = (claudeData as any).symbols || [];
+    const claudeRoutes: Array<{ type?: string; name?: string; estimatedLengthM?: number; description?: string }> = (claudeData as any).routes || [];
+    const geminiEntries: Array<{ label?: string; category?: string; description?: string; entryType?: string }> = (geminiData as any).entries || [];
+
+    if (!claudeSymbols.length && !geminiEntries.length) {
+      const msg = 'AI nie wykryło żadnych elementów. Sprawdź czy rysunek zawiera legendę i elementy instalacji.';
+      setError(msg);
+      showToast(msg, 'error');
+      setStep('scale');
+      return;
+    }
+
+    const geminiMap = new Map<string, typeof geminiEntries[0]>();
     for (const ge of geminiEntries) {
       geminiMap.set((ge.label || '').toLowerCase().trim(), ge);
     }
@@ -304,18 +413,21 @@ export default function PdfTakeoffWizard({
     }
 
     if (!result.length) {
-      setError('Brak rozpoznanych elementów. Sprawdź jakość rysunku.');
+      const msg = 'Brak rozpoznanych elementów. Sprawdź jakość rysunku.';
+      setError(msg);
+      showToast(msg, 'error');
       setStep('scale');
       return;
     }
 
     setPositions(result);
+    showToast(`Wykryto ${result.length} pozycji przedmiaru`, 'success');
     setStep('result');
-  }, [pdfDoc, pageNumber, analysisExtra]);
+  }, [pdfDoc, pageNumber, analysisExtra, showToast]);
 
   const saveAndCreate = useCallback(async () => {
     setStep('saving');
-    setStatusMsg('Zapisuję…');
+    setStatusMsg('Zapisuję przedmiar…');
     try {
       await supabase.from('drawing_analyses').upsert({
         plan_id: planId,
@@ -326,6 +438,11 @@ export default function PdfTakeoffWizard({
       }, { onConflict: 'plan_id,page_number' });
 
       if (positions.length > 0) {
+        // Delete old results for this plan page first
+        await supabase.from('drawing_takeoff_results')
+          .delete()
+          .eq('plan_id', planId);
+
         await supabase.from('drawing_takeoff_results').insert(
           positions.map((p, i) => ({
             plan_id: planId,
@@ -344,18 +461,99 @@ export default function PdfTakeoffWizard({
         );
       }
 
+      showToast(`Przedmiar zapisany: ${positions.filter(p => p.count > 0).length} pozycji z ilościami`, 'success');
       setStep('done');
       onTakeoffCreated(positions);
     } catch (e) {
-      setError(`Błąd zapisu: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = `Błąd zapisu: ${e instanceof Error ? e.message : String(e)}`;
+      setError(msg);
+      showToast(msg, 'error');
       setStep('result');
     }
-  }, [positions, planId, companyId, claudeRaw, geminiRaw, onTakeoffCreated, pageNumber]);
+  }, [positions, planId, companyId, claudeRaw, geminiRaw, onTakeoffCreated, pageNumber, showToast]);
+
+  const createOffer = useCallback(async () => {
+    if (!companyId) {
+      showToast('Brak identyfikatora firmy', 'error');
+      return;
+    }
+    setCreatingOffer(true);
+    try {
+      // Get next offer number
+      const { count: offerCount } = await supabase
+        .from('offers')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId);
+      const nextNum = (offerCount || 0) + 1;
+      const offerNumber = `OFR-${new Date().getFullYear()}-${String(nextNum).padStart(4, '0')}`;
+
+      // Create offer
+      const { data: newOffer, error: offerError } = await supabase
+        .from('offers')
+        .insert({
+          company_id: companyId,
+          number: offerNumber,
+          name: `Przedmiar AI — Strona ${pageNumber}`,
+          status: 'draft',
+          currency_id: 'PLN',
+        })
+        .select()
+        .single();
+
+      if (offerError || !newOffer) {
+        throw new Error(offerError?.message || 'Błąd tworzenia oferty');
+      }
+
+      // Group by category
+      const byCategory = positions.reduce((acc, p) => {
+        const cat = p.category || 'Inne';
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(p);
+        return acc;
+      }, {} as Record<string, TakeoffPosition[]>);
+
+      for (const [catIdx, [catName, catItems]] of Object.entries(byCategory).entries()) {
+        const { data: section, error: secErr } = await supabase
+          .from('offer_sections')
+          .insert({ offer_id: newOffer.id, name: catName, sort_order: catIdx })
+          .select()
+          .single();
+
+        if (secErr || !section) continue;
+
+        const itemsToInsert = catItems.map((p, pIdx) => ({
+          offer_id: newOffer.id,
+          section_id: section.id,
+          name: p.name || 'Pozycja',
+          description: p.description || '',
+          quantity: p.count || 0,
+          unit: p.unit || 'szt.',
+          unit_price: 0,
+          sort_order: pIdx,
+          is_optional: false,
+        }));
+
+        if (itemsToInsert.length > 0) {
+          await supabase.from('offer_items').insert(itemsToInsert);
+        }
+      }
+
+      showToast(`Oferta ${offerNumber} utworzona! Przekierowuję…`, 'success');
+      setTimeout(() => {
+        navigate(`/construction/offers?offerId=${newOffer.id}`);
+      }, 1200);
+    } catch (e) {
+      const msg = `Błąd tworzenia oferty: ${e instanceof Error ? e.message : String(e)}`;
+      showToast(msg, 'error');
+    } finally {
+      setCreatingOffer(false);
+    }
+  }, [positions, companyId, pageNumber, navigate, showToast]);
 
   return (
     <>
       <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col">
+        <div className="bg-white rounded-xl shadow-2xl w-[720px] max-h-[88vh] flex flex-col">
 
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b">
@@ -367,6 +565,18 @@ export default function PdfTakeoffWizard({
               )}
             </div>
             <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={16} /></button>
+          </div>
+
+          {/* Progress bar */}
+          <div className="px-4 pt-2 pb-1">
+            <ProgressBar step={step} />
+            <div className="flex justify-between mt-1">
+              {(['scale', 'analyzing', 'result', 'done'] as WizardStep[]).map(s => (
+                <span key={s} className={`text-[9px] font-medium ${step === s ? 'text-blue-600' : 'text-gray-300'}`}>
+                  {s === 'scale' ? 'Skala' : s === 'analyzing' ? 'Analiza AI' : s === 'result' ? 'Weryfikacja' : 'Gotowe'}
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* Body */}
@@ -440,17 +650,28 @@ export default function PdfTakeoffWizard({
               </div>
             )}
 
-            {/* Loading */}
+            {/* Loading with status message */}
             {isLoading && (
-              <div className="flex items-center gap-2 py-6 justify-center">
-                <Loader2 size={16} className="text-blue-600 animate-spin" />
+              <div className="flex flex-col items-center gap-3 py-8">
+                <Loader2 size={28} className="text-blue-600 animate-spin" />
                 <span className="text-sm text-gray-600">{statusMsg}</span>
+                {step === 'analyzing' && (
+                  <p className="text-[11px] text-gray-400 text-center max-w-sm">
+                    Claude Vision analizuje symbole i trasy…<br />
+                    Gemini sprawdza legendę…<br />
+                    To może potrwać 20–40 sekund.
+                  </p>
+                )}
               </div>
             )}
 
             {error && (
-              <div className="text-xs text-red-600 bg-red-50 border border-red-100 p-2 rounded flex items-center gap-1.5">
-                <AlertTriangle size={12} className="shrink-0" />{error}
+              <div className="text-xs text-red-600 bg-red-50 border border-red-100 p-3 rounded flex items-start gap-2">
+                <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium mb-0.5">Wystąpił błąd</p>
+                  <p>{error}</p>
+                </div>
               </div>
             )}
 
@@ -465,6 +686,9 @@ export default function PdfTakeoffWizard({
                       <AlertTriangle size={11} /> Do weryfikacji: {reviewCount}
                     </span>
                   )}
+                  <span className="ml-auto text-[10px] text-gray-400 flex items-center gap-1">
+                    <Edit2 size={10} /> Kliknij ilość aby edytować
+                  </span>
                 </div>
 
                 <div className="border rounded-lg overflow-hidden">
@@ -489,8 +713,11 @@ export default function PdfTakeoffWizard({
                           <td className="px-3 py-2 text-gray-500 max-w-[120px]">
                             <div className="truncate" title={pos.category}>{pos.category}</div>
                           </td>
-                          <td className="px-3 py-2 text-right font-mono text-gray-800">
-                            {pos.count > 0 ? pos.count : <span className="text-gray-300">—</span>}
+                          <td className="px-3 py-2 text-right">
+                            <EditableQty
+                              value={pos.count}
+                              onChange={(v) => updatePositionCount(i, v)}
+                            />
                           </td>
                           <td className="px-3 py-2 text-gray-500">{pos.unit}</td>
                           <td className="px-3 py-2 text-center">
@@ -514,7 +741,7 @@ export default function PdfTakeoffWizard({
                 {reviewCount > 0 && (
                   <p className="mt-1.5 text-xs text-amber-700 flex items-center gap-1">
                     <AlertTriangle size={11} />
-                    {reviewCount} pozycji do ręcznej weryfikacji — zostaną uwzględnione.
+                    {reviewCount} pozycji do ręcznej weryfikacji — kliknij ilość aby poprawić.
                   </p>
                 )}
               </div>
@@ -523,7 +750,7 @@ export default function PdfTakeoffWizard({
             {step === 'done' && (
               <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2">
                 <CheckCircle size={14} />
-                <span>Zapisano {positions.length} pozycji.</span>
+                <span>Zapisano {positions.length} pozycji w tabeli przedmiaru.</span>
               </div>
             )}
           </div>
@@ -553,12 +780,32 @@ export default function PdfTakeoffWizard({
                 </>
               )}
               {step === 'result' && positions.length > 0 && (
+                <>
+                  <button
+                    onClick={saveAndCreate}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    <Check size={13} />
+                    Zapisz przedmiar ({positions.filter(p => p.count > 0).length} poz.)
+                  </button>
+                  <button
+                    onClick={createOffer}
+                    disabled={creatingOffer}
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    {creatingOffer ? <Loader2 size={13} className="animate-spin" /> : <FilePlus size={13} />}
+                    Utwórz ofertę
+                  </button>
+                </>
+              )}
+              {step === 'done' && (
                 <button
-                  onClick={saveAndCreate}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                  onClick={createOffer}
+                  disabled={creatingOffer}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50"
                 >
-                  <Sparkles size={13} />
-                  Utwórz przedmiar ({positions.filter(p => p.count > 0).length} pozycji)
+                  {creatingOffer ? <Loader2 size={13} className="animate-spin" /> : <FilePlus size={13} />}
+                  Utwórz ofertę z przedmiaru
                 </button>
               )}
             </div>
@@ -582,6 +829,9 @@ export default function PdfTakeoffWizard({
           onClose={() => setShowScaleModal(false)}
         />
       )}
+
+      {/* Toast notification */}
+      {toast && <Toast message={toast.message} type={toast.type} />}
     </>
   );
 }
