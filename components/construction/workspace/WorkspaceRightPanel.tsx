@@ -968,6 +968,13 @@ const BoqTab: React.FC<WorkspaceRightPanelProps> = (props) => {
                 title="Excel">
                 XLS
               </button>
+              {props.onCreateOfferFromBoq && (
+                <button onClick={props.onCreateOfferFromBoq}
+                  className="px-1.5 py-1 text-[10px] font-medium bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200"
+                  title="Utwórz ofertę z BOQ">
+                  <FilePlus className="w-3 h-3" />
+                </button>
+              )}
             </div>
           )}
         </div>
