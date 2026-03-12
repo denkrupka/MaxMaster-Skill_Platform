@@ -24,7 +24,11 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
       state.currentCompany &&
       state.currentCompany.onboarding_completed === false
     ) {
-      setShowOnboarding(true);
+      // Don't re-show if user already skipped it this session
+      const skipped = localStorage.getItem(`onboarding_skipped_${state.currentCompany.id}`);
+      if (!skipped) {
+        setShowOnboarding(true);
+      }
     }
   }, [state.currentUser?.role, state.currentCompany?.onboarding_completed, state.currentCompany?.id]);
 

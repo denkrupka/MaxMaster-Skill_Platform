@@ -143,6 +143,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onClose }) =
 
   const handleSkip = async () => {
     setSkipping(true);
+    // Save skip state to localStorage so we don't re-show
+    const companyId = state.currentCompany?.id;
+    if (companyId) {
+      localStorage.setItem(`onboarding_skipped_${companyId}`, 'true');
+    }
     await markComplete();
     setSkipping(false);
     navigate('/dashboard');
@@ -392,6 +397,18 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onClose }) =
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
+
+  // Escape key to skip
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleSkip();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">

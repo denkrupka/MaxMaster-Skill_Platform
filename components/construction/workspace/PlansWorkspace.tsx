@@ -1,5 +1,5 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload, Ruler, Sparkles, PanelLeftOpen, Share2, ExternalLink, Link, Copy, Check } from 'lucide-react';
+import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload, FileUp, File, Ruler, Sparkles, PanelLeftOpen, Share2, ExternalLink, Link, Copy, Check } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../../../context/AppContext';
@@ -94,6 +94,7 @@ export const PlansWorkspace: React.FC = () => {
 
   // ---- Data state ----
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectFileCounts, setProjectFileCounts] = useState<Record<string, number>>({});
   const [customers, setCustomers] = useState<{ id: string; name: string; nip?: string; address_city?: string }[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string; kod_obiektu?: string; rodzaj?: string; typ?: string; address_street?: string; address_city?: string; address_postal_code?: string; client_id?: string }[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -326,6 +327,20 @@ export const PlansWorkspace: React.FC = () => {
       if (projRes.data) setProjects(projRes.data);
       if (custRes.data) setCustomers(custRes.data);
       if (deptRes.data) setDepartments(deptRes.data);
+      // Load file counts for each project
+      if (projRes.data && projRes.data.length > 0) {
+        const counts: Record<string, number> = {};
+        await Promise.all(projRes.data.map(async (proj) => {
+          const { count } = await supabase
+            .from('plans')
+            .select('id', { count: 'exact', head: true })
+            .eq('project_id', proj.id)
+            .eq('is_current_version', true)
+            .is('deleted_at', null);
+          counts[proj.id] = count || 0;
+        }));
+        setProjectFileCounts(counts);
+      }
     } catch (err) {
       console.error('Load projects error:', err);
     } finally {
@@ -2856,6 +2871,12 @@ export const PlansWorkspace: React.FC = () => {
     );
   }
 
+  // Helper: strip internal UUID fields from display strings
+  const cleanDisplayText = (text: string | null | undefined): string | null => {
+    if (!text) return null;
+    return text.replace(/kosztorys_source:[a-f0-9-]+/gi, '').replace(/\s+/g, ' ').trim() || null;
+  };
+
   if (!selectedProject) {
     const q = projectSearch.toLowerCase();
     const filtered = projects.filter(p => {
@@ -2984,6 +3005,7 @@ export const PlansWorkspace: React.FC = () => {
                     <SortHeader label="Status" sortKey="status" />
                     <SortHeader label="Utworzony" sortKey="created_at" />
                     <SortHeader label="Aktualizacja" sortKey="updated_at" />
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Pliki</th>
                     <th className="px-3 py-2.5 w-10"></th>
                   </tr>
                 </thead>
@@ -3002,8 +3024,8 @@ export const PlansWorkspace: React.FC = () => {
                           <div className="flex items-center gap-2.5">
                             <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color || '#94a3b8' }} />
                             <div>
-                              <p className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors">{p.name}</p>
-                              {p.description && <p className="text-[11px] text-slate-400 truncate max-w-[300px]">{p.description}</p>}
+                              <p className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors">{cleanDisplayText(p.name) || p.name}</p>
+                              {cleanDisplayText(p.description) && <p className="text-[11px] text-slate-400 truncate max-w-[300px]">{cleanDisplayText(p.description)}</p>}
                             </div>
                           </div>
                         </td>
@@ -3029,6 +3051,19 @@ export const PlansWorkspace: React.FC = () => {
                         </td>
                         <td className="px-3 py-3">
                           <span className="text-xs text-slate-500">{new Date(p.updated_at).toLocaleDateString('pl-PL')}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          {(() => {
+                            const fileCount = projectFileCounts[p.id] ?? null;
+                            return (
+                              <div className="flex items-center gap-1">
+                                <File className={`w-3.5 h-3.5 ${fileCount && fileCount > 0 ? 'text-blue-500' : 'text-slate-300'}`} />
+                                <span className={`text-xs font-medium ${fileCount && fileCount > 0 ? 'text-blue-600' : 'text-slate-300'}`}>
+                                  {fileCount ?? '—'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-3 py-3">
                           <button
@@ -3645,13 +3680,57 @@ export const PlansWorkspace: React.FC = () => {
             if (isPanning) { setIsPanning(false); setPanStart(null); }
           }}>
           {!activeFile ? (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-slate-300/50 flex items-center justify-center mb-4">
-                <Loader2 className="w-8 h-8 text-slate-400" />
+            loading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
               </div>
-              <h3 className="text-sm font-bold text-slate-500 mb-1">Wybierz plik z listy</h3>
-              <p className="text-xs text-slate-400 max-w-xs">Kliknij plik w panelu po lewej stronie, aby otworzyc go w przegladarce.</p>
-            </div>
+            ) : allPlans.length === 0 ? (
+              <div
+                className={`w-full h-full flex items-center justify-center transition-colors ${isDragOver ? 'bg-blue-50' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                  const f = e.dataTransfer.files[0];
+                  if (f) handleDropFile(f);
+                }}
+              >
+                <div className="flex flex-col items-center text-center max-w-sm p-8">
+                  <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-5 transition-colors ${isDragOver ? 'bg-blue-100' : 'bg-slate-100'}`}>
+                    <FileUp className={`w-10 h-10 ${isDragOver ? 'text-blue-500' : 'text-slate-400'}`} />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-700 mb-2">
+                    {isDragOver ? 'Upuść plik tutaj' : 'Nie ma jeszcze żadnych plików'}
+                  </h3>
+                  <p className="text-sm text-slate-400 mb-6">
+                    Przeciągnij plik lub kliknij „Importuj plik" aby dodać pierwszy plan
+                  </p>
+                  {isUploading ? (
+                    <div className="flex items-center gap-2 text-sm text-blue-600">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Przesyłanie: {uploadFileName}…</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleImport}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition shadow-sm"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Importuj plik
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                  <File className="w-8 h-8 text-slate-400" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-500 mb-1">Wybierz plik z listy</h3>
+                <p className="text-xs text-slate-400 max-w-xs">Kliknij plik w panelu po lewej stronie, aby otworzyć go w przeglądarce.</p>
+              </div>
+            )
           ) : showApsViewer ? (
             <div className="w-full h-full relative" style={{ minHeight: '400px' }}>
               <AutodeskViewer
