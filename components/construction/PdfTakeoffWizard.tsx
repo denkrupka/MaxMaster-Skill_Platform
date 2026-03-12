@@ -583,7 +583,7 @@ export default function PdfTakeoffWizard({
     setPositions(result);
     showToast(`Wykryto ${result.length} pozycji przedmiaru`, 'success');
     setStep('result');
-  }, [pdfDoc, pageNumber, analysisExtra, showToast]);
+  }, [pdfDoc, selectedPage, analysisExtra, showToast]);
 
   const saveAndCreate = useCallback(async () => {
     setStep('saving');
@@ -714,7 +714,7 @@ export default function PdfTakeoffWizard({
     } finally {
       setCreatingOffer(false);
     }
-  }, [positions, companyId, pageNumber, navigate, showToast]);
+  }, [positions, companyId, selectedPage, navigate, showToast]);
 
   return (
     <>
@@ -1043,7 +1043,7 @@ export default function PdfTakeoffWizard({
                         ws['!cols'] = [{wch:5},{wch:40},{wch:10},{wch:10},{wch:20},{wch:10},{wch:15}];
                         const wb = XLSX.utils.book_new();
                         XLSX.utils.book_append_sheet(wb, ws, 'Przedmiar AI');
-                        XLSX.writeFile(wb, `przedmiar_AI_str${pageNumber}_${date}.xlsx`);
+                        XLSX.writeFile(wb, `przedmiar_AI_str${selectedPage}_${date}.xlsx`);
                         showToast('Excel pobrany!', 'success');
                       } catch(e) { showToast('Blad eksportu', 'error'); }
                     }}
