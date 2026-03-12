@@ -91,6 +91,8 @@ export const FinancePage: React.FC = () => {
   const [showAddBudgetItemModal, setShowAddBudgetItemModal] = useState(false);
   const [budgetItemForm, setBudgetItemForm] = useState({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0, notes: '' });
   const [editingBudgetItem, setEditingBudgetItem] = useState<BudgetItem | null>(null);
+  const [budgetSnapshots, setBudgetSnapshots] = useState<Array<{date: string; totalPlanned: number; totalActual: number; categories: any[]}>>([]);
+  const [showSmartAlerts, setShowSmartAlerts] = useState(true);
   const [editingBudgetItemId, setEditingBudgetItemId] = useState<string | null>(null);
   const [editingBudgetValue, setEditingBudgetValue] = useState<{planned: number; actual: number}>({ planned: 0, actual: 0 });
 
@@ -592,6 +594,35 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
     }
     setEditingBudgetItemId(null);
   };
+
+  // ==================== BUDGET SNAPSHOT ====================
+  const handleSaveBudgetSnapshot = () => {
+    const snapshot = {
+      date: new Date().toISOString(),
+      totalPlanned: budgetKPIs.totalPlanned,
+      totalActual: budgetKPIs.totalActual,
+      categories: categoryAggregates.map(c => ({ code: c.code, label: c.label, planned: c.planned, actual: c.actual })),
+    };
+    setBudgetSnapshots(prev => [...prev, snapshot]);
+    try {
+      const key = `budget_snapshots_${budgetProject}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      existing.push(snapshot);
+      if (existing.length > 12) existing.shift(); // keep last 12
+      localStorage.setItem(key, JSON.stringify(existing));
+      alert('✓ Snapshot budżetu zapisany!');
+    } catch(e) {}
+  };
+
+  // Load snapshots from localStorage
+  useEffect(() => {
+    if (!budgetProject) return;
+    try {
+      const key = `budget_snapshots_${budgetProject}`;
+      const saved = JSON.parse(localStorage.getItem(key) || '[]');
+      setBudgetSnapshots(saved);
+    } catch(e) {}
+  }, [budgetProject]);
 
   // ==================== OPERATION CRUD ====================
   const handleSaveOperation = async () => {
@@ -1207,10 +1238,17 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                   {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
                 {budgetProject && (
-                  <button onClick={handleMonthlyReportPDF}
-                    className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
-                    <FileText className="w-4 h-4" /> Raport miesięczny PDF
-                  </button>
+                  <>
+                    <button onClick={handleMonthlyReportPDF}
+                      className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
+                      <FileText className="w-4 h-4" /> Raport miesięczny PDF
+                    </button>
+                    <button onClick={handleSaveBudgetSnapshot}
+                      className="flex items-center gap-2 px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 text-sm"
+                      title="Zapisz obecny stan budżetu jako punkt odniesienia">
+                      <Save className="w-4 h-4" /> Snapshot
+                    </button>
+                  </>
                 )}
               </div>
 
@@ -1470,6 +1508,34 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                       </div>
                     )}
                   </div>
+
+                  {/* Budget Snapshots History */}
+                  {budgetSnapshots.length > 1 && (
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                      <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-blue-600" />
+                        Historia budżetu (snapshots)
+                      </h3>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={budgetSnapshots.map(s => ({
+                          date: new Date(s.date).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }),
+                          Plan: s.totalPlanned,
+                          Fakt: s.totalActual,
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                          <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                          <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                          <Legend />
+                          <Line type="monotone" dataKey="Plan" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="Fakt" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                      <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                        <Info className="w-3 h-3" /> {budgetSnapshots.length} snapshot(ów) zapisanych. Kliknij "Snapshot" aby dodać kolejny.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1682,6 +1748,79 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Smart Alerts System */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" /> Smart Alerts
+                  </h4>
+                  <button onClick={() => setShowSmartAlerts(v => !v)}
+                    className="text-xs text-slate-400 hover:text-slate-600">
+                    {showSmartAlerts ? 'Ukryj' : 'Pokaż'}
+                  </button>
+                </div>
+                {showSmartAlerts && (
+                  <div className="space-y-2">
+                    {/* Cashflow alerts */}
+                    {stats.balance < 0 && (
+                      <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-red-800">🚨 Ujemny bilans finansowy</p>
+                          <p className="text-xs text-red-700">Koszty przewyższają przychody o {formatCurrency(Math.abs(stats.balance))}. Sprawdź cashflow.</p>
+                        </div>
+                      </div>
+                    )}
+                    {stats.pendingActs > 50000 && (
+                      <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <Clock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-amber-800">⚠️ Wysokie należności</p>
+                          <p className="text-xs text-amber-700">Masz {formatCurrency(stats.pendingActs)} nieopłaconych należności. Sprawdź akty i faktury.</p>
+                        </div>
+                      </div>
+                    )}
+                    {budgetKPIs.overTenPct && (
+                      <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-red-800">🚨 Budżet przekroczony</p>
+                          <p className="text-xs text-red-700">Faktyczne wydatki o {((budgetKPIs.pctSpent - 1) * 100).toFixed(1)}% powyżej planu.</p>
+                        </div>
+                      </div>
+                    )}
+                    {offers.filter(o => o.status === 'sent').length > 0 && (
+                      <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <FileText className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-blue-800">📋 Oferty oczekują na odpowiedź</p>
+                          <p className="text-xs text-blue-700">
+                            {offers.filter(o => o.status === 'sent').length} ofert(a) wysłanych za łącznie {formatCurrency(offers.filter(o => o.status === 'sent').reduce((s, o) => s + (o.final_amount || o.total_amount || 0), 0))}.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {categoryAggregates.filter(c => c.pct > 1.1 && c.planned > 0).map(c => (
+                      <div key={c.code} className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-orange-800">⚠️ {c.label} — przekroczenie kategorii</p>
+                          <p className="text-xs text-orange-700">
+                            Wydano {formatCurrency(c.actual)} z planowanych {formatCurrency(c.planned)} ({(c.pct * 100).toFixed(0)}%).
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {stats.balance >= 0 && !budgetKPIs.overBudget && stats.pendingActs < 50000 && (
+                      <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm font-semibold text-green-800">✅ Wszystko w normie! Kondycja finansowa jest dobra.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Industry Benchmarks */}
