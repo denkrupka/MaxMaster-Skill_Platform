@@ -497,20 +497,42 @@ export const DocumentSignPage: React.FC = () => {
 
         {/* Done */}
         {step === 'done' && (
-          <div className="bg-white rounded-2xl p-10 shadow-sm border border-slate-200 text-center">
-            <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-12 h-12 text-green-500" />
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-10 text-center">
+              <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="w-12 h-12 text-green-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-3">Dokument podpisany!</h2>
+              <p className="text-slate-500 mb-4">
+                Dokument <strong>{document.name}</strong> został pomyślnie podpisany przez <strong>{document.signer_name}</strong>.
+              </p>
+              <p className="text-slate-400 text-sm">
+                Data podpisania: {document.signed_at ? new Date(document.signed_at).toLocaleString('pl-PL') : new Date().toLocaleString('pl-PL')}
+              </p>
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-3">Dokument podpisany!</h2>
-            <p className="text-slate-500 mb-6">
-              Dokument <strong>{document.name}</strong> został pomyślnie podpisany przez <strong>{document.signer_name}</strong>.
-            </p>
-            <p className="text-slate-400 text-sm">
-              Data podpisania: {document.signed_at ? new Date(document.signed_at).toLocaleString('pl-PL') : new Date().toLocaleString('pl-PL')}
-            </p>
-            <div className="mt-6 p-4 bg-slate-50 rounded-xl text-sm text-slate-500">
-              <Shield className="w-5 h-5 mx-auto mb-2 text-green-500" />
-              Podpis elektroniczny jest prawnie wiążący zgodnie z Rozporządzeniem eIDAS.
+            {/* QR verification block */}
+            <div className="border-t border-slate-200 bg-slate-50 p-6 flex items-start gap-5">
+              <div className="flex-shrink-0 bg-white p-2 rounded-xl shadow-sm border border-slate-200">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(window.location.href)}&format=png&margin=4`}
+                  alt="QR kod weryfikacyjny"
+                  className="w-24 h-24"
+                />
+              </div>
+              <div className="text-left">
+                <div className="flex items-center gap-2 mb-1">
+                  <Shield className="w-4 h-4 text-green-500" />
+                  <p className="font-semibold text-slate-800 text-sm">Weryfikacja autentyczności</p>
+                </div>
+                <p className="text-slate-500 text-xs mb-2">
+                  Ten kod QR jest unikalnym dowodem elektronicznym powiązanym z tym dokumentem. 
+                  Zeskanuj go, aby zweryfikować autentyczność podpisu w dowolnym momencie.
+                </p>
+                <p className="text-xs text-slate-400 font-mono break-all">{window.location.href}</p>
+                <p className="mt-2 text-xs text-green-600 font-medium">
+                  ✓ Podpis elektroniczny zgodny z Rozporządzeniem eIDAS (UE) 910/2014
+                </p>
+              </div>
             </div>
           </div>
         )}

@@ -314,4 +314,109 @@ Data wykonania robót: <strong>{{data_wykonania}}</strong></p>
 </div>
 </div>`
   }
+,
+  {
+    id: 'umowa_o_prace',
+    name: 'Umowa o pracę',
+    category: 'Umowy',
+    description: 'Umowa o pracę na czas określony lub nieokreślony',
+    variables: [
+      { name: 'firma_nazwa', label: 'Nazwa pracodawcy', type: 'text', required: true },
+      { name: 'firma_nip', label: 'NIP pracodawcy', type: 'text', required: true },
+      { name: 'firma_adres', label: 'Adres pracodawcy', type: 'text', required: true },
+      { name: 'firma_reprezentant', label: 'Reprezentant pracodawcy', type: 'text', required: true },
+      { name: 'pracownik_imie_nazwisko', label: 'Imię i nazwisko pracownika', type: 'text', required: true },
+      { name: 'pracownik_pesel', label: 'PESEL pracownika', type: 'text', required: true },
+      { name: 'pracownik_adres', label: 'Adres pracownika', type: 'text', required: true },
+      { name: 'stanowisko', label: 'Stanowisko / Rodzaj pracy', type: 'text', required: true },
+      { name: 'miejsce_pracy', label: 'Miejsce wykonywania pracy', type: 'text', required: true },
+      { name: 'wymiar_czasu', label: 'Wymiar czasu pracy', type: 'text', required: true },
+      { name: 'wynagrodzenie', label: 'Wynagrodzenie zasadnicze (PLN brutto)', type: 'number', required: true },
+      { name: 'data_od', label: 'Data zatrudnienia od', type: 'date', required: true },
+      { name: 'data_do', label: 'Data zatrudnienia do (puste = nieokreślony)', type: 'date', required: false },
+      { name: 'rodzaj_umowy', label: 'Rodzaj umowy (czas określony/nieokreślony)', type: 'text', required: true },
+      { name: 'data', label: 'Data zawarcia umowy', type: 'date', required: true },
+      { name: 'miejsce', label: 'Miejsce zawarcia umowy', type: 'text', required: true },
+    ],
+    content: `<div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; line-height: 1.7; color: #333;">
+
+<h1 style="text-align: center; font-size: 22px; font-weight: bold; margin-bottom: 4px;">UMOWA O PRACĘ</h1>
+<p style="text-align: center; font-size: 14px; color: #666; margin-bottom: 8px;">na {{rodzaj_umowy}}</p>
+<p style="text-align: center; color: #666; margin-bottom: 32px;">zawarta dnia {{data}} w {{miejsce}}</p>
+
+<h2 style="font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1a1a1a; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px;">§ 1. STRONY UMOWY</h2>
+<p><strong>Pracodawca:</strong><br>
+{{firma_nazwa}}, NIP: {{firma_nip}}<br>
+{{firma_adres}}<br>
+reprezentowany przez: {{firma_reprezentant}}</p>
+<p style="margin-top: 12px;"><strong>Pracownik:</strong><br>
+{{pracownik_imie_nazwisko}}, PESEL: {{pracownik_pesel}}<br>
+{{pracownik_adres}}</p>
+
+<h2 style="font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1a1a1a; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px;">§ 2. WARUNKI ZATRUDNIENIA</h2>
+<table style="width: 100%; border-collapse: collapse; margin: 12px 0;">
+  <tr style="background: #f8f9fa;">
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0; font-weight: bold; width: 40%;">Rodzaj umówionej pracy:</td>
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0;">{{stanowisko}}</td>
+  </tr>
+  <tr>
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0; font-weight: bold;">Miejsce wykonywania pracy:</td>
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0;">{{miejsce_pracy}}</td>
+  </tr>
+  <tr style="background: #f8f9fa;">
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0; font-weight: bold;">Wymiar czasu pracy:</td>
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0;">{{wymiar_czasu}}</td>
+  </tr>
+  <tr>
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0; font-weight: bold;">Termin rozpoczęcia pracy:</td>
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0;">{{data_od}}</td>
+  </tr>
+  <tr style="background: #f8f9fa;">
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0; font-weight: bold;">Termin zakończenia umowy:</td>
+    <td style="padding: 8px 12px; border: 1px solid #e0e0e0;">{{data_do}}</td>
+  </tr>
+</table>
+
+<h2 style="font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1a1a1a; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px;">§ 3. WYNAGRODZENIE</h2>
+<p>Pracownikowi przysługuje wynagrodzenie zasadnicze w wysokości: <strong>{{wynagrodzenie}} PLN brutto</strong> miesięcznie.</p>
+<p>Wynagrodzenie będzie wypłacane do ostatniego dnia każdego miesiąca, przelewem na rachunek bankowy wskazany przez Pracownika.</p>
+
+<h2 style="font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1a1a1a; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px;">§ 4. OBOWIĄZKI PRACOWNIKA</h2>
+<p>Pracownik zobowiązuje się do:</p>
+<ul style="margin: 8px 0 8px 24px;">
+  <li>sumiennego i starannego wykonywania powierzonych obowiązków,</li>
+  <li>przestrzegania regulaminu pracy i przepisów BHP,</li>
+  <li>dbałości o dobro zakładu pracy i zachowania jego tajemnicy,</li>
+  <li>przestrzegania zasad współżycia społecznego w zakładzie pracy.</li>
+</ul>
+
+<h2 style="font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1a1a1a; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px;">§ 5. URLOP WYPOCZYNKOWY</h2>
+<p>Pracownikowi przysługuje urlop wypoczynkowy w wymiarze określonym przez Kodeks Pracy (20 lub 26 dni roboczych rocznie, w zależności od stażu pracy).</p>
+
+<h2 style="font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1a1a1a; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px;">§ 6. OKRES WYPOWIEDZENIA</h2>
+<p>Okres wypowiedzenia niniejszej umowy wynosi odpowiednio: 2 tygodnie (staż pracy poniżej 6 miesięcy), 1 miesiąc (staż pracy powyżej 6 miesięcy), 3 miesiące (staż pracy co najmniej 3 lata).</p>
+
+<h2 style="font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #1a1a1a; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px;">§ 7. POSTANOWIENIA KOŃCOWE</h2>
+<p>W sprawach nieuregulowanych niniejszą umową mają zastosowanie przepisy Kodeksu Pracy i Kodeksu Cywilnego. Wszelkie zmiany umowy wymagają formy pisemnej pod rygorem nieważności. Umowę sporządzono w dwóch jednobrzmiących egzemplarzach, po jednym dla każdej ze stron.</p>
+
+<p style="margin-top: 12px; font-size: 12px; color: #999; border-top: 1px dashed #e0e0e0; padding-top: 8px;">
+  Klauzula informacyjna RODO: Administratorem danych osobowych jest {{firma_nazwa}}. Dane przetwarzane są na podstawie art. 6 ust. 1 lit. b) RODO w celu realizacji umowy o pracę.
+</p>
+
+<div style="display: flex; justify-content: space-between; margin-top: 60px; gap: 40px;">
+  <div style="flex: 1; text-align: center;">
+    <div style="border-top: 1px solid #333; padding-top: 8px;">
+      <p style="margin: 0; font-size: 13px;"><strong>Pracodawca</strong></p>
+      <p style="margin: 4px 0 0; font-size: 12px; color: #666;">{{firma_nazwa}}</p>
+    </div>
+  </div>
+  <div style="flex: 1; text-align: center;">
+    <div style="border-top: 1px solid #333; padding-top: 8px;">
+      <p style="margin: 0; font-size: 13px;"><strong>Pracownik</strong></p>
+      <p style="margin: 4px 0 0; font-size: 12px; color: #666;">{{pracownik_imie_nazwisko}}</p>
+    </div>
+  </div>
+</div>
+</div>`
+  }
 ];
