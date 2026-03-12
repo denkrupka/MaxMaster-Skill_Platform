@@ -3258,11 +3258,12 @@ export const OffersPage: React.FC = () => {
       if (ext === 'xlsx' || ext === 'xls') {
         setTemplateProgress('Analiza struktury Excel...');
         const buffer = await file.arrayBuffer();
-        // Read preserving styles, formulas, merges etc.
-        const workbook = XLSX.read(buffer, { type: 'array', cellStyles: true, cellFormula: true });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
+
+        // Use SheetJS ONLY for analysis (reading values for AI)
+        const analyzeWb = XLSX.read(buffer, { type: 'array' });
+        const sheetName = analyzeWb.SheetNames[0];
+        const analyzeSheet = analyzeWb.Sheets[sheetName];
+        const rows: any[][] = XLSX.utils.sheet_to_json(analyzeSheet, { header: 1, raw: true });
 
         // Send to AI for structure analysis
         const compactRows = rows.map(row =>
@@ -3283,7 +3284,7 @@ export const OffersPage: React.FC = () => {
         const colQty = analysis.columns?.qty ?? -1;
         const { colPrice, colValue } = detectPriceValueColumns(headerRowData, colQty);
 
-        // Count position rows (non-section, non-ignore)
+        // Count position rows
         const structureRows = new Set((analysis.structure || []).map((s: any) => s.row));
         let positionCount = 0;
         for (let r = headerRowIdx + 1; r < rows.length; r++) {
@@ -3295,7 +3296,7 @@ export const OffersPage: React.FC = () => {
 
         setTemplateData({
           type: 'xlsx',
-          workbook,
+          originalBuffer: buffer, // Keep original file bytes for ExcelJS
           sheetName,
           rows,
           analysis,
@@ -3366,9 +3367,14 @@ export const OffersPage: React.FC = () => {
       );
 
       if (templateData.type === 'xlsx') {
-        // Write directly into the original workbook cells — preserves formatting
-        const workbook = templateData.workbook;
-        const sheet = workbook.Sheets[templateData.sheetName];
+        // Use ExcelJS to modify the original file — preserves ALL formatting
+        const ExcelJS = (await import('exceljs')).default;
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(templateData.originalBuffer);
+
+        const worksheet = workbook.getWorksheet(templateData.sheetName) || workbook.worksheets[0];
+        if (!worksheet) throw new Error('Nie znaleziono arkusza');
+
         const { colName, colQty, colPrice, colValue, headerRowIdx, rows, structureRows } = templateData;
 
         let filledCount = 0;
@@ -3382,7 +3388,7 @@ export const OffersPage: React.FC = () => {
           const rowName = colName >= 0 ? String(row[colName] || '').toLowerCase().trim() : '';
           if (!rowName) continue;
 
-          // Match template row to offer item by name
+          // Match template row to offer item by name similarity
           let bestIdx = -1;
           let bestScore = 0;
           for (let i = 0; i < allItems.length; i++) {
@@ -3391,13 +3397,8 @@ export const OffersPage: React.FC = () => {
             if (!itemName) continue;
 
             let score = 0;
-            // Exact match
             if (itemName === rowName) { score = 100; }
-            // One contains the other
-            else if (rowName.includes(itemName) || itemName.includes(rowName)) {
-              score = 80;
-            }
-            // First N chars match
+            else if (rowName.includes(itemName) || itemName.includes(rowName)) { score = 80; }
             else {
               const minLen = Math.min(rowName.length, itemName.length, 20);
               let matchLen = 0;
@@ -3406,7 +3407,6 @@ export const OffersPage: React.FC = () => {
               }
               if (matchLen >= 8) score = 50 + matchLen;
             }
-            // Word overlap
             if (score === 0) {
               const rowWords = rowName.split(/\s+/).filter(w => w.length > 2);
               const itemWords = itemName.split(/\s+/).filter(w => w.length > 2);
@@ -3415,7 +3415,6 @@ export const OffersPage: React.FC = () => {
                 score = 30 + overlap.length * 5;
               }
             }
-
             if (score > bestScore) { bestScore = score; bestIdx = i; }
           }
 
@@ -3423,27 +3422,18 @@ export const OffersPage: React.FC = () => {
             const match = allItems[bestIdx];
             usedOfferItems.add(bestIdx);
 
-            // Write unit price — preserve existing cell style
+            // ExcelJS rows are 1-based
+            const excelRow = rowIdx + 1;
+
+            // Write unit price — only set value, keep existing style
             if (colPrice >= 0) {
-              const cellAddr = XLSX.utils.encode_cell({ r: rowIdx, c: colPrice });
-              const existingCell = sheet[cellAddr];
-              sheet[cellAddr] = {
-                t: 'n',
-                v: match.unit_price,
-                ...(existingCell?.s ? { s: existingCell.s } : {}),
-                ...(existingCell?.z ? { z: existingCell.z } : {})
-              };
+              const cell = worksheet.getRow(excelRow).getCell(colPrice + 1);
+              cell.value = match.unit_price;
             }
-            // Write total value — preserve existing cell style
+            // Write total value
             if (colValue >= 0) {
-              const cellAddr = XLSX.utils.encode_cell({ r: rowIdx, c: colValue });
-              const existingCell = sheet[cellAddr];
-              sheet[cellAddr] = {
-                t: 'n',
-                v: match.total,
-                ...(existingCell?.s ? { s: existingCell.s } : {}),
-                ...(existingCell?.z ? { z: existingCell.z } : {})
-              };
+              const cell = worksheet.getRow(excelRow).getCell(colValue + 1);
+              cell.value = match.total;
             }
             filledCount++;
           }
@@ -3451,9 +3441,17 @@ export const OffersPage: React.FC = () => {
 
         setTemplateProgress(`Wypełniono ${filledCount} z ${allItems.length} pozycji. Zapisywanie...`);
 
-        // Write back the same workbook — formatting, merges, formulas preserved
-        const outName = templateData.fileName.replace(/\.(xlsx|xls)$/i, '_wypelniony.xlsx');
-        XLSX.writeFile(workbook, outName);
+        // Write modified workbook — ExcelJS preserves formatting, merges, formulas, styles
+        const outputBuffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = templateData.fileName.replace(/\.(xlsx|xls)$/i, '_wypelniony.xlsx');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       } else {
         // For PDF templates — create new Excel with offer data
         const wsData: any[][] = [
