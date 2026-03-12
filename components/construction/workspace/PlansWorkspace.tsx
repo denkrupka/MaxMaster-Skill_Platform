@@ -130,6 +130,7 @@ export const PlansWorkspace: React.FC = () => {
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfTotalPages, setPdfTotalPages] = useState(0);
+  const [pdfThumbnails, setPdfThumbnails] = useState<string[]>([]);
   const [pdfNaturalSize, setPdfNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // ---- DXF state ----
@@ -453,7 +454,7 @@ export const PlansWorkspace: React.FC = () => {
 
   // Load PDF when file changes
   useEffect(() => {
-    if (!activeFile || fileFormat !== 'pdf') { setPdfDoc(null); return; }
+    if (!activeFile || fileFormat !== 'pdf') { setPdfDoc(null); setPdfThumbnails([]); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -464,6 +465,23 @@ export const PlansWorkspace: React.FC = () => {
         setPdfTotalPages(doc.numPages);
         setPdfPage(1);
         renderPdfPage(doc, 1, zoom);
+        // Generate thumbnails for all pages (async, non-blocking)
+        const generateThumbs = async () => {
+          const thumbs: string[] = [];
+          const maxPages = Math.min(doc.numPages, 20); // cap at 20
+          for (let i = 1; i <= maxPages; i++) {
+            try {
+              const p = await doc.getPage(i);
+              const vp = p.getViewport({ scale: 0.2 });
+              const c = document.createElement('canvas');
+              c.width = vp.width; c.height = vp.height;
+              await p.render({ canvasContext: c.getContext('2d')!, viewport: vp }).promise;
+              thumbs.push(c.toDataURL('image/jpeg', 0.7));
+            } catch { thumbs.push(''); }
+          }
+          if (!cancelled) setPdfThumbnails(thumbs);
+        };
+        generateThumbs();
       } catch (err) {
         console.error('PDF load error:', err);
         if (!cancelled) notify('Blad ladowania PDF', 'error');
@@ -3488,11 +3506,33 @@ export const PlansWorkspace: React.FC = () => {
               )}
             </div>
           ) : showPdfViewer ? (
-            <div className="w-full h-full overflow-auto flex items-start justify-center p-4">
-              <div className="relative inline-block">
-                <canvas ref={pdfCanvasRef} className="shadow-lg rounded-lg bg-white" />
-                {/* Annotation SVG overlay on top of PDF canvas */}
-                {pdfNaturalSize.w > 0 && renderOverlaySvg(pdfNaturalSize.w, pdfNaturalSize.h)}
+            <div className="w-full h-full flex">
+              {/* Page thumbnail strip — show if multiple pages */}
+              {pdfTotalPages > 1 && pdfThumbnails.length > 0 && (
+                <div className="w-20 flex-shrink-0 bg-slate-100 border-r border-slate-200 overflow-y-auto flex flex-col gap-1 p-1">
+                  {pdfThumbnails.map((thumb, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setPdfPage(idx + 1)}
+                      className={`relative rounded border-2 transition ${pdfPage === idx + 1 ? 'border-blue-500 shadow-sm' : 'border-transparent hover:border-blue-300'}`}
+                      title={`Strona ${idx + 1}`}
+                    >
+                      {thumb ? (
+                        <img src={thumb} alt={`s.${idx+1}`} className="w-full rounded-sm" />
+                      ) : (
+                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-sm flex items-center justify-center text-slate-400 text-[9px]">{idx+1}</div>
+                      )}
+                      <span className="absolute bottom-0.5 right-0.5 bg-black/50 text-white text-[8px] px-1 rounded">{idx + 1}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex-1 overflow-auto flex items-start justify-center p-4">
+                <div className="relative inline-block">
+                  <canvas ref={pdfCanvasRef} className="shadow-lg rounded-lg bg-white" />
+                  {/* Annotation SVG overlay on top of PDF canvas */}
+                  {pdfNaturalSize.w > 0 && renderOverlaySvg(pdfNaturalSize.w, pdfNaturalSize.h)}
+                </div>
               </div>
             </div>
           ) : showDxfViewer ? (
