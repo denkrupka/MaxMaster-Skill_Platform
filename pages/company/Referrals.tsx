@@ -5,27 +5,28 @@ import {
   CreditCard, Send, MessageCircle, Mail, Phone, ExternalLink, X, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
+import { Referral } from '../../types';
 import { createShortLink } from '../../lib/shortLinks';
 import { sendSMS } from '../../lib/smsService';
 
-// Referral status types
-type ReferralStatus = 'sent' | 'registered' | 'demo' | 'subscription';
+// Referral status types (legacy UI labels, not to be confused with DB status)
+type ReferralStatusUI = 'sent' | 'registered' | 'demo' | 'subscription';
 type BonusStatus = 'pending' | 'paid';
 
-// Mock referral data for display (in production, this would come from database)
 interface CompanyReferral {
   id: string;
   companyName: string;
   contactEmail: string;
   contactPhone?: string;
   invitedAt: string;
-  status: ReferralStatus;
+  status: ReferralStatusUI;
   bonusStatus: BonusStatus;
-  bonusAmount: number;
-  paidAmount?: number;
+  bonusMonths: number;
+  dbStatus: 'pending' | 'active' | 'paid';
 }
 
-const REFERRAL_STATUS_CONFIG: Record<ReferralStatus, { label: string; color: string; bgColor: string; borderColor: string }> = {
+const REFERRAL_STATUS_CONFIG: Record<ReferralStatusUI, { label: string; color: string; bgColor: string; borderColor: string }> = {
   sent: { label: 'Wysłano', color: 'text-slate-600', bgColor: 'bg-slate-50', borderColor: 'border-slate-200' },
   registered: { label: 'Zarejestrowany', color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
   demo: { label: 'Demo', color: 'text-amber-600', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
@@ -73,47 +74,103 @@ export const CompanyReferralsPage: React.FC = () => {
     return () => { cancelled = true; };
   }, [fullReferralLink, state.currentUser?.id]);
 
-  // Load referred companies from database
+  // Load referred companies from referrals table
   const [referrals, setReferrals] = useState<CompanyReferral[]>([]);
+  const [loadingReferrals, setLoadingReferrals] = useState(false);
 
   useEffect(() => {
     if (!currentCompany) return;
-    // Find companies that were referred by this company
-    const referred = state.companies.filter(c => c.referred_by_company_id === currentCompany.id);
-    const mapped: CompanyReferral[] = referred.map(c => {
-      let status: ReferralStatus = 'registered';
-      if (c.subscription_status === 'active') status = 'subscription';
-      else if (c.status === 'trial') status = 'demo';
 
-      return {
-        id: c.id,
-        companyName: c.name || c.legal_name || '—',
-        contactEmail: c.contact_email || '—',
-        contactPhone: c.contact_phone || undefined,
-        invitedAt: c.created_at,
-        status,
-        bonusStatus: c.referral_bonus_paid ? 'paid' : 'pending',
-        bonusAmount: bonusAmount,
-        paidAmount: c.referral_bonus_paid ? bonusAmount : undefined
-      };
-    });
-    setReferrals(mapped);
-  }, [currentCompany, state.companies, bonusAmount]);
+    const loadReferrals = async () => {
+      setLoadingReferrals(true);
+      try {
+        // Fetch from referrals table with joined referred company info
+        const { data, error } = await supabase
+          .from('referrals')
+          .select(`
+            id,
+            referred_company_id,
+            status,
+            bonus_months,
+            created_at,
+            paid_at,
+            companies!referred_company_id (
+              name,
+              legal_name,
+              contact_email,
+              contact_phone,
+              subscription_status,
+              status,
+              referral_bonus_paid
+            )
+          `)
+          .eq('referrer_company_id', currentCompany.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          // Fallback: use state.companies if table doesn't exist yet
+          const referred = state.companies.filter(c => c.referred_by_company_id === currentCompany.id);
+          const mapped: CompanyReferral[] = referred.map(c => {
+            let status: ReferralStatusUI = 'registered';
+            if (c.subscription_status === 'active') status = 'subscription';
+            else if (c.status === 'trial') status = 'demo';
+            return {
+              id: c.id,
+              companyName: c.name || c.legal_name || '—',
+              contactEmail: c.contact_email || '—',
+              contactPhone: c.contact_phone || undefined,
+              invitedAt: c.created_at,
+              status,
+              bonusStatus: (c.referral_bonus_paid ? 'paid' : 'pending') as BonusStatus,
+              bonusMonths: 1,
+              dbStatus: c.subscription_status === 'active' ? 'active' : 'pending'
+            };
+          });
+          setReferrals(mapped);
+        } else if (data) {
+          const mapped: CompanyReferral[] = data.map((r: any) => {
+            const co = r.companies || {};
+            let status: ReferralStatusUI = 'registered';
+            if (co.subscription_status === 'active') status = 'subscription';
+            else if (co.status === 'trial') status = 'demo';
+            return {
+              id: r.id,
+              companyName: co.name || co.legal_name || '—',
+              contactEmail: co.contact_email || '—',
+              contactPhone: co.contact_phone || undefined,
+              invitedAt: r.created_at,
+              status,
+              bonusStatus: (r.status === 'paid' ? 'paid' : 'pending') as BonusStatus,
+              bonusMonths: r.bonus_months || 1,
+              dbStatus: r.status as 'pending' | 'active' | 'paid'
+            };
+          });
+          setReferrals(mapped);
+        }
+      } finally {
+        setLoadingReferrals(false);
+      }
+    };
+
+    loadReferrals();
+  }, [currentCompany, state.companies]);
 
   // Calculate stats
   const stats = useMemo(() => {
     const totalInvited = referrals.length;
-    const registered = referrals.filter(r => r.status !== 'sent').length;
+    const active = referrals.filter(r => r.dbStatus === 'active' || r.dbStatus === 'paid').length;
     const withSubscription = referrals.filter(r => r.status === 'subscription').length;
-    const totalEarned = referrals
+    const totalBonusMonthsEarned = referrals
       .filter(r => r.bonusStatus === 'paid')
-      .reduce((sum, r) => sum + (r.paidAmount || 0), 0);
-    const pendingBonus = referrals
-      .filter(r => r.bonusStatus === 'pending' && r.status === 'subscription')
-      .reduce((sum, r) => sum + r.bonusAmount, 0);
+      .reduce((sum, r) => sum + r.bonusMonths, 0);
+    const pendingBonusMonths = referrals
+      .filter(r => r.bonusStatus === 'pending' && r.dbStatus === 'active')
+      .reduce((sum, r) => sum + r.bonusMonths, 0);
+    // My own bonus_months (from company profile)
+    const myBonusMonths = currentCompany?.bonus_months || 0;
 
-    return { totalInvited, registered, withSubscription, totalEarned, pendingBonus };
-  }, [referrals]);
+    return { totalInvited, active, withSubscription, totalBonusMonthsEarned, pendingBonusMonths, myBonusMonths };
+  }, [referrals, currentCompany]);
 
   const handleCopyLink = async () => {
     try {
@@ -224,12 +281,12 @@ export const CompanyReferralsPage: React.FC = () => {
         {/* Balance cards */}
         <div className="flex gap-3">
           <div className="bg-green-50 border border-green-200 px-4 py-3 rounded-xl text-center min-w-[120px]">
-            <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Wypłacone</div>
-            <div className="text-xl font-black text-green-700">{stats.totalEarned} zł</div>
+            <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Moje miesiące bonus</div>
+            <div className="text-xl font-black text-green-700">{stats.myBonusMonths} mies.</div>
           </div>
           <div className="bg-blue-50 border border-blue-200 px-4 py-3 rounded-xl text-center min-w-[120px]">
-            <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">Do wypłaty</div>
-            <div className="text-xl font-black text-blue-700">{stats.pendingBonus} zł</div>
+            <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">Oczekujące</div>
+            <div className="text-xl font-black text-blue-700">{stats.pendingBonusMonths} mies.</div>
           </div>
         </div>
       </div>
@@ -365,8 +422,8 @@ export const CompanyReferralsPage: React.FC = () => {
           <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
             <Users size={20} className="text-blue-500" />
           </div>
-          <div className="text-2xl font-bold text-slate-900">{stats.registered}</div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider">Zarejestrowanych</div>
+          <div className="text-2xl font-bold text-slate-900">{stats.active}</div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider">Aktywnych</div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
           <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
@@ -379,8 +436,8 @@ export const CompanyReferralsPage: React.FC = () => {
           <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mx-auto mb-2">
             <Gift size={20} className="text-amber-500" />
           </div>
-          <div className="text-2xl font-bold text-slate-900">{stats.totalEarned + stats.pendingBonus} zł</div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider">Łączny bonus</div>
+          <div className="text-2xl font-bold text-slate-900">{stats.totalBonusMonthsEarned + stats.pendingBonusMonths} mies.</div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider">Miesiące bonusów</div>
         </div>
       </div>
 
@@ -427,7 +484,7 @@ export const CompanyReferralsPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="font-bold text-slate-900">{referral.bonusAmount} zł</div>
+                        <div className="font-bold text-slate-900">{referral.bonusMonths} mies.</div>
                         <div className={`text-xs ${bonusConfig.color}`}>{bonusConfig.label}</div>
                       </td>
                     </tr>

@@ -285,6 +285,10 @@ export interface Company {
   created_by?: string;
   sales_owner_id?: string;
   doradca_id?: string;
+
+  // Referral & Onboarding
+  bonus_months?: number;
+  onboarding_completed?: boolean;
 }
 
 export interface Module {
@@ -1395,6 +1399,24 @@ export interface HolidayDay {
 }
 
 // === Раздел J: Центр уведомлений ===
+
+
+// ---------------------------------------------------------------
+// Referral
+// ---------------------------------------------------------------
+
+export type ReferralStatus = 'pending' | 'active' | 'paid';
+
+export interface Referral {
+  id: string;
+  referrer_company_id: string;
+  referred_company_id: string;
+  status: ReferralStatus;
+  bonus_months: number;
+  created_at: string;
+  activated_at?: string;
+  paid_at?: string;
+}
 
 export type NotificationType_Hub =
   | 'attendance_reminder' | 'day_request_new' | 'day_request_approved' | 'day_request_rejected'
