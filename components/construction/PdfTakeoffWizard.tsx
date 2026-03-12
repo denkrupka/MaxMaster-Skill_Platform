@@ -18,6 +18,8 @@ export interface TakeoffPosition {
   confidence: number;
   needsReview: boolean;
   reviewReason?: string;
+  knrCode?: string;
+  id?: string;
 }
 
 interface PdfTakeoffWizardProps {
@@ -425,6 +427,7 @@ export default function PdfTakeoffWizard({
         || [...geminiMap.entries()].find(([k]) => k.includes(name.toLowerCase().slice(0, 10)))?.[1];
       const count = typeof sym.count === 'number' ? sym.count : 1;
       result.push({
+        id: `pos-${result.length}-${Date.now()}`,
         name,
         legendRef: sym.legendRef || '',
         category: sym.category || geminiMatch?.category || 'Inne',
@@ -860,6 +863,35 @@ export default function PdfTakeoffWizard({
               )}
               {step === 'result' && positions.length > 0 && (
                 <>
+                  {/* KNR Enrichment button */}
+                  <button
+                    onClick={async () => {
+                      showToast('Wzbogacam pozycje o kody KNR…', 'info');
+                      try {
+                        const positionsForKnr = positions.map(p => ({ id: p.id, name: p.name, unit: p.unit }));
+                        const { data, error } = await supabase.functions.invoke('knr-ai-lookup', {
+                          body: { positions: positionsForKnr },
+                        });
+                        if (error) throw error;
+                        if (data?.results) {
+                          setPositions(prev => prev.map((p, i) => {
+                            const knr = data.results.find((r: any) => r.index === i);
+                            if (knr?.code) {
+                              return { ...p, description: knr.description || p.description, knrCode: knr.code };
+                            }
+                            return p;
+                          }));
+                          showToast(`Dodano kody KNR do ${data.results.filter((r: any) => r.code).length} pozycji`, 'success');
+                        }
+                      } catch (e) {
+                        showToast('Błąd pobierania KNR', 'error');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
+                    title="Pobierz kody KNR dla wszystkich pozycji"
+                  >
+                    KNR
+                  </button>
                   <button
                     onClick={async () => {
                       try {
