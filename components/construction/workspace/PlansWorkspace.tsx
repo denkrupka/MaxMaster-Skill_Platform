@@ -3948,10 +3948,22 @@ export const PlansWorkspace: React.FC = () => {
             }
           }}
           onLinkAnnotationToBoq={(id) => {
-            if (boqRows.length > 0) {
-              setAnnotations(prev => prev.map(a => a.id === id ? { ...a, linkedBoqRowId: boqRows[0].id } : a));
-              notify('Adnotacja polaczona z BOQ');
+            if (boqRows.length === 0) {
+              notify('Brak pozycji BOQ do polaczenia. Najpierw wygeneruj BOQ.', 'error');
+              return;
             }
+            // Show selection dialog
+            const options = boqRows.map(r => `${r.code || r.id.slice(0, 8)} — ${r.name} (${r.quantity} ${r.unit})`).join('\n');
+            const input = window.prompt(`Wybierz pozycję BOQ (1-${boqRows.length}):\n${options}`, '1');
+            if (!input) return;
+            const idx = parseInt(input, 10) - 1;
+            if (idx < 0 || idx >= boqRows.length) {
+              notify('Nieprawidłowy numer pozycji', 'error');
+              return;
+            }
+            const row = boqRows[idx];
+            setAnnotations(prev => prev.map(a => a.id === id ? { ...a, linkedBoqRowId: row.id } : a));
+            notify(`Adnotacja połączona z: ${row.name}`);
           }}
           // Measurements tab
           onRenameMeasurement={(id) => {
