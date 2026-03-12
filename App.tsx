@@ -137,6 +137,7 @@ const DictionariesPage = React.lazy(() => import('./pages/construction/Dictionar
 const PriceListsPage = React.lazy(() => import('./pages/construction/PriceLists').then(m => ({ default: m.PriceListsPage })));
 const KosztorysEditorPage = React.lazy(() => import('./pages/construction/KosztorysEditor').then(m => ({ default: m.KosztorysEditorPage })));
 const ContractorsPage = React.lazy(() => import("./pages/construction/Contractors").then(m => ({ default: m.ContractorsPage })));
+const KontrahenciPage = React.lazy(() => import("./pages/construction/Kontrahenci").then(m => ({ default: m.KontrahenciPage })));
 const BrigadeSchedulePage = React.lazy(() => import("./pages/construction/BrigadeSchedule").then(m => ({ default: m.BrigadeSchedulePage })));
 
 // Lazy-loaded heavy pages from other modules
@@ -485,6 +486,7 @@ export default function App() {
           <Route path="/construction/kosztorys/:estimateId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KosztorysEditorPage /></ProtectedRoute>} />
           <Route path="/construction/kosztorys" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KosztorysEditorPage /></ProtectedRoute>} />
           <Route path="/construction/contractors" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><ContractorsPage /></ProtectedRoute>} />
+          <Route path="/construction/kontrahenci" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KontrahenciPage /></ProtectedRoute>} />
           <Route path="/construction/brigade-schedule" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="estimates"><BrigadeSchedulePage /></ProtectedRoute>} />
 
           {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}

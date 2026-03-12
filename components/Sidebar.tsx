@@ -333,7 +333,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                    <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
                    <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                    <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
-                   <NavItem to="/construction/contractors" icon={Building2} label="Kontrahenci" />
+                   <NavItem to="/construction/kontrahenci" icon={Building2} label="Kontrahenci" />
                    <NavItem to="/construction/brigade-schedule" icon={UserSquare} label="Graf. Brig." />
                  </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
@@ -365,7 +365,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                    <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
                    <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                    <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
-                   <NavItem to="/construction/contractors" icon={Building2} label="Kontrahenci" />
+                   <NavItem to="/construction/kontrahenci" icon={Building2} label="Kontrahenci" />
                    <NavItem to="/construction/brigade-schedule" icon={UserSquare} label="Graf. brygad" />
                  </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
