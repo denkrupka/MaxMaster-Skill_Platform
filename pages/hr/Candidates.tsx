@@ -17,6 +17,7 @@ import { uploadDocument, supabase } from '../../lib/supabase';
 import { calculateSalary } from '../../services/salaryService';
 import { sendTemplatedSMS, sendSMS } from '../../lib/smsService';
 import { createShortLink } from '../../lib/shortLinks';
+import { Breadcrumbs } from '../../components/Breadcrumbs';
 
 // --- PESEL Validation ---
 const validatePesel = (pesel: string): { valid: boolean; error?: string } => {
@@ -1131,6 +1132,7 @@ Odpowiedz TYLKO w formacie JSON (bez markdown):
                             </div>
                             <div className="space-y-0.5">
                                 <div className="flex flex-wrap items-center gap-2">
+      <Breadcrumbs />
                                     <h1 className="text-lg font-black text-slate-900 tracking-tight">{selectedCandidate.first_name} {selectedCandidate.last_name}</h1>
                                     <div className="relative">
                                         <button 

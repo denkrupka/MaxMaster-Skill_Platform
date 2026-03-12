@@ -348,7 +348,8 @@ export default function PdfTakeoffWizard({
   onTakeoffCreated, onClose,
 }: PdfTakeoffWizardProps) {
   const navigate = useNavigate();
-  const lsKey = `takeoff_wizard_${planId}_pg${selectedPage}`;
+  const [selectedPage, setSelectedPage] = useState(pageNumber);
+  const lsKey = `takeoff_wizard_${planId}_pg${pageNumber}`;
 
   // Restore from localStorage on mount
   const getInitialState = () => {
@@ -366,7 +367,6 @@ export default function PdfTakeoffWizard({
   const savedState = getInitialState();
 
   const [step, setStep] = useState<WizardStep>(savedState?.step || (pdfDoc.numPages > 1 ? 'page_select' : 'scale'));
-  const [selectedPage, setSelectedPage] = useState(pageNumber);
   const [statusMsg, setStatusMsg] = useState('');
   const [positions, setPositions] = useState<TakeoffPosition[]>(savedState?.positions || []);
   const [error, setError] = useState('');

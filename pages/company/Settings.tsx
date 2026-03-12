@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2, Link2, Webhook, Bell, Shield, CheckCircle, AlertCircle, RefreshCw, Copy, Globe, Smartphone, Monitor, LogOut, Key, Zap, ExternalLink } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { Breadcrumbs } from '../../components/Breadcrumbs';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { WorkingHours, WorkingHoursDay, RoundTime, HolidayDay } from '../../types';
@@ -583,6 +584,7 @@ export const CompanySettingsPage: React.FC = () => {
   return (
     <div className="p-4 lg:p-6">
       {/* Header */}
+      <Breadcrumbs />
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Ustawienia firmy</h1>
         <p className="text-slate-500 mt-1">Zarządzaj danymi i ustawieniami swojej firmy</p>

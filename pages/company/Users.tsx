@@ -4,6 +4,7 @@ import { Search, UserPlus, Edit2, Trash2, X, Check, AlertCircle } from 'lucide-r
 import { useAppContext } from '../../context/AppContext';
 import { User, Role, UserStatus } from '../../types';
 import { ROLE_LABELS, MODULE_LABELS, COMPANY_ROLES } from '../../constants';
+import { Breadcrumbs } from '../../components/Breadcrumbs';
 
 const STATUS_LABELS: Record<string, string> = {
   [UserStatus.ACTIVE]: 'Aktywny',
@@ -185,6 +186,7 @@ export const CompanyUsersPage: React.FC = () => {
 
   return (
     <div className="p-4 lg:p-6">
+      <Breadcrumbs />
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div>

@@ -17,6 +17,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Legend
 } from 'recharts';
 import * as XLSX from 'xlsx';
+import { Breadcrumbs } from '../../components/Breadcrumbs';
 
 // ---------------------------------------------------------------
 // Helpers

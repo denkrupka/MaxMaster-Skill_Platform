@@ -10,6 +10,7 @@ import {
     ClipboardList, CalendarOff, CalendarRange, FolderKanban, BarChart3
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { useConfirm } from '../../components/ConfirmDialog';
 import { Button } from '../../components/Button';
 import { Role, ContractType, Position, Skill, SkillCategory, SystemConfig, UserStatus } from '../../types';
 import { CONTRACT_TYPE_LABELS, MODULE_LABELS } from '../../constants';
@@ -133,7 +134,7 @@ export const HRSettingsPage = () => {
     
     const handleSaveGeneral = () => { 
         if (currentUser) { 
-            if (profileData.password && profileData.password !== profileData.confirmPassword) return alert("Hasła nie są identyczne!"); 
+            if (profileData.password && profileData.password !== profileData.confirmPassword) { alert("Hasła nie są identyczne!"); return; } 
             updateUser(currentUser.id, profileData); 
             showSuccess('Zaktualizowano profil.'); 
         } 

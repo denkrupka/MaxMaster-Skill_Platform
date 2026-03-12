@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SectionTabs } from '../../components/SectionTabs';
+import { Breadcrumbs } from '../../components/Breadcrumbs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -128,6 +129,7 @@ export const CompanyAttendancePage: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto">
+      <Breadcrumbs />
       <SectionTabs section="obecnosci" />
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Obecności</h1>
 

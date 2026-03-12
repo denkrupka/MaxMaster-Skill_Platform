@@ -9,6 +9,7 @@ import { calculateSalary } from '../../services/salaryService';
 import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES, TERMINATION_REASONS, REFERRAL_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
+import { Breadcrumbs } from '../../components/Breadcrumbs';
 
 export const HREmployeesPage = () => {
     const { state, updateUser, logCandidateAction, addCandidateDocument, updateCandidateDocumentDetails, archiveCandidateDocument, restoreCandidateDocument, updateUserSkillStatus, resetSkillProgress, assignBrigadir, triggerNotification, addEmployeeNote, deleteEmployeeNote, payReferralBonus } = useAppContext();
@@ -453,6 +454,7 @@ export const HREmployeesPage = () => {
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
                     <div className="flex justify-between items-start">
                         <div className="flex gap-4">
+      <Breadcrumbs />
                              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xl font-bold">{selectedEmployee.first_name[0]}{selectedEmployee.last_name[0]}</div>
                             <div>
                                 <h1 className="text-2xl font-bold text-slate-900">{selectedEmployee.first_name} {selectedEmployee.last_name}</h1>
