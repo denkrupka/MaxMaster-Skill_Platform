@@ -139,6 +139,10 @@ const KosztorysEditorPage = React.lazy(() => import('./pages/construction/Koszto
 const ContractorsPage = React.lazy(() => import("./pages/construction/Contractors").then(m => ({ default: m.ContractorsPage })));
 const KontrahenciPage = React.lazy(() => import("./pages/construction/Kontrahenci").then(m => ({ default: m.KontrahenciPage })));
 const BrigadeSchedulePage = React.lazy(() => import("./pages/construction/BrigadeSchedule").then(m => ({ default: m.BrigadeSchedulePage })));
+const EstimateViewPage = React.lazy(() => import("./pages/construction/EstimateView").then(m => ({ default: m.EstimateViewPage })));
+const ContractorsCompanyPage = React.lazy(() => import("./pages/company/Contractors").then(m => ({ default: m.ContractorsPage })));
+const CompanyModulesPage = React.lazy(() => import("./pages/company/Modules").then(m => ({ default: m.CompanyModulesPage })));
+const DoradcaSkillsPage = React.lazy(() => import("./pages/doradca/Skills").then(m => ({ default: m.DoradcaSkills })));
 
 // Lazy-loaded heavy pages from other modules
 const SalesCompanies = React.lazy(() => import('./pages/sales/Companies').then(m => ({ default: m.SalesCompanies })));
@@ -456,6 +460,8 @@ export default function App() {
           <Route path="/company/time-off" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="time_off"><CompanyTimeOffPage /></ProtectedRoute>} />
           <Route path="/company/schedules" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="work_schedule"><CompanySchedulesPage /></ProtectedRoute>} />
           <Route path="/company/projects" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="tasks_projects"><CompanyProjectsPage /></ProtectedRoute>} />
+          <Route path="/company/contractors" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]}><ContractorsCompanyPage /></ProtectedRoute>} />
+          <Route path="/company/modules" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyModulesPage /></ProtectedRoute>} />
           <Route path="/company/tasks" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="tasks_projects"><CompanyTasksPage /></ProtectedRoute>} />
           <Route path="/company/customers" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="tasks_projects"><CompanyCustomersPage /></ProtectedRoute>} />
           <Route path="/company/timesheets" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="reports_payroll"><CompanyTimesheetsPage /></ProtectedRoute>} />
@@ -488,6 +494,7 @@ export default function App() {
           <Route path="/construction/contractors" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><ContractorsPage /></ProtectedRoute>} />
           <Route path="/construction/kontrahenci" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KontrahenciPage /></ProtectedRoute>} />
           <Route path="/construction/brigade-schedule" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="estimates"><BrigadeSchedulePage /></ProtectedRoute>} />
+          <Route path="/construction/estimate-view/:estimateId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimateViewPage /></ProtectedRoute>} />
 
           {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}
           <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesDashboard /></ProtectedRoute>} />
@@ -502,6 +509,7 @@ export default function App() {
           <Route path="/doradca/companies" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaCompanies /></ProtectedRoute>} />
           <Route path="/doradca/company/:companyId" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaCompanyView /></ProtectedRoute>} />
           <Route path="/doradca/library" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaLibrary /></ProtectedRoute>} />
+          <Route path="/doradca/skills" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaSkillsPage /></ProtectedRoute>} />
 
           {/* Legacy Admin Route */}
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPERADMIN]}><AdminUsersPage /></ProtectedRoute>} />
