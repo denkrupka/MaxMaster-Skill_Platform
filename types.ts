@@ -1932,6 +1932,7 @@ export interface KosztorysOwnLabour {
   updated_at: string;
   materials?: KosztorysOwnLabourMaterial[];
   equipment?: KosztorysOwnLabourEquipment[];
+  robocizna?: KosztorysOwnLabourRobocizna[];
 }
 
 export interface KosztorysOwnLabourMaterial {
@@ -1956,6 +1957,35 @@ export interface KosztorysOwnLabourEquipment {
   source_wholesaler?: string;
   source_sku?: string;
   source_url?: string;
+}
+
+// Robocizna catalog (simple labor items)
+export interface KosztorysRobocizna {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  unit?: string;
+  price_unit?: number;
+  time_hours: number;
+  time_minutes: number;
+  cost_type: 'rg' | 'ryczalt';
+  cost_ryczalt?: number;
+  category?: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Linked robocizna for positions
+export interface KosztorysOwnLabourRobocizna {
+  id: string;
+  labour_id: string;
+  robocizna_name: string;
+  robocizna_price?: number;
+  robocizna_quantity: number;
+  source_robocizna_id?: string;
 }
 
 // Справочник материалов

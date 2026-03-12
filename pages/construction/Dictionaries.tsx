@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Check, RefreshCw,
-  Wrench, Package, Monitor, FileText, Link2, ChevronDown, BookOpen,
+  Wrench, Package, Monitor, FileText, Link2, ChevronDown, BookOpen, Hammer,
   Settings, AlertCircle, ChevronRight, ClipboardList, GripVertical,
   Layers, FolderOpen, Store, Grid3X3, List, ExternalLink, ChevronLeft,
   Image as ImageIcon, Upload, Eye, ArrowUp, ArrowDown
@@ -36,10 +36,11 @@ import { AtutIntegrator } from './AtutIntegrator';
 import { RamirentIntegrator } from './RamirentIntegrator';
 
 // ============ Типы для вкладок ============
-type TabType = 'work_types' | 'materials' | 'equipment';
+type TabType = 'work_types' | 'robocizna' | 'materials' | 'equipment';
 
 const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
-  { id: 'work_types', label: 'Robocizna', icon: Wrench },
+  { id: 'work_types', label: 'Pozycje', icon: Wrench },
+  { id: 'robocizna', label: 'Robocizna', icon: Hammer },
   { id: 'materials', label: 'Materiały', icon: Package },
   { id: 'equipment', label: 'Sprzęt', icon: Monitor },
 ];
@@ -268,8 +269,20 @@ export const DictionariesPage: React.FC = () => {
   // ============ Full catalog pickers for labour modal ============
   const [labourMaterialPickerOpen, setLabourMaterialPickerOpen] = useState(false);
   const [labourEquipmentPickerOpen, setLabourEquipmentPickerOpen] = useState(false);
+  const [labourRobociznaPickerOpen, setLabourRobociznaPickerOpen] = useState(false);
   const [pickerMatSubTab, setPickerMatSubTab] = useState<string>('own');
   const [pickerEqSubTab, setPickerEqSubTab] = useState<string>('own');
+
+  // ============ Robocizna catalog tab ============
+  const [robociznaItems, setRobociznaItems] = useState<any[]>([]);
+  const [robociznaSearch, setRobociznaSearch] = useState('');
+  const [robociznaDialog, setRobociznaDialog] = useState(false);
+  const [editingRobocizna, setEditingRobocizna] = useState<any | null>(null);
+  const [autoGenerateRobociznaCode, setAutoGenerateRobociznaCode] = useState(true);
+  const [robociznaManualRate, setRobociznaManualRate] = useState(0);
+  const [robociznaUseManualRate, setRobociznaUseManualRate] = useState(false);
+  const [ownLabourRobocizna, setOwnLabourRobocizna] = useState<any[]>([]);
+  const [laboursWithRobocizna, setLaboursWithRobocizna] = useState<Set<string>>(new Set());
 
   // ============ Шаблонные задания ============
   const [templateTasks, setTemplateTasks] = useState<any[]>([]);
@@ -465,6 +478,7 @@ export const DictionariesPage: React.FC = () => {
     setTabLoading(true);
     try {
       if (tab === 'work_types') await loadWorkTypesTabData();
+      else if (tab === 'robocizna') await loadRobociznaItems();
       else if (tab === 'materials') await loadMaterialsTabData();
       else if (tab === 'equipment') await loadEquipmentTabData();
 
@@ -1088,15 +1102,18 @@ export const DictionariesPage: React.FC = () => {
       // Load linked items flags for icon highlighting
       if (labours.length > 0) {
         const ids = labours.map(l => l.id);
-        const [matRes, eqRes] = await Promise.all([
+        const [matRes, eqRes, robRes] = await Promise.all([
           supabase.from('kosztorys_own_labour_materials').select('labour_id').in('labour_id', ids),
           supabase.from('kosztorys_own_labour_equipment').select('labour_id').in('labour_id', ids),
+          supabase.from('kosztorys_own_labour_robocizna').select('labour_id').in('labour_id', ids),
         ]);
         setLaboursWithMats(new Set((matRes.data || []).map(r => r.labour_id)));
         setLaboursWithEquip(new Set((eqRes.data || []).map(r => r.labour_id)));
+        setLaboursWithRobocizna(new Set((robRes.data || []).map(r => r.labour_id)));
       } else {
         setLaboursWithMats(new Set());
         setLaboursWithEquip(new Set());
+        setLaboursWithRobocizna(new Set());
       }
     } catch (err) {
       console.error('Error loading own labours:', err);
@@ -1119,12 +1136,69 @@ export const DictionariesPage: React.FC = () => {
   };
 
   const loadOwnLabourLinked = async (labourId: string) => {
-    const [matRes, eqRes] = await Promise.all([
+    const [matRes, eqRes, robRes] = await Promise.all([
       supabase.from('kosztorys_own_labour_materials').select('*').eq('labour_id', labourId),
       supabase.from('kosztorys_own_labour_equipment').select('*').eq('labour_id', labourId),
+      supabase.from('kosztorys_own_labour_robocizna').select('*').eq('labour_id', labourId),
     ]);
     setOwnLabourMaterials(matRes.data || []);
     setOwnLabourEquipment(eqRes.data || []);
+    setOwnLabourRobocizna(robRes.data || []);
+  };
+
+  // ============ Robocizna catalog ============
+  const loadRobociznaItems = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data } = await supabase.from('kosztorys_robocizna')
+        .select('*').eq('company_id', currentUser.company_id).order('name');
+      setRobociznaItems(data || []);
+    } catch (err) {
+      console.error('Error loading robocizna:', err);
+    }
+  };
+
+  const generateRobociznaCode = () => {
+    let maxNum = 0;
+    robociznaItems.forEach(r => {
+      const match = r.code?.match(/^RB-(\d+)$/);
+      if (match) maxNum = Math.max(maxNum, parseInt(match[1]));
+    });
+    return `RB-${String(maxNum + 1).padStart(5, '0')}`;
+  };
+
+  const handleSaveRobocizna = async () => {
+    if (!currentUser?.company_id || !editingRobocizna?.name?.trim()) return;
+    setSaving(true);
+    try {
+      const code = autoGenerateRobociznaCode ? generateRobociznaCode() : (editingRobocizna.code || generateRobociznaCode());
+      const record = {
+        company_id: currentUser.company_id,
+        code,
+        name: editingRobocizna.name.trim(),
+        unit: editingRobocizna.unit || 'szt.',
+        price_unit: editingRobocizna.price_unit || 0,
+        time_hours: editingRobocizna.time_hours || 0,
+        time_minutes: editingRobocizna.time_minutes || 0,
+        cost_type: editingRobocizna.cost_type || 'rg',
+        cost_ryczalt: editingRobocizna.cost_ryczalt || 0,
+        category: editingRobocizna.category || null,
+        description: editingRobocizna.description || null,
+        is_active: editingRobocizna.is_active !== false,
+      };
+      if (editingRobocizna.id) {
+        await supabase.from('kosztorys_robocizna').update(record).eq('id', editingRobocizna.id);
+      } else {
+        await supabase.from('kosztorys_robocizna').insert(record);
+      }
+      await loadRobociznaItems();
+      setRobociznaDialog(false);
+      setEditingRobocizna(null);
+    } catch (err) {
+      console.error('Error saving robocizna:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ============ Robocizna — Katalog Własny (handlers) ============
@@ -1410,6 +1484,7 @@ export const DictionariesPage: React.FC = () => {
     // Delete old and re-insert
     await supabase.from('kosztorys_own_labour_materials').delete().eq('labour_id', labourId);
     await supabase.from('kosztorys_own_labour_equipment').delete().eq('labour_id', labourId);
+    await supabase.from('kosztorys_own_labour_robocizna').delete().eq('labour_id', labourId);
 
     if (ownLabourMaterials.length > 0) {
       await supabase.from('kosztorys_own_labour_materials').insert(
@@ -1436,6 +1511,17 @@ export const DictionariesPage: React.FC = () => {
           source_wholesaler: e.source_wholesaler || null,
           source_sku: e.source_sku || null,
           source_url: e.source_url || null,
+        }))
+      );
+    }
+    if (ownLabourRobocizna.length > 0) {
+      await supabase.from('kosztorys_own_labour_robocizna').insert(
+        ownLabourRobocizna.map(r => ({
+          labour_id: labourId,
+          robocizna_name: r.robocizna_name,
+          robocizna_price: r.robocizna_price || 0,
+          robocizna_quantity: r.robocizna_quantity || 1,
+          source_robocizna_id: r.source_robocizna_id || null,
         }))
       );
     }
@@ -4038,6 +4124,120 @@ export const DictionariesPage: React.FC = () => {
             </div>
 
             {/* Cost type toggle */}
+            {/* Linked Robocizna (labour items from Robocizna catalog) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                  <Hammer className="w-4 h-4 text-purple-500" />
+                  Robocizna ({ownLabourRobocizna.length})
+                </label>
+                <button onClick={() => {
+                    setLabourRobociznaPickerOpen(true);
+                    if (!loadedTabs.current.has('robocizna')) loadTabData('robocizna' as TabType);
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-purple-600 hover:bg-purple-50 rounded">
+                  <Plus className="w-3 h-3" /> Dodaj robociznę
+                </button>
+              </div>
+              {ownLabourRobocizna.length > 0 && (
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="min-w-full divide-y divide-slate-200 text-xs">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-slate-500">Nazwa</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-20">Koszt</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-16">Ilość</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-24">Wartość</th>
+                        <th className="px-3 py-2 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {ownLabourRobocizna.map((r: any, idx: number) => (
+                        <tr key={r.id || idx}>
+                          <td className="px-3 py-1.5 text-slate-800">{r.robocizna_name}</td>
+                          <td className="px-3 py-1.5 text-right text-slate-600">{(r.robocizna_price || 0).toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <input type="number" min="0.01" step="0.01" value={r.robocizna_quantity} onChange={e => {
+                              const qty = parseFloat(e.target.value) || 1;
+                              setOwnLabourRobocizna(prev => prev.map((p: any, i: number) => i === idx ? { ...p, robocizna_quantity: qty } : p));
+                            }} className="w-14 px-1 py-0.5 border border-slate-200 rounded text-right text-xs" />
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-medium text-slate-800">{((r.robocizna_price || 0) * (r.robocizna_quantity || 1)).toFixed(2)}</td>
+                          <td className="px-3 py-1.5">
+                            <button onClick={() => setOwnLabourRobocizna(prev => prev.filter((_: any, i: number) => i !== idx))} className="p-0.5 text-slate-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Robocizna picker overlay */}
+            {labourRobociznaPickerOpen && (
+              <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl w-full max-w-2xl max-h-[70vh] flex flex-col shadow-xl">
+                  <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                    <h3 className="font-semibold">Wybierz robociznę z katalogu</h3>
+                    <button onClick={() => setLabourRobociznaPickerOpen(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+                  </div>
+                  <div className="p-3 border-b border-slate-100">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input type="text" placeholder="Szukaj robocizny..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm" />
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Kod</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Nazwa</th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">Koszt</th>
+                          <th className="px-4 py-2 w-16"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {robociznaItems.filter(r => r.is_active !== false).map(r => {
+                          const rgRate = avgEmployeeRate ?? 0;
+                          const cost = r.cost_type === 'rg'
+                            ? rgRate * ((r.time_hours || 0) + (r.time_minutes || 0) / 60)
+                            : (r.cost_ryczalt || 0);
+                          return (
+                            <tr key={r.id} className="hover:bg-blue-50 cursor-pointer"
+                              onClick={() => {
+                                setOwnLabourRobocizna(prev => [...prev, {
+                                  id: `new-${Date.now()}`,
+                                  labour_id: '',
+                                  robocizna_name: r.name,
+                                  robocizna_price: cost,
+                                  robocizna_quantity: 1,
+                                  source_robocizna_id: r.id,
+                                }]);
+                                setLabourRobociznaPickerOpen(false);
+                              }}>
+                              <td className="px-4 py-2 font-mono text-xs text-slate-500">{r.code}</td>
+                              <td className="px-4 py-2 font-medium">{r.name}</td>
+                              <td className="px-4 py-2 text-right font-semibold text-blue-600">{cost.toFixed(2)} zł</td>
+                              <td className="px-4 py-2">
+                                <span className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Dodaj</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {robociznaItems.length === 0 && (
+                          <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">Brak robocizny — dodaj w zakładce Robocizna</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="hidden">
+            {/* Legacy: Koszt robocizny block — kept for backward compat, hidden */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Koszt robocizny</label>
               <div className="flex gap-2 mb-2">
@@ -4104,13 +4304,11 @@ export const DictionariesPage: React.FC = () => {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Kwota ryczałtu..." />
               )}
             </div>
+            </div>{/* end hidden legacy Koszt robocizny */}
 
             {/* Cost summary — 4 columns */}
             {(() => {
-              const rgRate = useManualRate ? manualHourlyRate : (avgEmployeeRate ?? 0);
-              const labourCost = editingOwnLabour.cost_type === 'rg'
-                ? rgRate * ((editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60)
-                : (editingOwnLabour.cost_ryczalt || 0);
+              const labourCost = ownLabourRobocizna.reduce((sum, r) => sum + (r.robocizna_price || 0) * (r.robocizna_quantity || 1), 0);
               const totalCost = labourCost + materialCostSum + equipmentCostSum;
               const profit = (editingOwnLabour.price || 0) - totalCost;
               return (
@@ -6481,6 +6679,262 @@ export const DictionariesPage: React.FC = () => {
           ) : (
             <>
               {activeTab === 'work_types' && renderWorkTypesTab()}
+
+              {activeTab === 'robocizna' && (
+                <div>
+                  {/* Search + Add button */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        value={robociznaSearch}
+                        onChange={e => setRobociznaSearch(e.target.value)}
+                        placeholder="Szukaj robocizny..."
+                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm"
+                      />
+                    </div>
+                    <span className="text-sm text-slate-500">{robociznaItems.filter(r => r.is_active !== false).length} pozycji</span>
+                    <button
+                      onClick={() => {
+                        setEditingRobocizna({ cost_type: 'rg', is_active: true, time_hours: 0, time_minutes: 0 });
+                        setAutoGenerateRobociznaCode(true);
+                        setRobociznaUseManualRate(false);
+                        setRobociznaManualRate(0);
+                        setRobociznaDialog(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Dodaj robociznę
+                    </button>
+                  </div>
+
+                  {/* Robocizna table */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Koszt robocizny</th>
+                          <th className="px-4 py-3 w-20"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {robociznaItems
+                          .filter(r => {
+                            if (!robociznaSearch) return true;
+                            const s = robociznaSearch.toLowerCase();
+                            return (r.name || '').toLowerCase().includes(s) || (r.code || '').toLowerCase().includes(s);
+                          })
+                          .map(r => {
+                            const rgRate = avgEmployeeRate ?? 0;
+                            const labourCost = r.cost_type === 'rg'
+                              ? rgRate * ((r.time_hours || 0) + (r.time_minutes || 0) / 60)
+                              : (r.cost_ryczalt || 0);
+                            return (
+                              <tr key={r.id} className="hover:bg-slate-50 cursor-pointer"
+                                onClick={() => {
+                                  setEditingRobocizna(r);
+                                  setAutoGenerateRobociznaCode(false);
+                                  setRobociznaUseManualRate(false);
+                                  setRobociznaDialog(true);
+                                }}>
+                                <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{r.code}</td>
+                                <td className="px-4 py-2.5 text-sm font-medium text-slate-900">{r.name}</td>
+                                <td className="px-4 py-2.5 text-sm text-right font-semibold text-blue-600">{labourCost.toFixed(2)} zł</td>
+                                <td className="px-4 py-2.5">
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await supabase.from('kosztorys_robocizna').delete().eq('id', r.id);
+                                      await loadRobociznaItems();
+                                    }}
+                                    className="p-1 text-slate-300 hover:text-red-500"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        {robociznaItems.length === 0 && (
+                          <tr><td colSpan={4} className="px-4 py-12 text-center text-slate-400">Brak robocizny w katalogu</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Add/Edit Robocizna Modal */}
+                  {robociznaDialog && editingRobocizna && (
+                    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-10 overflow-y-auto">
+                      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 mb-10">
+                        <div className="p-5 border-b border-slate-200 flex justify-between items-center">
+                          <h2 className="text-lg font-semibold">{editingRobocizna.id ? 'Edytuj robociznę' : 'Dodaj robociznę'}</h2>
+                          <button onClick={() => { setRobociznaDialog(false); setEditingRobocizna(null); }} className="p-1 hover:bg-slate-100 rounded">
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                          {/* Code + Auto */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Kod robocizny</label>
+                              <div className="flex gap-2 items-center">
+                                <input type="text" value={autoGenerateRobociznaCode ? 'Auto' : (editingRobocizna.code || '')}
+                                  onChange={e => setEditingRobocizna({ ...editingRobocizna, code: e.target.value })}
+                                  disabled={autoGenerateRobociznaCode}
+                                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-50 disabled:text-slate-400" placeholder="Auto" />
+                                <label className="flex items-center gap-1 text-sm text-blue-600 whitespace-nowrap cursor-pointer">
+                                  <input type="checkbox" checked={autoGenerateRobociznaCode} onChange={e => setAutoGenerateRobociznaCode(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                  Auto
+                                </label>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+                              <input type="text" value={editingRobocizna.category || ''}
+                                onChange={e => setEditingRobocizna({ ...editingRobocizna, category: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="np. Elektryka" />
+                            </div>
+                          </div>
+
+                          {/* Name */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+                            <input type="text" value={editingRobocizna.name || ''}
+                              onChange={e => setEditingRobocizna({ ...editingRobocizna, name: e.target.value })}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nazwa robocizny..." />
+                          </div>
+
+                          {/* Unit + Price + Time */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
+                              <select value={editingRobocizna.unit || 'szt.'}
+                                onChange={e => setEditingRobocizna({ ...editingRobocizna, unit: e.target.value })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                {LABOUR_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Cena jednostkowa</label>
+                              <input type="number" step="0.01" min="0" value={editingRobocizna.price_unit || ''}
+                                onChange={e => setEditingRobocizna({ ...editingRobocizna, price_unit: parseFloat(e.target.value) || 0 })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="0.00 zł" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Czasochłonność (HH:MM)</label>
+                              <div className="flex items-center gap-1">
+                                <input type="number" min="0" value={editingRobocizna.time_hours || 0}
+                                  onChange={e => setEditingRobocizna({ ...editingRobocizna, time_hours: parseInt(e.target.value) || 0 })}
+                                  className="w-16 px-2 py-2 border border-slate-300 rounded-lg text-sm text-center" />
+                                <span className="text-lg font-bold text-slate-400">:</span>
+                                <input type="number" min="0" max="59" value={editingRobocizna.time_minutes || 0}
+                                  onChange={e => setEditingRobocizna({ ...editingRobocizna, time_minutes: Math.min(59, parseInt(e.target.value) || 0) })}
+                                  className="w-16 px-2 py-2 border border-slate-300 rounded-lg text-sm text-center" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Koszt robocizny block */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Koszt robocizny</label>
+                            <div className="flex gap-2 mb-2">
+                              <button onClick={() => setEditingRobocizna({ ...editingRobocizna, cost_type: 'rg' })}
+                                className={`px-3 py-1.5 rounded text-sm font-medium ${editingRobocizna.cost_type === 'rg' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                RG
+                              </button>
+                              <button onClick={() => setEditingRobocizna({ ...editingRobocizna, cost_type: 'ryczalt' })}
+                                className={`px-3 py-1.5 rounded text-sm font-medium ${editingRobocizna.cost_type === 'ryczalt' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                Ryczałt
+                              </button>
+                            </div>
+                            {editingRobocizna.cost_type === 'rg' ? (
+                              <div className="px-3 py-2.5 bg-blue-50 rounded-lg space-y-2">
+                                {(() => {
+                                  const activeRate = robociznaUseManualRate ? robociznaManualRate : (avgEmployeeRate ?? 0);
+                                  const timeDecimal = (editingRobocizna.time_hours || 0) + (editingRobocizna.time_minutes || 0) / 60;
+                                  const cost = activeRate * timeDecimal;
+                                  return (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <button onClick={() => setRobociznaUseManualRate(false)}
+                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${!robociznaUseManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                                            Średnia
+                                          </button>
+                                          <button onClick={() => setRobociznaUseManualRate(true)}
+                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${robociznaUseManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                                            Ręcznie
+                                          </button>
+                                        </div>
+                                        {!robociznaUseManualRate && avgEmployeeRate !== null && (
+                                          <span className="text-[10px] text-blue-500">śr. stawka pracowników (baza + bonusy)</span>
+                                        )}
+                                      </div>
+                                      {robociznaUseManualRate ? (
+                                        <div className="flex items-center gap-2">
+                                          <input type="number" step="0.01" min="0" value={robociznaManualRate || ''} onChange={e => setRobociznaManualRate(parseFloat(e.target.value) || 0)}
+                                            className="w-28 px-2 py-1.5 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500" placeholder="zł/h" />
+                                          <span className="text-xs text-blue-700">
+                                            × {editingRobocizna.time_hours || 0}h{String(editingRobocizna.time_minutes || 0).padStart(2, '0')}m
+                                            = <span className="font-bold">{cost.toFixed(2)} zł</span>
+                                          </span>
+                                        </div>
+                                      ) : avgEmployeeRate !== null ? (
+                                        <div className="text-xs text-blue-700">
+                                          Śr. stawka: <span className="font-semibold">{avgEmployeeRate.toFixed(2)} zł/h</span>
+                                          {' × '}
+                                          {editingRobocizna.time_hours || 0}h{String(editingRobocizna.time_minutes || 0).padStart(2, '0')}m
+                                          {' = '}
+                                          <span className="font-bold">{cost.toFixed(2)} zł</span>
+                                        </div>
+                                      ) : (
+                                        <div className="text-xs text-blue-500">Brak aktywnych pracowników ze stawką — przełącz na «Ręcznie»</div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            ) : (
+                              <input type="number" step="0.01" min="0" value={editingRobocizna.cost_ryczalt || ''} onChange={e => setEditingRobocizna({ ...editingRobocizna, cost_ryczalt: parseFloat(e.target.value) || 0 })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Kwota ryczałtu..." />
+                            )}
+                          </div>
+
+                          {/* Description */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                            <textarea value={editingRobocizna.description || ''}
+                              onChange={e => setEditingRobocizna({ ...editingRobocizna, description: e.target.value })}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" rows={2} placeholder="Opis..." />
+                          </div>
+
+                          {/* Active checkbox */}
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={editingRobocizna.is_active !== false}
+                              onChange={e => setEditingRobocizna({ ...editingRobocizna, is_active: e.target.checked })}
+                              className="w-4 h-4 text-blue-600 rounded" />
+                            <span className="text-sm text-slate-700">Aktywna</span>
+                          </label>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-5 border-t border-slate-200 flex justify-end gap-3">
+                          <button onClick={() => { setRobociznaDialog(false); setEditingRobocizna(null); }}
+                            className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm">Anuluj</button>
+                          <button onClick={handleSaveRobocizna} disabled={saving || !editingRobocizna.name?.trim()}
+                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Zapisz'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {activeTab === 'materials' && (
                 <div>
