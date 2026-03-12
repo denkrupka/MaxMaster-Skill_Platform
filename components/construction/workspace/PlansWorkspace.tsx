@@ -695,12 +695,16 @@ export const PlansWorkspace: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
+  const [isUploading, setIsUploading] = React.useState(false);
+  const [uploadFileName, setUploadFileName] = React.useState('');
 
   const handleDropFile = useCallback(async (file: File) => {
     if (!selectedProject || !currentUser) {
       notify('Wybierz projekt przed wczytaniem pliku', 'error');
       return;
     }
+    setIsUploading(true);
+    setUploadFileName(file.name);
     try {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `plans/${selectedProject.id}/${Date.now()}_${safeName}`;
@@ -738,10 +742,13 @@ export const PlansWorkspace: React.FC = () => {
         created_by_id: currentUser.id,
       });
       if (insertErr) throw insertErr;
-      notify('Plik zostal wczytany z przesuniecia');
+      notify('Plik został wczytany!');
       loadPlansData();
     } catch (err: any) {
-      notify(err.message || 'Blad przesylania pliku', 'error');
+      notify(err.message || 'Błąd przesyłania pliku', 'error');
+    } finally {
+      setIsUploading(false);
+      setUploadFileName('');
     }
   }, [selectedProject, currentUser, allPlans.length, notify]);
 
@@ -3772,15 +3779,22 @@ export const PlansWorkspace: React.FC = () => {
                   <Upload className={`w-8 h-8 ${isDragOver ? 'text-blue-600' : 'text-slate-400'}`} />
                 </div>
                 <h3 className="text-sm font-semibold text-slate-700 mb-1">
-                  {isDragOver ? 'Upuść plik tutaj' : 'Wybierz plik z panelu lub przeciągnij tutaj'}
+                  {isUploading ? `Przesyłanie: ${uploadFileName}…` : isDragOver ? 'Upuść plik tutaj' : 'Wybierz plik z panelu lub przeciągnij tutaj'}
                 </h3>
                 <p className="text-xs text-slate-400 mb-4">PDF, DWG, DXF, IFC, RVT, obrazy</p>
-                <button
-                  onClick={handleImport}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                >
-                  Wczytaj plik
-                </button>
+                {isUploading ? (
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Przesyłanie do chmury…</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleImport}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                  >
+                    Wczytaj plik
+                  </button>
+                )}
               </div>
             </div>
           ) : (
