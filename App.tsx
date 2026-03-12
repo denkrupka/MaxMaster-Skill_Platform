@@ -1,5 +1,6 @@
 
 import React, { Suspense } from 'react';
+import { FullPageLoader } from './components/SkeletonLoader';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
@@ -43,12 +44,12 @@ import { DepartmentDetailPage } from './pages/company/DepartmentDetail';
 import { CompanyAttendancePage } from './pages/company/Attendance';
 import { TeamNowPage } from './pages/company/TeamNow';
 import { CompanyTimeOffPage } from './pages/company/TimeOff';
-import { CompanySchedulesPage } from './pages/company/Schedules';
+// import { CompanySchedulesPage } from './pages/company/Schedules';
 // CompanyProjectsPage is lazy-loaded above
 import { CompanyTasksPage } from './pages/company/Tasks';
-import { CompanyCustomersPage } from './pages/company/Customers';
-import { CompanyTimesheetsPage } from './pages/company/Timesheets';
-import { CompanyReportsPage } from './pages/company/Reports';
+// import { CompanyCustomersPage } from './pages/company/Customers';
+// import { CompanyTimesheetsPage } from './pages/company/Timesheets';
+// import { CompanyReportsPage } from './pages/company/Reports';
 import { NotificationsPage } from './pages/company/Notifications';
 
 // Sales Pages
@@ -66,11 +67,11 @@ import { DoradcaCompanies } from './pages/doradca/Companies';
 import { DoradcaLibrary } from './pages/doradca/Library';
 
 import { HRDashboard } from './pages/hr/Dashboard';
-import { HRCandidatesPage } from './pages/hr/Candidates';
-import { HREmployeesPage } from './pages/hr/Employees';
+// import { HRCandidatesPage } from './pages/hr/Candidates';
+// import { HREmployeesPage } from './pages/hr/Employees';
 import { HRTrialPage } from './pages/hr/Trial';
 import { HRDocumentsPage } from './pages/hr/Documents';
-import { HRReportsPage } from './pages/hr/Reports';
+// import { HRReportsPage } from './pages/hr/Reports';
 import { HRLibraryPage } from './pages/hr/Library';
 import { HRSkillsPage } from './pages/hr/Skills';
 import { HRTestsPage } from './pages/hr/Tests';
@@ -131,6 +132,15 @@ const DMSPage = React.lazy(() => import('./pages/construction/DMS').then(m => ({
 const GanttPage = React.lazy(() => import('./pages/construction/Gantt').then(m => ({ default: m.GanttPage })));
 const FinancePage = React.lazy(() => import('./pages/construction/Finance').then(m => ({ default: m.FinancePage })));
 const ProcurementPage = React.lazy(() => import('./pages/construction/Procurement').then(m => ({ default: m.ProcurementPage })));
+// Additional lazy-loaded heavy pages
+const CompanyReportsPage = React.lazy(() => import('./pages/company/Reports').then(m => ({ default: m.CompanyReportsPage })));
+const CompanyTimesheetsPage = React.lazy(() => import('./pages/company/Timesheets').then(m => ({ default: m.CompanyTimesheetsPage })));
+const CompanyCustomersPage = React.lazy(() => import('./pages/company/Customers').then(m => ({ default: m.CompanyCustomersPage })));
+const HRCandidatesPage = React.lazy(() => import('./pages/hr/Candidates').then(m => ({ default: m.HRCandidatesPage })));
+const HREmployeesPage = React.lazy(() => import('./pages/hr/Employees').then(m => ({ default: m.HREmployeesPage })));
+const HRReportsPage = React.lazy(() => import('./pages/hr/Reports').then(m => ({ default: m.HRReportsPage })));
+const CompanySchedulesPage = React.lazy(() => import('./pages/company/Schedules').then(m => ({ default: m.CompanySchedulesPage })));
+
 const ApprovalsPage = React.lazy(() => import('./pages/construction/Approvals').then(m => ({ default: m.ApprovalsPage })));
 const RequestsPage = React.lazy(() => import('./pages/construction/Requests').then(m => ({ default: m.RequestsPage })));
 const FormularyPage = React.lazy(() => import('./pages/construction/Formulary').then(m => ({ default: m.FormularyPage })));
@@ -150,11 +160,7 @@ const SalesCompanies = React.lazy(() => import('./pages/sales/Companies').then(m
 const CompanyProjectsPage = React.lazy(() => import('./pages/company/Projects').then(m => ({ default: m.CompanyProjectsPage })));
 
 // Loading fallback
-const LazyFallback = () => (
-  <div className="flex items-center justify-center h-64">
-    <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-  </div>
-);
+const LazyFallback = () => <FullPageLoader />;
 
 const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' | 'estimates' | 'offers' | 'drawings' | 'dms' | 'gantt' | 'finance' | 'procurement' | 'approvals' }) => {
   const { state, getEffectiveRole } = useAppContext();
