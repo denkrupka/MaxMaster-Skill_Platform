@@ -17,6 +17,7 @@ import { SubscriptionExpiredAdminPage } from './pages/SubscriptionExpiredAdmin';
 import { SubscriptionExpiredUserPage } from './pages/SubscriptionExpiredUser';
 import { ModuleAccessDeniedPage } from './pages/ModuleAccessDenied';
 import { OfferLandingPage } from './pages/public/OfferLanding';
+const DocumentSignPage = React.lazy(() => import('./pages/public/DocumentSign').then(m => ({ default: m.DocumentSignPage })));
 import { OfferRequestLandingPage } from './pages/public/OfferRequestLanding';
 import { AdminUsersPage } from './pages/admin/Users';
 
@@ -423,6 +424,7 @@ export default function App() {
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
           <Route path="/register" element={<CompanyRegisterPage />} />
           <Route path="/offer/:token" element={<OfferLandingPage />} />
+          <Route path="/sign/:token" element={<DocumentSignPage />} />
           <Route path="/offer-request/:token" element={<OfferRequestLandingPage />} />
 
           {/* SuperAdmin Routes */}

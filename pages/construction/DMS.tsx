@@ -7,6 +7,7 @@ import {
   Copy
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { DocumentsPanel } from '../../components/construction/dms/DocumentsPanel';
 import { supabase } from '../../lib/supabase';
 import { Project, DMSFolder, DMSFile } from '../../types';
 
@@ -35,6 +36,7 @@ export const DMSPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser, users } = state;
 
+  const [activeTab, setActiveTab] = useState<'files' | 'documents'>('files');
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [allFolders, setAllFolders] = useState<DMSFolder[]>([]);
@@ -330,6 +332,33 @@ export const DMSPage: React.FC = () => {
   if (!selectedProject) {
     return (
       <div className="p-6">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-slate-200">
+          <button
+            onClick={() => setActiveTab('files')}
+            className={`px-4 py-2.5 -mb-px font-medium text-sm border-b-2 transition
+              ${activeTab === 'files' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            <span className="flex items-center gap-2">
+              <FolderOpen className="w-4 h-4" />
+              Pliki projektowe
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('documents')}
+            className={`px-4 py-2.5 -mb-px font-medium text-sm border-b-2 transition
+              ${activeTab === 'documents' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            <span className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Dokumenty elektroniczne
+            </span>
+          </button>
+        </div>
+
+        {activeTab === 'documents' ? (
+          <DocumentsPanel />
+        ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map(project => (
             <button
@@ -355,6 +384,7 @@ export const DMSPage: React.FC = () => {
             </button>
           ))}
         </div>
+        )}
       </div>
     );
   }
