@@ -270,12 +270,18 @@ export const DictionariesPage: React.FC = () => {
   const [labourMaterialPickerOpen, setLabourMaterialPickerOpen] = useState(false);
   const [labourEquipmentPickerOpen, setLabourEquipmentPickerOpen] = useState(false);
   const [labourRobociznaPickerOpen, setLabourRobociznaPickerOpen] = useState(false);
+  const [robociznaPickerSearch, setRobociznaPickerSearch] = useState('');
+  const [robociznaPickerCategory, setRobociznaPickerCategory] = useState<string | null>(null);
   const [pickerMatSubTab, setPickerMatSubTab] = useState<string>('own');
   const [pickerEqSubTab, setPickerEqSubTab] = useState<string>('own');
 
   // ============ Robocizna catalog tab ============
   const [robociznaItems, setRobociznaItems] = useState<any[]>([]);
   const [robociznaSearch, setRobociznaSearch] = useState('');
+  const [robociznaSelectedCategory, setRobociznaSelectedCategory] = useState<string | null>(null);
+  const [robociznaCategories, setRobociznaCategories] = useState<string[]>([]);
+  const [showAddRobociznaCategory, setShowAddRobociznaCategory] = useState(false);
+  const [newRobociznaCategoryName, setNewRobociznaCategoryName] = useState('');
   const [robociznaDialog, setRobociznaDialog] = useState(false);
   const [editingRobocizna, setEditingRobocizna] = useState<any | null>(null);
   const [autoGenerateRobociznaCode, setAutoGenerateRobociznaCode] = useState(true);
@@ -1152,7 +1158,11 @@ export const DictionariesPage: React.FC = () => {
     try {
       const { data } = await supabase.from('kosztorys_robocizna')
         .select('*').eq('company_id', currentUser.company_id).order('name');
-      setRobociznaItems(data || []);
+      const items = data || [];
+      setRobociznaItems(items);
+      // Extract unique categories
+      const cats = [...new Set(items.map(r => r.category).filter(Boolean))] as string[];
+      setRobociznaCategories(cats.sort());
     } catch (err) {
       console.error('Error loading robocizna:', err);
     }
@@ -1242,7 +1252,7 @@ export const DictionariesPage: React.FC = () => {
           .update(labourData)
           .eq('id', editingOwnLabour.id);
         if (error) throw error;
-        showNotification('Robocizna zaktualizowana', 'success');
+        showNotification('Pozycja zaktualizowana', 'success');
       } else {
         labourData.company_id = currentUser.company_id;
         const { data, error } = await supabase
@@ -1263,7 +1273,7 @@ export const DictionariesPage: React.FC = () => {
             ownLabourEquipment.map(e => ({ ...e, id: undefined, labour_id: data.id }))
           );
         }
-        showNotification('Robocizna dodana', 'success');
+        showNotification('Pozycja dodana', 'success');
       }
 
       setOwnLabourDialog(false);
@@ -1283,7 +1293,7 @@ export const DictionariesPage: React.FC = () => {
     try {
       const { error } = await supabase.from('kosztorys_own_labours').delete().eq('id', id);
       if (error) throw error;
-      showNotification('Robocizna usunięta', 'success');
+      showNotification('Pozycja usunięta', 'success');
       await loadOwnLabours();
     } catch (error: any) {
       showNotification(error.message || 'Błąd podczas usuwania', 'error');
@@ -3647,7 +3657,7 @@ export const DictionariesPage: React.FC = () => {
                 <input
                   value={systemLabourSearch}
                   onChange={e => setSystemLabourSearch(e.target.value)}
-                  placeholder="Szukaj robocizny..."
+                  placeholder="Szukaj pozycji..."
                   className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
                 />
                 {systemLabourSearch && (
@@ -3737,7 +3747,7 @@ export const DictionariesPage: React.FC = () => {
       )}
 
       {/* System labour detail modal */}
-      <Modal isOpen={!!systemLabourDetail} onClose={() => setSystemLabourDetail(null)} title="Szczegóły robocizny systemowej" size="lg">
+      <Modal isOpen={!!systemLabourDetail} onClose={() => setSystemLabourDetail(null)} title="Szczegóły pozycji systemowej" size="lg">
         {systemLabourDetail && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -3930,7 +3940,7 @@ export const DictionariesPage: React.FC = () => {
               <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
                 <Search className="w-4 h-4 text-slate-400" />
                 <input value={ownLabourSearch} onChange={e => setOwnLabourSearch(e.target.value)}
-                  placeholder="Szukaj robocizny..." className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400" />
+                  placeholder="Szukaj pozycji..." className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400" />
                 {ownLabourSearch && <button onClick={() => setOwnLabourSearch('')} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>}
               </div>
               <span className="text-xs text-slate-400 whitespace-nowrap">{filteredOwnLabours.length} pozycji</span>
@@ -3945,16 +3955,16 @@ export const DictionariesPage: React.FC = () => {
                 className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
-                Dodaj Robociznę
+                Dodaj Pozycję
               </button>
             </div>
 
             {filteredOwnLabours.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center">
                 <Wrench className="w-12 h-12 text-slate-200 mb-4" />
-                <h3 className="text-lg font-semibold text-slate-600 mb-2">Własny katalog robocizny</h3>
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">Własny katalog pozycji</h3>
                 <p className="text-sm text-slate-400 max-w-sm">
-                  {ownLabourSearch ? `Brak wyników dla «${ownLabourSearch}»` : 'Dodaj robocizny ręcznie lub importuj z katalogu systemowego.'}
+                  {ownLabourSearch ? `Brak wyników dla «${ownLabourSearch}»` : 'Dodaj pozycje ręcznie lub importuj z katalogu systemowego.'}
                 </p>
               </div>
             ) : (() => {
@@ -4037,7 +4047,7 @@ export const DictionariesPage: React.FC = () => {
       )}
 
       {/* Delete own labour confirm */}
-      <Modal isOpen={!!deleteOwnLabourConfirm} onClose={() => setDeleteOwnLabourConfirm(null)} title="Usunąć robociznę?" size="sm">
+      <Modal isOpen={!!deleteOwnLabourConfirm} onClose={() => setDeleteOwnLabourConfirm(null)} title="Usunąć pozycję?" size="sm">
         {deleteOwnLabourConfirm && (
           <div>
             <p className="text-sm text-slate-600 mb-4">Czy na pewno chcesz usunąć <strong>{deleteOwnLabourConfirm.name}</strong>?</p>
@@ -4053,7 +4063,7 @@ export const DictionariesPage: React.FC = () => {
       <Modal isOpen={!!deleteOwnLabourCategoryConfirm} onClose={() => setDeleteOwnLabourCategoryConfirm(null)} title="Usunąć kategorię?" size="sm">
         {deleteOwnLabourCategoryConfirm && (
           <div>
-            <p className="text-sm text-slate-600 mb-4">Kategoria <strong>{deleteOwnLabourCategoryConfirm.name}</strong> zostanie usunięta. Robocizny zostaną przeniesione do kategorii nadrzędnej.</p>
+            <p className="text-sm text-slate-600 mb-4">Kategoria <strong>{deleteOwnLabourCategoryConfirm.name}</strong> zostanie usunięta. Pozycje zostaną przeniesione do kategorii nadrzędnej.</p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setDeleteOwnLabourCategoryConfirm(null)} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
               <button onClick={() => handleDeleteOwnLabourCategory(deleteOwnLabourCategoryConfirm.id)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Usuń</button>
@@ -4063,16 +4073,16 @@ export const DictionariesPage: React.FC = () => {
       </Modal>
 
       {/* ========== OWN LABOUR EDIT/CREATE MODAL ========== */}
-      <Modal isOpen={ownLabourDialog} onClose={() => { setOwnLabourDialog(false); setEditingOwnLabour(null); }} title={editingOwnLabour?.id ? 'Edytuj robociznę' : 'Dodaj robociznę'} size="xl">
+      <Modal isOpen={ownLabourDialog} onClose={() => { setOwnLabourDialog(false); setEditingOwnLabour(null); }} title={editingOwnLabour?.id ? 'Edytuj pozycję' : 'Dodaj pozycję'} size="xl">
         {editingOwnLabour && (
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             {/* Code + Auto-generate */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Kod robocizny</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kod pozycji</label>
                 <div className="flex items-center gap-2">
                   <input type="text" value={editingOwnLabour.code || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, code: e.target.value })}
-                    disabled={autoGenerateLabourCode} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400 text-sm" placeholder={autoGenerateLabourCode ? 'Auto' : 'ROB-XXXXX'} />
+                    disabled={autoGenerateLabourCode} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400 text-sm" placeholder={autoGenerateLabourCode ? 'Auto' : 'POZ-XXXXX'} />
                   <label className="flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap">
                     <input type="checkbox" checked={autoGenerateLabourCode} onChange={e => setAutoGenerateLabourCode(e.target.checked)} className="h-3.5 w-3.5 text-blue-600 rounded border-slate-300" />
                     Auto
@@ -4175,66 +4185,117 @@ export const DictionariesPage: React.FC = () => {
             </div>
 
             {/* Robocizna picker overlay */}
-            {labourRobociznaPickerOpen && (
+            {labourRobociznaPickerOpen && (() => {
+              const pickerCats = [...new Set(robociznaItems.filter(r => r.is_active !== false).map(r => r.category).filter(Boolean))] as string[];
+              const filteredPickerItems = robociznaItems.filter(r => {
+                if (r.is_active === false) return false;
+                if (robociznaPickerCategory === '__none__' && r.category) return false;
+                if (robociznaPickerCategory && robociznaPickerCategory !== '__none__' && r.category !== robociznaPickerCategory) return false;
+                if (robociznaPickerSearch) {
+                  const s = robociznaPickerSearch.toLowerCase();
+                  return (r.name || '').toLowerCase().includes(s) || (r.code || '').toLowerCase().includes(s);
+                }
+                return true;
+              });
+              return (
               <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl w-full max-w-2xl max-h-[70vh] flex flex-col shadow-xl">
+                <div className="bg-white rounded-xl w-full max-w-3xl shadow-xl flex flex-col" style={{ height: '70vh' }}>
                   <div className="p-4 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-semibold">Wybierz robociznę z katalogu</h3>
-                    <button onClick={() => setLabourRobociznaPickerOpen(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+                    <button onClick={() => { setLabourRobociznaPickerOpen(false); setRobociznaPickerSearch(''); setRobociznaPickerCategory(null); }} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
                   </div>
-                  <div className="p-3 border-b border-slate-100">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input type="text" placeholder="Szukaj robocizny..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm" />
+                  <div className="flex flex-1 overflow-hidden">
+                    {/* Category sidebar */}
+                    <div className="w-48 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+                      <div className="px-3 py-2.5 border-b border-slate-200">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+                      </div>
+                      <div className="py-1">
+                        <button onClick={() => setRobociznaPickerCategory(null)}
+                          className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${!robociznaPickerCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                          <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                          <span className="truncate">Wszystkie</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{robociznaItems.filter(r => r.is_active !== false).length}</span>
+                        </button>
+                        {pickerCats.sort().map(cat => (
+                          <button key={cat} onClick={() => setRobociznaPickerCategory(cat)}
+                            className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${robociznaPickerCategory === cat ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                            <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                            <span className="truncate">{cat}</span>
+                            <span className="ml-auto text-[10px] text-slate-400">{robociznaItems.filter(r => r.is_active !== false && r.category === cat).length}</span>
+                          </button>
+                        ))}
+                        <button onClick={() => setRobociznaPickerCategory('__none__')}
+                          className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${robociznaPickerCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                          <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                          <span className="truncate">Bez kategorii</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{robociznaItems.filter(r => r.is_active !== false && !r.category).length}</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead className="bg-slate-50 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Kod</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Nazwa</th>
-                          <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">Koszt</th>
-                          <th className="px-4 py-2 w-16"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {robociznaItems.filter(r => r.is_active !== false).map(r => {
-                          const rgRate = avgEmployeeRate ?? 0;
-                          const cost = r.cost_type === 'rg'
-                            ? rgRate * ((r.time_hours || 0) + (r.time_minutes || 0) / 60)
-                            : (r.cost_ryczalt || 0);
-                          return (
-                            <tr key={r.id} className="hover:bg-blue-50 cursor-pointer"
-                              onClick={() => {
-                                setOwnLabourRobocizna(prev => [...prev, {
-                                  id: `new-${Date.now()}`,
-                                  labour_id: '',
-                                  robocizna_name: r.name,
-                                  robocizna_price: cost,
-                                  robocizna_quantity: 1,
-                                  source_robocizna_id: r.id,
-                                }]);
-                                setLabourRobociznaPickerOpen(false);
-                              }}>
-                              <td className="px-4 py-2 font-mono text-xs text-slate-500">{r.code}</td>
-                              <td className="px-4 py-2 font-medium">{r.name}</td>
-                              <td className="px-4 py-2 text-right font-semibold text-blue-600">{cost.toFixed(2)} zł</td>
-                              <td className="px-4 py-2">
-                                <span className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Dodaj</span>
-                              </td>
+                    {/* Main content */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                      <div className="p-3 border-b border-slate-100">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input type="text" value={robociznaPickerSearch} onChange={e => setRobociznaPickerSearch(e.target.value)}
+                            placeholder="Szukaj robocizny..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm" />
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto">
+                        <table className="min-w-full divide-y divide-slate-200 text-sm">
+                          <thead className="bg-slate-50 sticky top-0">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Kod</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Nazwa</th>
+                              <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">Koszt</th>
+                              <th className="px-4 py-2 w-16"></th>
                             </tr>
-                          );
-                        })}
-                        {robociznaItems.length === 0 && (
-                          <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">Brak robocizny — dodaj w zakładce Robocizna</td></tr>
-                        )}
-                      </tbody>
-                    </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {filteredPickerItems.map(r => {
+                              const rgRate = avgEmployeeRate ?? 0;
+                              const cost = r.cost_type === 'rg'
+                                ? rgRate * ((r.time_hours || 0) + (r.time_minutes || 0) / 60)
+                                : (r.cost_ryczalt || 0);
+                              return (
+                                <tr key={r.id} className="hover:bg-blue-50 cursor-pointer"
+                                  onClick={() => {
+                                    setOwnLabourRobocizna(prev => [...prev, {
+                                      id: `new-${Date.now()}`,
+                                      labour_id: '',
+                                      robocizna_name: r.name,
+                                      robocizna_price: cost,
+                                      robocizna_quantity: 1,
+                                      source_robocizna_id: r.id,
+                                    }]);
+                                    setLabourRobociznaPickerOpen(false);
+                                    setRobociznaPickerSearch('');
+                                    setRobociznaPickerCategory(null);
+                                  }}>
+                                  <td className="px-4 py-2 font-mono text-xs text-slate-500">{r.code}</td>
+                                  <td className="px-4 py-2 font-medium">{r.name}</td>
+                                  <td className="px-4 py-2 text-right font-semibold text-blue-600">{cost.toFixed(2)} zł</td>
+                                  <td className="px-4 py-2">
+                                    <span className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Dodaj</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {filteredPickerItems.length === 0 && (
+                              <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                                {robociznaItems.length === 0 ? 'Brak robocizny — dodaj w zakładce Robocizna' : 'Brak wyników'}
+                              </td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             <div className="hidden">
             {/* Legacy: Koszt robocizny block — kept for backward compat, hidden */}
@@ -4493,11 +4554,11 @@ export const DictionariesPage: React.FC = () => {
               {pickerMatSubTab === 'own' && renderMaterialsTab({ onSelect: (m) => { handleAddLinkedMaterial(m); setLabourMaterialPickerOpen(false); setPickerMatSubTab('own'); } })}
               {pickerMatSubTab === 'tim' && (
                 <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id}
-                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do robocizny" />
+                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do pozycji" />
               )}
               {pickerMatSubTab === 'oninen' && (
                 <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id}
-                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do robocizny" />
+                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do pozycji" />
               )}
             </div>
           </div>
@@ -4529,11 +4590,11 @@ export const DictionariesPage: React.FC = () => {
               {pickerEqSubTab === 'own' && renderEquipmentTab({ onSelect: (eq) => { handleAddLinkedEquipment(eq); setLabourEquipmentPickerOpen(false); setPickerEqSubTab('own'); } })}
               {pickerEqSubTab === 'atut-rental' && (
                 <AtutIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'atut-rental' && i.is_active)?.id}
-                  onAddToOwnCatalog={(p) => handlePickWholesalerEquipment(p)} catalogButtonLabel="Przypisz do robocizny" />
+                  onAddToOwnCatalog={(p) => handlePickWholesalerEquipment(p)} catalogButtonLabel="Przypisz do pozycji" />
               )}
               {pickerEqSubTab === 'ramirent' && (
                 <RamirentIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'ramirent' && i.is_active)?.id}
-                  onAddToOwnCatalog={(p) => handlePickWholesalerEquipment(p)} catalogButtonLabel="Przypisz do robocizny" />
+                  onAddToOwnCatalog={(p) => handlePickWholesalerEquipment(p)} catalogButtonLabel="Przypisz do pozycji" />
               )}
             </div>
           </div>
@@ -6643,7 +6704,7 @@ export const DictionariesPage: React.FC = () => {
 
   // ============ Statistics ============
   const stats = [
-    { label: 'Robocizna', value: workTypes.length, icon: Wrench, color: 'text-blue-600' },
+    { label: 'Pozycje', value: workTypes.length, icon: Wrench, color: 'text-blue-600' },
     { label: 'Materiały', value: materials.length, icon: Package, color: 'text-green-600' },
     { label: 'Sprzęt', value: equipment.length, icon: Monitor, color: 'text-blue-600' },
   ];
@@ -6680,91 +6741,139 @@ export const DictionariesPage: React.FC = () => {
             <>
               {activeTab === 'work_types' && renderWorkTypesTab()}
 
-              {activeTab === 'robocizna' && (
-                <div>
-                  {/* Search + Add button */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="flex-1 relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        value={robociznaSearch}
-                        onChange={e => setRobociznaSearch(e.target.value)}
-                        placeholder="Szukaj robocizny..."
-                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm"
-                      />
+              {activeTab === 'robocizna' && (() => {
+                const filteredRobocizna = robociznaItems.filter(r => {
+                  if (r.is_active === false) return false;
+                  if (robociznaSelectedCategory === '__none__' && r.category) return false;
+                  if (robociznaSelectedCategory && robociznaSelectedCategory !== '__none__' && r.category !== robociznaSelectedCategory) return false;
+                  if (robociznaSearch) {
+                    const s = robociznaSearch.toLowerCase();
+                    return (r.name || '').toLowerCase().includes(s) || (r.code || '').toLowerCase().includes(s);
+                  }
+                  return true;
+                });
+                return (<>
+                <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white" style={{ height: 'calc(100vh - 320px)', minHeight: 500 }}>
+                  {/* Left sidebar: Categories */}
+                  <div className="w-52 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+                    <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+                      <button onClick={() => setShowAddRobociznaCategory(true)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Dodaj kategorię">
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <span className="text-sm text-slate-500">{robociznaItems.filter(r => r.is_active !== false).length} pozycji</span>
-                    <button
-                      onClick={() => {
-                        setEditingRobocizna({ cost_type: 'rg', is_active: true, time_hours: 0, time_minutes: 0 });
-                        setAutoGenerateRobociznaCode(true);
-                        setRobociznaUseManualRate(false);
-                        setRobociznaManualRate(0);
-                        setRobociznaDialog(true);
-                      }}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Dodaj robociznę
-                    </button>
+                    <div className="py-1">
+                      <button onClick={() => setRobociznaSelectedCategory(null)}
+                        className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${!robociznaSelectedCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                        <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                        <span className="truncate">Wszystkie</span>
+                        <span className="ml-auto text-[10px] text-slate-400">{robociznaItems.filter(r => r.is_active !== false).length}</span>
+                      </button>
+                      {robociznaCategories.map(cat => (
+                        <button key={cat} onClick={() => setRobociznaSelectedCategory(cat)}
+                          className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${robociznaSelectedCategory === cat ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                          <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                          <span className="truncate">{cat}</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{robociznaItems.filter(r => r.is_active !== false && r.category === cat).length}</span>
+                        </button>
+                      ))}
+                      <button onClick={() => setRobociznaSelectedCategory('__none__')}
+                        className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${robociznaSelectedCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                        <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                        <span className="truncate">Bez kategorii</span>
+                        <span className="ml-auto text-[10px] text-slate-400">{robociznaItems.filter(r => r.is_active !== false && !r.category).length}</span>
+                      </button>
+                      {showAddRobociznaCategory && (
+                        <div className="px-2 py-1">
+                          <input autoFocus value={newRobociznaCategoryName} onChange={e => setNewRobociznaCategoryName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && newRobociznaCategoryName.trim()) {
+                                const cat = newRobociznaCategoryName.trim();
+                                if (!robociznaCategories.includes(cat)) setRobociznaCategories(prev => [...prev, cat].sort());
+                                setNewRobociznaCategoryName('');
+                                setShowAddRobociznaCategory(false);
+                                setRobociznaSelectedCategory(cat);
+                              }
+                              if (e.key === 'Escape') { setShowAddRobociznaCategory(false); setNewRobociznaCategoryName(''); }
+                            }}
+                            onBlur={() => { setShowAddRobociznaCategory(false); setNewRobociznaCategoryName(''); }}
+                            className="w-full px-2 py-1 text-xs border border-blue-400 rounded focus:ring-1 focus:ring-blue-500"
+                            placeholder="Nazwa kategorii..." />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Robocizna table */}
-                  <div className="border border-slate-200 rounded-lg overflow-hidden">
-                    <table className="min-w-full divide-y divide-slate-200">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Koszt robocizny</th>
-                          <th className="px-4 py-3 w-20"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {robociznaItems
-                          .filter(r => {
-                            if (!robociznaSearch) return true;
-                            const s = robociznaSearch.toLowerCase();
-                            return (r.name || '').toLowerCase().includes(s) || (r.code || '').toLowerCase().includes(s);
-                          })
-                          .map(r => {
-                            const rgRate = avgEmployeeRate ?? 0;
-                            const labourCost = r.cost_type === 'rg'
-                              ? rgRate * ((r.time_hours || 0) + (r.time_minutes || 0) / 60)
-                              : (r.cost_ryczalt || 0);
-                            return (
-                              <tr key={r.id} className="hover:bg-slate-50 cursor-pointer"
-                                onClick={() => {
-                                  setEditingRobocizna(r);
-                                  setAutoGenerateRobociznaCode(false);
-                                  setRobociznaUseManualRate(false);
-                                  setRobociznaDialog(true);
-                                }}>
-                                <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{r.code}</td>
-                                <td className="px-4 py-2.5 text-sm font-medium text-slate-900">{r.name}</td>
-                                <td className="px-4 py-2.5 text-sm text-right font-semibold text-blue-600">{labourCost.toFixed(2)} zł</td>
-                                <td className="px-4 py-2.5">
-                                  <button
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      await supabase.from('kosztorys_robocizna').delete().eq('id', r.id);
-                                      await loadRobociznaItems();
-                                    }}
-                                    className="p-1 text-slate-300 hover:text-red-500"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        {robociznaItems.length === 0 && (
-                          <tr><td colSpan={4} className="px-4 py-12 text-center text-slate-400">Brak robocizny w katalogu</td></tr>
-                        )}
-                      </tbody>
-                    </table>
+                  {/* Main content */}
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Search + Add button */}
+                    <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3">
+                      <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input type="text" value={robociznaSearch} onChange={e => setRobociznaSearch(e.target.value)}
+                          placeholder="Szukaj robocizny..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm" />
+                      </div>
+                      <span className="text-sm text-slate-500">{filteredRobocizna.length} pozycji</span>
+                      <button
+                        onClick={() => {
+                          setEditingRobocizna({ cost_type: 'rg', is_active: true, time_hours: 0, time_minutes: 0, category: robociznaSelectedCategory && robociznaSelectedCategory !== '__none__' ? robociznaSelectedCategory : null });
+                          setAutoGenerateRobociznaCode(true);
+                          setRobociznaUseManualRate(false);
+                          setRobociznaManualRate(0);
+                          setRobociznaDialog(true);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium whitespace-nowrap"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Dodaj robociznę
+                      </button>
+                    </div>
+
+                    {/* Robocizna table */}
+                    <div className="flex-1 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-slate-200">
+                        <thead className="bg-slate-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Koszt robocizny</th>
+                            <th className="px-4 py-3 w-20"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {filteredRobocizna.map(r => {
+                              const rgRate = avgEmployeeRate ?? 0;
+                              const labourCost = r.cost_type === 'rg'
+                                ? rgRate * ((r.time_hours || 0) + (r.time_minutes || 0) / 60)
+                                : (r.cost_ryczalt || 0);
+                              return (
+                                <tr key={r.id} className="hover:bg-slate-50 cursor-pointer"
+                                  onClick={() => {
+                                    setEditingRobocizna(r);
+                                    setAutoGenerateRobociznaCode(false);
+                                    setRobociznaUseManualRate(false);
+                                    setRobociznaDialog(true);
+                                  }}>
+                                  <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{r.code}</td>
+                                  <td className="px-4 py-2.5 text-sm font-medium text-slate-900">{r.name}</td>
+                                  <td className="px-4 py-2.5 text-sm text-right font-semibold text-blue-600">{labourCost.toFixed(2)} zł</td>
+                                  <td className="px-4 py-2.5">
+                                    <button onClick={async (e) => { e.stopPropagation(); await supabase.from('kosztorys_robocizna').delete().eq('id', r.id); await loadRobociznaItems(); }}
+                                      className="p-1 text-slate-300 hover:text-red-500">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          {filteredRobocizna.length === 0 && (
+                            <tr><td colSpan={4} className="px-4 py-12 text-center text-slate-400">Brak robocizny w katalogu</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
+                </div>
 
                   {/* Add/Edit Robocizna Modal */}
                   {robociznaDialog && editingRobocizna && (
@@ -6794,9 +6903,25 @@ export const DictionariesPage: React.FC = () => {
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
-                              <input type="text" value={editingRobocizna.category || ''}
-                                onChange={e => setEditingRobocizna({ ...editingRobocizna, category: e.target.value })}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="np. Elektryka" />
+                              <select value={editingRobocizna.category || ''}
+                                onChange={e => {
+                                  if (e.target.value === '__new__') {
+                                    const newCat = prompt('Nowa kategoria:');
+                                    if (newCat?.trim()) {
+                                      setEditingRobocizna({ ...editingRobocizna, category: newCat.trim() });
+                                      if (!robociznaCategories.includes(newCat.trim())) {
+                                        setRobociznaCategories(prev => [...prev, newCat.trim()].sort());
+                                      }
+                                    }
+                                  } else {
+                                    setEditingRobocizna({ ...editingRobocizna, category: e.target.value || null });
+                                  }
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                <option value="">Bez kategorii</option>
+                                {robociznaCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                <option value="__new__">+ Dodaj nową kategorię...</option>
+                              </select>
                             </div>
                           </div>
 
@@ -6808,8 +6933,8 @@ export const DictionariesPage: React.FC = () => {
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Nazwa robocizny..." />
                           </div>
 
-                          {/* Unit + Price + Time */}
-                          <div className="grid grid-cols-3 gap-3">
+                          {/* Unit + Time */}
+                          <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
                               <select value={editingRobocizna.unit || 'szt.'}
@@ -6817,12 +6942,6 @@ export const DictionariesPage: React.FC = () => {
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
                                 {LABOUR_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                               </select>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-1">Cena jednostkowa</label>
-                              <input type="number" step="0.01" min="0" value={editingRobocizna.price_unit || ''}
-                                onChange={e => setEditingRobocizna({ ...editingRobocizna, price_unit: parseFloat(e.target.value) || 0 })}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="0.00 zł" />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-slate-700 mb-1">Czasochłonność (HH:MM)</label>
@@ -6933,8 +7052,8 @@ export const DictionariesPage: React.FC = () => {
                       </div>
                     </div>
                   )}
-                </div>
-              )}
+                </>);
+              })()}
 
               {activeTab === 'materials' && (
                 <div>
