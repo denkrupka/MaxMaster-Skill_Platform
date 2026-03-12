@@ -10,7 +10,7 @@ import {
   ChevronLeft, ChevronRight, Save, UserPlus, HardHat, CheckCircle, Image, File, UploadCloud, Filter, Building,
   Calculator, FileSpreadsheet, PenTool, FolderOpen, GanttChartSquare, Wallet, ShoppingCart, ClipboardCheck
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../../context/AppContext';
@@ -39,7 +39,7 @@ const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; bg: string; 
   on_hold: { label: 'Wstrzymany', bg: 'bg-amber-100', text: 'text-amber-700' },
 };
 
-type TabKey = 'summary' | 'schedule' | 'tasks' | 'protocols' | 'income' | 'costs' | 'timeTracking' | 'members' | 'issues' | 'attachments';
+type TabKey = 'summary' | 'schedule' | 'tasks' | 'protocols' | 'income' | 'costs' | 'timeTracking' | 'members' | 'issues' | 'attachments' | 'acceptance_acts';
 
 interface TabDef {
   key: TabKey;
@@ -59,6 +59,7 @@ const TABS: TabDef[] = [
   { key: 'members', label: 'Pracownicy', icon: <Users className="w-3.5 h-3.5" /> },
   { key: 'issues', label: 'Zgłoszenia', icon: <MessageSquare className="w-3.5 h-3.5" /> },
   { key: 'attachments', label: 'Załączniki', icon: <Paperclip className="w-3.5 h-3.5" /> },
+  { key: 'acceptance_acts', label: 'Akty odbioru', icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
 ];
 
 const MONTH_NAMES = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -147,9 +148,32 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 }) => {
   const { state, setState } = useAppContext();
   const { currentUser } = state;
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
   const [loading, setLoading] = useState(true);
+
+  // Acceptance acts state
+  const [acceptanceActs, setAcceptanceActs] = useState<any[]>([]);
+  const [loadingActs, setLoadingActs] = useState(false);
+  const [showNewActModal, setShowNewActModal] = useState(false);
+  const [savingAct, setSavingAct] = useState(false);
+  const [actForm, setActForm] = useState({
+    act_number: '',
+    act_date: new Date().toISOString().split('T')[0],
+    period_from: '',
+    period_to: '',
+    total_amount: '',
+    vat_rate: '23',
+    scope_of_work: '',
+    description: '',
+    notes: '',
+    status: 'draft' as 'draft' | 'signed' | 'rejected',
+  });
+
+  // Close project dialog state
+  const [showCloseProjectModal, setShowCloseProjectModal] = useState(false);
+  const [closingProject, setClosingProject] = useState(false);
 
   // Data for tabs
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
@@ -439,6 +463,24 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     }
   };
 
+  // Load acceptance acts
+  const loadAcceptanceActs = async () => {
+    if (!currentUser) return;
+    setLoadingActs(true);
+    try {
+      const { data } = await supabase
+        .from('project_acceptance_acts')
+        .select('*')
+        .eq('project_id', project.id)
+        .order('act_date', { ascending: false });
+      setAcceptanceActs(data || []);
+    } catch (err) {
+      console.error('Error loading acceptance acts:', err);
+    } finally {
+      setLoadingActs(false);
+    }
+  };
+
   // Load attendance data for project members
   const loadAttendanceData = async () => {
     if (!currentUser || members.length === 0) {
@@ -556,6 +598,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       loadAttendanceData();
     }
   }, [loading, members, activeTab, attendanceDateFrom, attendanceDateTo]);
+
+  useEffect(() => {
+    if (!loading && activeTab === 'acceptance_acts') {
+      loadAcceptanceActs();
+    }
+  }, [loading, activeTab]);
 
   const toggleClientConfirmation = async (row: ProjectAttendanceRow) => {
     if (!currentUser) return;
@@ -2972,6 +3020,219 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     doc.save(`protokol_${(p.protocol_number || '').replace(/\//g, '-')}.pdf`);
   };
 
+  // =========== ACCEPTANCE ACTS ===========
+  const generateAcceptanceActPDF = (act: any) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const F = 'helvetica';
+    const ml = 20, mr = 190;
+    let y = 20;
+    doc.setFont(F, 'bold');
+    doc.setFontSize(16);
+    doc.text('AKT ODBIORU ROBÓT', 105, y, { align: 'center' });
+    y += 8;
+    doc.setFontSize(11);
+    doc.setFont(F, 'normal');
+    doc.text(`Nr ${act.act_number}`, 105, y, { align: 'center' });
+    y += 10;
+    doc.setFontSize(9);
+    doc.setFont(F, 'bold');
+    doc.text('Projekt:', ml, y); doc.setFont(F, 'normal'); doc.text(project.name, ml + 20, y); y += 6;
+    doc.setFont(F, 'bold');
+    doc.text('Data odbioru:', ml, y); doc.setFont(F, 'normal'); doc.text(new Date(act.act_date).toLocaleDateString('pl-PL'), ml + 28, y); y += 6;
+    if (act.period_from && act.period_to) {
+      doc.setFont(F, 'bold');
+      doc.text('Okres:', ml, y); doc.setFont(F, 'normal');
+      doc.text(`${new Date(act.period_from).toLocaleDateString('pl-PL')} – ${new Date(act.period_to).toLocaleDateString('pl-PL')}`, ml + 16, y); y += 6;
+    }
+    y += 4;
+    doc.line(ml, y, mr, y); y += 6;
+    if (act.scope_of_work) {
+      doc.setFont(F, 'bold'); doc.text('Zakres robót:', ml, y); y += 5;
+      doc.setFont(F, 'normal'); doc.setFontSize(8);
+      const lines = doc.splitTextToSize(act.scope_of_work, mr - ml);
+      doc.text(lines, ml, y); y += lines.length * 4 + 4;
+    }
+    doc.setFontSize(9);
+    doc.line(ml, y, mr, y); y += 6;
+    doc.setFont(F, 'bold'); doc.text('Wartość robót:', ml, y);
+    doc.setFont(F, 'normal'); doc.text(`Netto: ${parseFloat(act.total_amount || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN`, ml + 30, y); y += 5;
+    doc.text(`VAT (${act.vat_rate}%): ${parseFloat(act.vat_amount || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN`, ml + 30, y); y += 5;
+    doc.setFont(F, 'bold'); doc.text(`Brutto: ${parseFloat(act.total_gross || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN`, ml + 30, y); y += 10;
+    doc.setFont(F, 'normal');
+    doc.line(ml, y, mr, y); y += 10;
+    doc.text('Podpis Zleceniodawcy: ___________________________', ml, y);
+    doc.text('Podpis Wykonawcy: ___________________________', 120, y); y += 15;
+    doc.save(`akt_odbioru_${act.act_number.replace(/\//g, '-')}.pdf`);
+  };
+
+  const handleSaveAcceptanceAct = async () => {
+    if (!currentUser || !actForm.act_number) return;
+    setSavingAct(true);
+    try {
+      const payload = {
+        company_id: currentUser.company_id,
+        project_id: project.id,
+        act_number: actForm.act_number,
+        act_date: actForm.act_date,
+        period_from: actForm.period_from || null,
+        period_to: actForm.period_to || null,
+        total_amount: parseFloat(actForm.total_amount) || 0,
+        vat_rate: parseFloat(actForm.vat_rate) || 23,
+        scope_of_work: actForm.scope_of_work || null,
+        description: actForm.description || null,
+        notes: actForm.notes || null,
+        status: actForm.status,
+        created_by_id: currentUser.id,
+      };
+      const { error } = await supabase.from('project_acceptance_acts').insert(payload);
+      if (!error) {
+        setShowNewActModal(false);
+        setActForm({ act_number: '', act_date: new Date().toISOString().split('T')[0], period_from: '', period_to: '', total_amount: '', vat_rate: '23', scope_of_work: '', description: '', notes: '', status: 'draft' });
+        loadAcceptanceActs();
+      }
+    } catch (err) { console.error(err); }
+    finally { setSavingAct(false); }
+  };
+
+  const handleDeleteAcceptanceAct = async (id: string) => {
+    if (!window.confirm('Czy na pewno usunąć ten akt?')) return;
+    await supabase.from('project_acceptance_acts').delete().eq('id', id);
+    loadAcceptanceActs();
+  };
+
+  const renderAcceptanceActs = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-sm font-semibold text-gray-900">Akty odbioru robót</h3>
+        <button
+          onClick={() => setShowNewActModal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4" /> Nowy akt
+        </button>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        {loadingActs ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+        ) : acceptanceActs.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">Brak aktów odbioru. Kliknij "Nowy akt" aby dodać.</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nr aktu</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Okres</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kwota netto</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kwota brutto</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
+              </tr>
+            </thead>
+            <tbody>
+              {acceptanceActs.map(act => {
+                const statusCls = act.status === 'signed' ? 'bg-green-100 text-green-700' : act.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700';
+                const statusLabel = act.status === 'signed' ? 'Podpisany' : act.status === 'rejected' ? 'Odrzucony' : 'Szkic';
+                return (
+                  <tr key={act.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{act.act_number}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{new Date(act.act_date).toLocaleDateString('pl-PL')}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {act.period_from ? `${new Date(act.period_from).toLocaleDateString('pl-PL')} – ${new Date(act.period_to).toLocaleDateString('pl-PL')}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{parseFloat(act.total_amount || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{parseFloat(act.total_gross || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusCls}`}>{statusLabel}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => generateAcceptanceActPDF(act)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Pobierz PDF">
+                          <FileDown className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteAcceptanceAct(act.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Usuń">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* New Act Modal */}
+      {showNewActModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowNewActModal(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 sticky top-0 bg-white z-10">
+              <h2 className="text-base font-semibold text-gray-900">Nowy akt odbioru robót</h2>
+              <button onClick={() => setShowNewActModal(false)} className="p-1 rounded hover:bg-gray-100"><X className="w-4 h-4 text-gray-400" /></button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Nr aktu *</label>
+                  <input value={actForm.act_number} onChange={e => setActForm(f => ({ ...f, act_number: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="np. AO/2026/001" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Data odbioru</label>
+                  <input type="date" value={actForm.act_date} onChange={e => setActForm(f => ({ ...f, act_date: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Okres od</label>
+                  <input type="date" value={actForm.period_from} onChange={e => setActForm(f => ({ ...f, period_from: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Okres do</label>
+                  <input type="date" value={actForm.period_to} onChange={e => setActForm(f => ({ ...f, period_to: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Wartość netto (PLN)</label>
+                  <input type="number" min="0" step="0.01" value={actForm.total_amount} onChange={e => setActForm(f => ({ ...f, total_amount: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Stawka VAT (%)</label>
+                  <input type="number" min="0" max="100" value={actForm.vat_rate} onChange={e => setActForm(f => ({ ...f, vat_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Zakres robót</label>
+                <textarea rows={3} value={actForm.scope_of_work} onChange={e => setActForm(f => ({ ...f, scope_of_work: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Opisz zakres wykonanych robót..." />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Uwagi</label>
+                <textarea rows={2} value={actForm.notes} onChange={e => setActForm(f => ({ ...f, notes: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                <select value={actForm.status} onChange={e => setActForm(f => ({ ...f, status: e.target.value as any }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <option value="draft">Szkic</option>
+                  <option value="signed">Podpisany</option>
+                  <option value="rejected">Odrzucony</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-200">
+              <button onClick={() => setShowNewActModal(false)} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
+              <button onClick={handleSaveAcceptanceAct} disabled={savingAct || !actForm.act_number} className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                {savingAct && <Loader2 className="w-4 h-4 animate-spin" />}
+                Zapisz akt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   // =========== REMAINING TABS (unchanged) ===========
   const renderProtocols = () => (
     <div className="space-y-4">
@@ -4669,16 +4930,22 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Stanowisko</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Forma wynagrodzenia</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zaangażowanie</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
               </tr>
             </thead>
             <tbody>
-              {members.map(m => {
+              {(() => {
+                const totalProjectHours = timeLogs.filter(tl => tasks.some(t => t.id === tl.task_id)).reduce((s, tl) => s + (tl.minutes || 0), 0);
+                return members.map(m => {
                 const user = m.user_id ? users.find(u => u.id === m.user_id) : null;
                 const worker = m.worker_id ? subcontractorWorkers.find(w => w.id === m.worker_id) : null;
                 const memberName = user ? `${user.first_name} ${user.last_name}` : worker ? `${worker.first_name} ${worker.last_name}` : getUserName(m.user_id || '');
                 const memberPosition = user?.target_position || worker?.position || m.position || '-';
+                const memberHours = m.user_id ? timeLogs.filter(tl => tl.user_id === m.user_id && tasks.some(t => t.id === tl.task_id)).reduce((s, tl) => s + (tl.minutes || 0), 0) : 0;
+                const workloadPct = totalProjectHours > 0 ? Math.round((memberHours / totalProjectHours) * 100) : 0;
+                const memberHoursDecimal = memberHours / 60;
                 return (
                 <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleOpenEditMember(m)}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{memberName}</td>
@@ -4690,6 +4957,15 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {m.payment_type === 'hourly' ? `Stawka: ${m.hourly_rate || 0} zł/godz.` : 'Akord'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 min-w-[100px]">
+                      <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full bg-indigo-500 transition-all" style={{ width: `${workloadPct}%` }} />
+                      </div>
+                      <span className="text-xs font-medium text-gray-700 w-10 text-right">{workloadPct}%</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{memberHoursDecimal.toFixed(1)} godz.</p>
                   </td>
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     <select value={m.member_status} onChange={e => handleUpdateMemberStatus(m.id, e.target.value as ProjectMemberStatus)}
@@ -4709,7 +4985,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   </td>
                 </tr>
                 );
-              })}
+              });
+              })()}
             </tbody>
           </table>
         )}
@@ -5372,6 +5649,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       case 'members': return renderMembers();
       case 'issues': return renderIssues();
       case 'attachments': return renderAttachments();
+      case 'acceptance_acts': return renderAcceptanceActs();
       default: return null;
     }
   };
@@ -5403,14 +5681,150 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             {project.department_id ? ` / ${getDepartmentName(project.department_id)}` : ''}
           </p>
         </div>
-        <button
-          onClick={() => onEditProject(project)}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          <Pencil className="w-4 h-4" />
-          Edytuj
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Link
+            to={`/construction/gantt?project=${project.id}`}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm text-cyan-700 border border-cyan-300 rounded-lg hover:bg-cyan-50"
+            title="Otwórz projekt w Harmonogramie"
+          >
+            <GanttChartSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">Harmonogram</span>
+          </Link>
+          <button
+            onClick={() => onEditProject(project)}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            <Pencil className="w-4 h-4" />
+            Edytuj
+          </button>
+          {project.status === 'active' && (
+            <button
+              onClick={() => setShowCloseProjectModal(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm text-red-700 border border-red-300 rounded-lg hover:bg-red-50"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Zamknij projekt
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* KPI Block */}
+      {(() => {
+        const totalTasks = tasks.length;
+        const doneTasks = tasks.filter(t => t.status === 'done' || t.status === 'cancelled').length;
+        const completionPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+        const budgetPlan = project.billing_type === 'ryczalt' ? (project.budget_amount || 0) : 0;
+        const budgetFact = totalIncome;
+        const today = new Date();
+        const endDate = project.end_date ? new Date(project.end_date) : null;
+        const daysLeft = endDate ? Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-3">
+              <p className="text-xs text-gray-500 font-medium uppercase mb-1">Realizacja zadań</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-gray-100 rounded-full h-2">
+                  <div className="h-2 rounded-full bg-blue-500 transition-all" style={{ width: `${completionPct}%` }} />
+                </div>
+                <span className="text-sm font-bold text-gray-900">{completionPct}%</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{doneTasks} / {totalTasks} zadań</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-3">
+              <p className="text-xs text-gray-500 font-medium uppercase mb-1">Budżet plan/fakt</p>
+              {project.billing_type === 'ryczalt' ? (
+                <>
+                  <p className="text-sm font-bold text-gray-900">{budgetFact.toLocaleString('pl-PL')} PLN</p>
+                  <p className="text-xs text-gray-400">Plan: {budgetPlan.toLocaleString('pl-PL')} PLN</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-bold text-gray-900">{budgetFact.toLocaleString('pl-PL')} PLN</p>
+                  <p className="text-xs text-gray-400">Stawka: {project.hourly_rate || 0} PLN/godz.</p>
+                </>
+              )}
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-3">
+              <p className="text-xs text-gray-500 font-medium uppercase mb-1">Zysk netto</p>
+              <p className={`text-sm font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{profit.toLocaleString('pl-PL')} PLN</p>
+              <p className="text-xs text-gray-400">Koszty: {totalCosts.toLocaleString('pl-PL')} PLN</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-3">
+              <p className="text-xs text-gray-500 font-medium uppercase mb-1">Termin</p>
+              {endDate ? (
+                <>
+                  <p className={`text-sm font-bold ${daysLeft !== null && daysLeft < 7 ? 'text-red-600' : daysLeft !== null && daysLeft < 30 ? 'text-amber-600' : 'text-gray-900'}`}>
+                    {daysLeft !== null && daysLeft >= 0 ? `${daysLeft} dni` : daysLeft !== null ? 'Przekroczony' : '—'}
+                  </p>
+                  <p className="text-xs text-gray-400">{endDate.toLocaleDateString('pl-PL')}</p>
+                </>
+              ) : (
+                <p className="text-sm font-bold text-gray-400">Nie określono</p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Close project modal */}
+      {showCloseProjectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowCloseProjectModal(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Zamknij projekt</h2>
+              <button onClick={() => setShowCloseProjectModal(false)} className="p-1 rounded hover:bg-gray-100"><X className="w-4 h-4 text-gray-400" /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-gray-700">Czy na pewno chcesz zamknąć projekt <strong>{project.name}</strong>?</p>
+              <p className="text-sm text-gray-500">Status projektu zostanie zmieniony na "Zakończony".</p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-amber-800">Czy chcesz utworzyć fakturę końcową?</p>
+                <p className="text-xs text-amber-600 mt-1">Zostaniesz przekierowany do modułu Finanse z pre-wypełnionymi danymi.</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-200">
+              <button onClick={() => setShowCloseProjectModal(false)} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
+              <button
+                onClick={async () => {
+                  setClosingProject(true);
+                  try {
+                    const { data, error } = await supabase.from('projects').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', project.id).select().single();
+                    if (!error && data) {
+                      onUpdateProject(data);
+                      setShowCloseProjectModal(false);
+                    }
+                  } finally { setClosingProject(false); }
+                }}
+                disabled={closingProject}
+                className="px-4 py-2 text-sm text-white bg-gray-700 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center gap-2"
+              >
+                {closingProject && <Loader2 className="w-4 h-4 animate-spin" />}
+                Zamknij bez faktury
+              </button>
+              <button
+                onClick={async () => {
+                  setClosingProject(true);
+                  try {
+                    const { data, error } = await supabase.from('projects').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', project.id).select().single();
+                    if (!error && data) {
+                      onUpdateProject(data);
+                      setShowCloseProjectModal(false);
+                      navigate(`/construction/finance?project=${project.id}&action=new_act`);
+                    }
+                  } finally { setClosingProject(false); }
+                }}
+                disabled={closingProject}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {closingProject && <Loader2 className="w-4 h-4 animate-spin" />}
+                Zamknij i utwórz fakturę
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Compact Tabs */}
       <div className="border-b border-gray-200 mb-6">
