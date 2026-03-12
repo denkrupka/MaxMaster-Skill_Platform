@@ -45,7 +45,7 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [projects, setProjects] = useState<{ id: string; name: string; code?: string }[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
-  const [contractors, setContractors] = useState<{ id: string; name: string; nip?: string; address?: string }[]>([]);
+  const [contractors, setContractors] = useState<{ id: string; name: string; nip?: string; legal_address?: string; actual_address?: string }[]>([]);
   const [selectedContractor, setSelectedContractor] = useState<string>('');
 
   const isHRTemplate = selectedTemplate?.id === 'umowa_o_prace' || selectedTemplate?.id === 'umowa_zlecenie' || selectedTemplate?.id === 'umowa_o_dzielo';
@@ -73,7 +73,7 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
     if (!currentUser) return;
     const { data } = await supabase
       .from('contractors')
-      .select('id, name, nip, address')
+      .select('id, name, nip, legal_address, actual_address')
       .eq('company_id', currentUser.company_id)
       .order('name');
     if (data) setContractors(data);
@@ -157,18 +157,21 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
     const proj = projects.find(p => p.id === selectedProject);
     if (!proj) return;
 
-    supabase.from('projects').select('*, address, city').eq('id', selectedProject).single().then(({ data: projData }) => {
+    supabase.from('projects').select('*').eq('id', selectedProject).single().then(({ data: projData }) => {
       if (!projData) return;
       const projFills: Record<string, string> = {};
       selectedTemplate.variables.forEach(v => {
         if (v.name === 'nazwa_inwestycji' || v.name === 'nazwa_projektu') {
           projFills[v.name] = projData.name;
         }
-        if (v.name === 'adres_inwestycji' || v.name === 'miejsce_pracy' || v.name === 'miejsce') {
-          projFills[v.name] = projData.address || projData.city || '';
+        if (v.name === 'adres_inwestycji' || v.name === 'miejsce_pracy' || v.name === 'miejsce' || v.name === 'adres_obiektu') {
+          projFills[v.name] = projData.description?.substring(0,100) || '';
         }
-        if (v.name === 'nr_projektu') {
+        if (v.name === 'nr_projektu' || v.name === 'nr_umowy') {
           projFills[v.name] = projData.code || '';
+        }
+        if (v.name === 'opis_robot' && !projFills[v.name]) {
+          projFills[v.name] = `Roboty budowlane na obiekcie ${projData.name || ''}`.trim();
         }
       });
       setValues(prev => ({ ...prev, ...projFills }));
@@ -183,14 +186,14 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
 
     const ctFills: Record<string, string> = {};
     selectedTemplate.variables.forEach(v => {
-      if (v.name === 'kontrahent_nazwa' || v.name === 'wykonawca_nazwa') {
+      if (v.name === 'kontrahent_nazwa' || v.name === 'wykonawca_nazwa' || v.name === 'firma_nazwa') {
         ctFills[v.name] = ct.name;
       }
       if (v.name === 'kontrahent_nip' || v.name === 'wykonawca_nip') {
         ctFills[v.name] = ct.nip || '';
       }
       if (v.name === 'kontrahent_adres' || v.name === 'wykonawca_adres') {
-        ctFills[v.name] = ct.address || '';
+        ctFills[v.name] = ct.legal_address || ct.actual_address || '';
       }
     });
     setValues(prev => ({ ...prev, ...ctFills }));

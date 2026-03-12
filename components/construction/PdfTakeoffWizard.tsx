@@ -465,7 +465,6 @@ export default function PdfTakeoffWizard({
         page_number: pageNumber,
         analysis_data: claudeRaw,
         legend_data: geminiRaw,
-        updated_at: new Date().toISOString(),
       }, { onConflict: 'plan_id,page_number' });
 
       if (positions.length > 0) {
@@ -524,7 +523,7 @@ export default function PdfTakeoffWizard({
           number: offerNumber,
           name: `Przedmiar AI — Strona ${pageNumber}`,
           status: 'draft',
-          currency_id: 'PLN',
+          currency_id: 1, // Default PLN
         })
         .select()
         .single();
