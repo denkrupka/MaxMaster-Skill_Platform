@@ -18,6 +18,7 @@ import { SubscriptionExpiredUserPage } from './pages/SubscriptionExpiredUser';
 import { ModuleAccessDeniedPage } from './pages/ModuleAccessDenied';
 import { OfferLandingPage } from './pages/public/OfferLanding';
 const DocumentSignPage = React.lazy(() => import('./pages/public/DocumentSign').then(m => ({ default: m.DocumentSignPage })));
+const PlanViewPage = React.lazy(() => import('./pages/public/PlanView').then(m => ({ default: m.PlanView })));
 import { OfferRequestLandingPage } from './pages/public/OfferRequestLanding';
 import { AdminUsersPage } from './pages/admin/Users';
 
@@ -433,6 +434,7 @@ export default function App() {
           <Route path="/register" element={<CompanyRegisterPage />} />
           <Route path="/offer/:token" element={<OfferLandingPage />} />
           <Route path="/sign/:token" element={<DocumentSignPage />} />
+          <Route path="/public/plan-view" element={<React.Suspense fallback={<div className='flex items-center justify-center h-screen'><div className='animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600'></div></div>}><PlanViewPage /></React.Suspense>} />
           <Route path="/offer-request/:token" element={<OfferRequestLandingPage />} />
 
           {/* SuperAdmin Routes */}
