@@ -37,7 +37,7 @@ interface PdfTakeoffWizardProps {
   onClose: () => void;
 }
 
-type WizardStep = 'scale' | 'rendering' | 'analyzing' | 'result' | 'saving' | 'done';
+type WizardStep = 'page_select' | 'scale' | 'rendering' | 'analyzing' | 'result' | 'saving' | 'done';
 
 // ─── Toast notification (internal) ────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ function Toast({ message, type }: ToastProps) {
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
 function ProgressBar({ step }: { step: WizardStep }) {
-  const steps: WizardStep[] = ['scale', 'rendering', 'analyzing', 'result', 'saving', 'done'];
+  const steps: WizardStep[] = ['page_select', 'scale', 'rendering', 'analyzing', 'result', 'saving', 'done'];
   const idx = steps.indexOf(step);
   const progress = Math.min(100, Math.round((idx / (steps.length - 1)) * 100));
   return (
@@ -75,6 +75,101 @@ function ProgressBar({ step }: { step: WizardStep }) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+// ─── PageThumbnails — render small previews of all PDF pages ─────────────────
+
+interface PageThumbnailsProps {
+  pdfDoc: PDFDocumentProxy;
+  currentPage: number;
+  onSelect: (page: number) => void;
+}
+
+function PageThumbnails({ pdfDoc, currentPage, onSelect }: PageThumbnailsProps) {
+  const [thumbs, setThumbs] = React.useState<string[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const renderThumbs = async () => {
+      const results: string[] = [];
+      const total = pdfDoc.numPages;
+      for (let i = 1; i <= total; i++) {
+        try {
+          const page = await pdfDoc.getPage(i);
+          const vp = page.getViewport({ scale: 0.25 });
+          const canvas = document.createElement('canvas');
+          canvas.width = vp.width;
+          canvas.height = vp.height;
+          await page.render({ canvasContext: canvas.getContext('2d')!, viewport: vp }).promise;
+          results.push(canvas.toDataURL('image/jpeg', 0.7));
+        } catch {
+          results.push('');
+        }
+        if (cancelled) return;
+        setThumbs([...results]);
+      }
+      if (!cancelled) setLoading(false);
+    };
+    renderThumbs();
+    return () => { cancelled = true; };
+  }, [pdfDoc]);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Wybierz stronę PDF do analizy AI. Dokument ma <strong>{pdfDoc.numPages}</strong> str.
+      </p>
+      {loading && thumbs.length === 0 && (
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <Loader2 size={12} className="animate-spin" />
+          <span>Generowanie podglądów…</span>
+        </div>
+      )}
+      <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto pr-1">
+        {thumbs.map((src, i) => {
+          const pageNum = i + 1;
+          const isSelected = pageNum === currentPage;
+          return (
+            <button
+              key={pageNum}
+              onClick={() => onSelect(pageNum)}
+              className={`relative border-2 rounded-lg overflow-hidden transition-all ${
+                isSelected
+                  ? 'border-blue-600 shadow-md ring-2 ring-blue-300'
+                  : 'border-slate-200 hover:border-blue-400'
+              }`}
+            >
+              {src ? (
+                <img src={src} alt={`Str. ${pageNum}`} className="w-full h-auto" />
+              ) : (
+                <div className="aspect-[3/4] flex items-center justify-center bg-slate-100">
+                  <Loader2 size={14} className="animate-spin text-slate-300" />
+                </div>
+              )}
+              <div className={`absolute bottom-0 inset-x-0 text-center py-0.5 text-[9px] font-bold ${
+                isSelected ? 'bg-blue-600 text-white' : 'bg-black/40 text-white'
+              }`}>
+                {pageNum}
+              </div>
+              {isSelected && (
+                <div className="absolute top-1 right-1 bg-blue-600 rounded-full p-0.5">
+                  <CheckCircle size={8} className="text-white" />
+                </div>
+              )}
+            </button>
+          );
+        })}
+        {/* Show placeholder for pages still loading */}
+        {loading && Array.from({ length: Math.max(0, pdfDoc.numPages - thumbs.length) }).map((_, i) => (
+          <div key={`loading-${i}`} className="border-2 border-slate-200 rounded-lg aspect-[3/4] flex items-center justify-center bg-slate-50">
+            <Loader2 size={14} className="animate-spin text-slate-300" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 async function renderPageToBase64(page: PDFPageProxy): Promise<string> {
   const baseVp = page.getViewport({ scale: 1 });
@@ -253,7 +348,7 @@ export default function PdfTakeoffWizard({
   onTakeoffCreated, onClose,
 }: PdfTakeoffWizardProps) {
   const navigate = useNavigate();
-  const lsKey = `takeoff_wizard_${planId}_pg${pageNumber}`;
+  const lsKey = `takeoff_wizard_${planId}_pg${selectedPage}`;
 
   // Restore from localStorage on mount
   const getInitialState = () => {
@@ -270,7 +365,8 @@ export default function PdfTakeoffWizard({
   };
   const savedState = getInitialState();
 
-  const [step, setStep] = useState<WizardStep>(savedState?.step || 'scale');
+  const [step, setStep] = useState<WizardStep>(savedState?.step || (pdfDoc.numPages > 1 ? 'page_select' : 'scale'));
+  const [selectedPage, setSelectedPage] = useState(pageNumber);
   const [statusMsg, setStatusMsg] = useState('');
   const [positions, setPositions] = useState<TakeoffPosition[]>(savedState?.positions || []);
   const [error, setError] = useState('');
@@ -321,7 +417,7 @@ export default function PdfTakeoffWizard({
 
     let pageBase64: string;
     try {
-      const page = await pdfDoc.getPage(pageNumber);
+      const page = await pdfDoc.getPage(selectedPage);
       pageBase64 = await renderPageToBase64(page);
     } catch (e) {
       const msg = `Błąd renderowania: ${e instanceof Error ? e.message : String(e)}`;
@@ -364,7 +460,7 @@ export default function PdfTakeoffWizard({
         body: {
           imageBase64: pageBase64,
           mimeType: 'image/jpeg',
-          pageNumber,
+          pageNumber: selectedPage,
           structuredData: structuredDataForAI,
         },
       }),
@@ -495,7 +591,7 @@ export default function PdfTakeoffWizard({
     try {
       await supabase.from('drawing_analyses').upsert({
         plan_id: planId,
-        page_number: pageNumber,
+        page_number: selectedPage,
         analysis_data: claudeRaw,
         legend_data: geminiRaw,
       }, { onConflict: 'plan_id,page_number' });
@@ -516,7 +612,7 @@ export default function PdfTakeoffWizard({
             quantity: p.count,
             unit: p.unit,
             entity_count: Math.round(p.count),
-            page_number: pageNumber,
+            page_number: selectedPage,
           }))
         );
       }
@@ -531,7 +627,7 @@ export default function PdfTakeoffWizard({
       showToast(msg, 'error');
       setStep('result');
     }
-  }, [positions, planId, companyId, claudeRaw, geminiRaw, onTakeoffCreated, pageNumber, showToast]);
+  }, [positions, planId, companyId, claudeRaw, geminiRaw, onTakeoffCreated, selectedPage, showToast]);
 
   const createOffer = useCallback(async () => {
     if (!companyId) {
@@ -563,7 +659,7 @@ export default function PdfTakeoffWizard({
           company_id: companyId,
           created_by_id: user.id,
           number: offerNumber,
-          name: `Przedmiar AI — Strona ${pageNumber}`,
+          name: `Przedmiar AI — Strona ${selectedPage}`,
           status: 'draft',
           currency_id: 1, // Default PLN (id=1)
         })
@@ -641,9 +737,9 @@ export default function PdfTakeoffWizard({
           <div className="px-4 pt-2 pb-1">
             <ProgressBar step={step} />
             <div className="flex justify-between mt-1">
-              {(['scale', 'analyzing', 'result', 'done'] as WizardStep[]).map(s => (
+              {(['page_select', 'scale', 'analyzing', 'result', 'done'] as WizardStep[]).map(s => (
                 <span key={s} className={`text-[9px] font-medium ${step === s ? 'text-blue-600' : 'text-gray-300'}`}>
-                  {s === 'scale' ? 'Skala' : s === 'analyzing' ? 'Analiza AI' : s === 'result' ? 'Weryfikacja' : 'Gotowe'}
+                  {s === 'page_select' ? 'Strona' : s === 'scale' ? 'Skala' : s === 'analyzing' ? 'Analiza AI' : s === 'result' ? 'Weryfikacja' : 'Gotowe'}
                 </span>
               ))}
             </div>
@@ -651,6 +747,31 @@ export default function PdfTakeoffWizard({
 
           {/* Body */}
           <div className="p-4 flex-1 overflow-y-auto space-y-3">
+
+            {/* Step: Page Selection */}
+            {step === 'page_select' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                  <Sparkles size={14} className="text-blue-600" />
+                  <span className="text-xs font-medium text-blue-700">Wybierz stronę PDF do analizy AI</span>
+                </div>
+                <PageThumbnails
+                  pdfDoc={pdfDoc}
+                  currentPage={selectedPage}
+                  onSelect={setSelectedPage}
+                />
+                <button
+                  onClick={() => setStep('scale')}
+                  className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition"
+                >
+                  Dalej — Potwierdź skalę →
+                </button>
+              </div>
+            )}
+
+            {/* All other steps — show only when not on page_select */}
+            {step !== 'page_select' && (
+              <div className="space-y-3">
 
             {/* Restored session banner */}
             {hasSavedState && step === 'result' && (
@@ -660,7 +781,7 @@ export default function PdfTakeoffWizard({
                 <button
                   onClick={() => {
                     clearSavedState();
-                    setStep('scale');
+                    setStep(pdfDoc.numPages > 1 ? 'page_select' : 'scale');
                     setPositions([]);
                     setClaudeRaw(null);
                     setGeminiRaw(null);
@@ -844,6 +965,10 @@ export default function PdfTakeoffWizard({
                 <span>Zapisano {positions.length} pozycji w tabeli przedmiaru.</span>
               </div>
             )}
+
+              </div>
+            )}
+
           </div>
 
           {/* Footer */}
