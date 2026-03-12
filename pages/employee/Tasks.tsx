@@ -291,7 +291,8 @@ export const EmployeeTasksPage: React.FC = () => {
   );
 
   const renderListView = () => (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="overflow-x-auto rounded-xl border border-gray-200">
+    <div className="bg-white">
       <table className="w-full">
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200">
@@ -349,6 +350,7 @@ export const EmployeeTasksPage: React.FC = () => {
           )}
         </tbody>
       </table>
+    </div>
     </div>
   );
 
