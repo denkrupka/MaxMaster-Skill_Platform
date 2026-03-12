@@ -1,62 +1,149 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus, Search, CheckSquare, Clock, CheckCircle, XCircle, AlertCircle,
-  Loader2, Filter, User, Calendar, MessageSquare, ArrowRight, FileText,
-  Send, RotateCcw, Users, Settings, ChevronRight, MoreVertical, X,
-  Save, Pencil, Trash2, Eye
+  Loader2, User, Calendar, MessageSquare, ArrowRight, FileText,
+  Send, RotateCcw, Users, X, Save, Pencil, Trash2, Eye,
+  MapPin, Image, ChevronRight, AlertTriangle, BarChart3, Download,
+  Filter, History, Target
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
-  ApprovalRequest, ApprovalWorkflowTemplate, ApprovalAction,
-  ApprovalRequestStatus, ApprovalEntityType, Project
+  Project
 } from '../../types';
-import {
-  APPROVAL_REQUEST_STATUS_LABELS, APPROVAL_REQUEST_STATUS_COLORS,
-  APPROVAL_ENTITY_TYPE_LABELS, APPROVAL_ACTION_TYPE_LABELS
-} from '../../constants';
 
-type TabType = 'pending' | 'my-requests' | 'all' | 'templates';
+type UzgodnienieStatus = 'new' | 'in_review' | 'approved' | 'rejected' | 'delegated' | 'escalated' | 'cancelled';
+type UzgodnienePriority = 'low' | 'normal' | 'high' | 'urgent';
+type FilterTab = 'mine' | 'waiting' | 'all';
+
+interface Uzgodnienie {
+  id: string;
+  company_id: string;
+  project_id?: string;
+  number?: string;
+  title: string;
+  description?: string;
+  status: UzgodnienieStatus;
+  priority: UzgodnienePriority;
+  plan_id?: string;
+  plan_page?: number;
+  plan_x?: number;
+  plan_y?: number;
+  plan_screenshot_url?: string;
+  assigned_to_id?: string;
+  created_by_id: string;
+  sla_hours: number;
+  sla_deadline?: string;
+  escalated_at?: string;
+  resolved_at?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  project?: Project;
+  assigned_to?: any;
+  created_by?: any;
+  history?: UzgodnienieHistoryEntry[];
+  photos?: UzgodnieniePhoto[];
+}
+
+interface UzgodnienieHistoryEntry {
+  id: string;
+  uzgodnienie_id: string;
+  action: string;
+  from_status?: UzgodnienieStatus;
+  to_status?: UzgodnienieStatus;
+  user_id: string;
+  comment?: string;
+  delegated_to_id?: string;
+  created_at: string;
+  user?: any;
+  delegated_to?: any;
+}
+
+interface UzgodnieniePhoto {
+  id: string;
+  uzgodnienie_id: string;
+  url: string;
+  caption?: string;
+  created_at: string;
+}
+
+const STATUS_LABELS: Record<UzgodnienieStatus, string> = {
+  new: 'Nowe',
+  in_review: 'W trakcie',
+  approved: 'Zatwierdzone',
+  rejected: 'Odrzucone',
+  delegated: 'Delegowane',
+  escalated: 'Eskalowane',
+  cancelled: 'Anulowane'
+};
+
+const STATUS_COLORS: Record<UzgodnienieStatus, string> = {
+  new: 'bg-blue-100 text-blue-700 border-blue-200',
+  in_review: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  approved: 'bg-green-100 text-green-700 border-green-200',
+  rejected: 'bg-red-100 text-red-700 border-red-200',
+  delegated: 'bg-purple-100 text-purple-700 border-purple-200',
+  escalated: 'bg-orange-100 text-orange-700 border-orange-200',
+  cancelled: 'bg-gray-100 text-gray-500 border-gray-200'
+};
+
+const PRIORITY_LABELS: Record<UzgodnienePriority, string> = {
+  low: 'Niski', normal: 'Normalny', high: 'Wysoki', urgent: 'Pilny'
+};
+
+const PRIORITY_COLORS: Record<UzgodnienePriority, string> = {
+  low: 'text-slate-500', normal: 'text-blue-600', high: 'text-amber-600', urgent: 'text-red-600'
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  created: 'Utworzono',
+  approved: 'Zatwierdzono',
+  rejected: 'Odrzucono',
+  delegated: 'Delegowano',
+  escalated: 'Eskalowano',
+  comment: 'Komentarz',
+  reassigned: 'Przypisano'
+};
 
 export const ApprovalsPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser, users } = state;
 
-  const [activeTab, setActiveTab] = useState<TabType>('pending');
-  const [requests, setRequests] = useState<ApprovalRequest[]>([]);
-  const [templates, setTemplates] = useState<ApprovalWorkflowTemplate[]>([]);
+  const [filterTab, setFilterTab] = useState<FilterTab>('mine');
+  const [uzgodnienia, setUzgodnienia] = useState<Uzgodnienie[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  // Modal states
-  const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null);
-  const [showApproveModal, setShowApproveModal] = useState(false);
-  const [showRequestModal, setShowRequestModal] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  // Detail modal
+  const [selectedUzgodnienie, setSelectedUzgodnienie] = useState<Uzgodnienie | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailHistory, setDetailHistory] = useState<UzgodnienieHistoryEntry[]>([]);
 
-  const [editingTemplate, setEditingTemplate] = useState<ApprovalWorkflowTemplate | null>(null);
-  const [approvalComment, setApprovalComment] = useState('');
-  const [processing, setProcessing] = useState(false);
+  // Create/Edit modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingUzgodnienie, setEditingUzgodnienie] = useState<Uzgodnienie | null>(null);
   const [saving, setSaving] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
-  // Request form
-  const [requestForm, setRequestForm] = useState({
-    subject: '',
-    description: '',
-    entity_type: 'document' as ApprovalEntityType,
+  // Action modal (approve/reject/delegate)
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [actionType, setActionType] = useState<'approve' | 'reject' | 'delegate' | 'comment'>('approve');
+  const [actionComment, setActionComment] = useState('');
+  const [delegateTo, setDelegateTo] = useState('');
+
+  // Form
+  const [form, setForm] = useState({
     project_id: '',
-    template_id: '',
-    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent'
-  });
-
-  // Template form
-  const [templateForm, setTemplateForm] = useState({
-    name: '',
+    title: '',
     description: '',
-    entity_types: [] as ApprovalEntityType[],
-    steps: [{ name: 'Krok 1', approvers: [] as string[], all_must_approve: false }]
+    priority: 'normal' as UzgodnienePriority,
+    assigned_to_id: '',
+    sla_hours: 24,
+    plan_screenshot_url: ''
   });
 
   useEffect(() => {
@@ -67,377 +154,376 @@ export const ApprovalsPage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [requestsRes, templatesRes, projectsRes] = await Promise.all([
-        supabase
-          .from('approval_requests')
-          .select('*, project:projects(*), workflow_template:approval_workflow_templates(*), actions:approval_actions(*)')
+      const [uzgRes, projectsRes] = await Promise.all([
+        supabase.from('uzgodnienia')
+          .select(`
+            *,
+            project:projects(*),
+            assigned_to:users!uzgodnienia_assigned_to_id_fkey(id, first_name, last_name, email),
+            created_by:users!uzgodnienia_created_by_id_fkey(id, first_name, last_name, email),
+            photos:uzgodnienia_photos(*)
+          `)
           .eq('company_id', currentUser.company_id)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false }),
-        supabase
-          .from('approval_workflow_templates')
-          .select('*')
-          .eq('company_id', currentUser.company_id)
-          .eq('is_active', true)
-          .order('name'),
-        supabase
-          .from('projects')
-          .select('*')
-          .eq('company_id', currentUser.company_id)
+        supabase.from('projects').select('*').eq('company_id', currentUser.company_id)
       ]);
 
-      if (requestsRes.data) setRequests(requestsRes.data);
-      if (templatesRes.data) setTemplates(templatesRes.data);
+      if (uzgRes.data) setUzgodnienia(uzgRes.data);
       if (projectsRes.data) setProjects(projectsRes.data);
     } catch (err) {
-      console.error('Error loading approvals:', err);
+      console.error('Error loading uzgodnienia:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const pendingForMe = useMemo(() => {
-    if (!currentUser) return [];
-    return requests.filter(r => {
-      if (r.status !== 'in_progress') return false;
-      // Check if current user is an approver at current step
-      const template = templates.find(t => t.id === r.workflow_template_id);
-      if (!template || !template.steps) return false;
-      const steps = template.steps as any[];
-      const currentStep = steps[r.current_step - 1];
-      if (!currentStep) return false;
-      return currentStep.approvers?.includes(currentUser.id);
-    });
-  }, [requests, templates, currentUser]);
-
-  const myRequests = useMemo(() => {
-    return requests.filter(r => r.initiated_by_id === currentUser?.id);
-  }, [requests, currentUser]);
-
-  const stats = useMemo(() => ({
-    pendingCount: pendingForMe.length,
-    approvedCount: requests.filter(r => r.status === 'approved').length,
-    rejectedCount: requests.filter(r => r.status === 'rejected').length,
-    totalCount: requests.length
-  }), [requests, pendingForMe]);
-
-  const getUserName = (userId: string) => {
-    const user = users.find(u => u.id === userId);
-    return user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
+  const loadHistory = async (uzgId: string) => {
+    const { data } = await supabase
+      .from('uzgodnienia_history')
+      .select(`
+        *,
+        user:users!uzgodnienia_history_user_id_fkey(id, first_name, last_name),
+        delegated_to:users!uzgodnienia_history_delegated_to_id_fkey(id, first_name, last_name)
+      `)
+      .eq('uzgodnienie_id', uzgId)
+      .order('created_at', { ascending: true });
+    if (data) setDetailHistory(data);
   };
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' });
+  // Stats
+  const stats = useMemo(() => {
+    const mine = uzgodnienia.filter(u => u.created_by_id === currentUser?.id);
+    const waitingForMe = uzgodnienia.filter(u => u.assigned_to_id === currentUser?.id && ['new', 'in_review', 'escalated'].includes(u.status));
+    const overdue = uzgodnienia.filter(u => {
+      if (!u.sla_deadline || ['approved', 'rejected', 'cancelled'].includes(u.status)) return false;
+      return new Date(u.sla_deadline) < new Date();
+    });
+    const approvedThisMonth = uzgodnienia.filter(u => {
+      if (u.status !== 'approved' || !u.resolved_at) return false;
+      const d = new Date(u.resolved_at);
+      const now = new Date();
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
 
-  // Approval actions
-  const handleApprove = async (request: ApprovalRequest, action: 'approved' | 'rejected') => {
-    if (!currentUser) return;
-    setProcessing(true);
+    // Avg response time (hours)
+    const resolved = uzgodnienia.filter(u => u.resolved_at);
+    const avgHours = resolved.length > 0
+      ? resolved.reduce((s, u) => {
+          const diff = (new Date(u.resolved_at!).getTime() - new Date(u.created_at).getTime()) / (1000 * 60 * 60);
+          return s + diff;
+        }, 0) / resolved.length
+      : 0;
+
+    return { mine: mine.length, waitingForMe: waitingForMe.length, overdue: overdue.length, approvedThisMonth: approvedThisMonth.length, avgHours };
+  }, [uzgodnienia, currentUser]);
+
+  const filteredUzgodnienia = useMemo(() => {
+    let list = uzgodnienia;
+
+    if (filterTab === 'mine') {
+      list = list.filter(u => u.created_by_id === currentUser?.id);
+    } else if (filterTab === 'waiting') {
+      list = list.filter(u => u.assigned_to_id === currentUser?.id && ['new', 'in_review', 'escalated', 'delegated'].includes(u.status));
+    }
+
+    if (projectFilter !== 'all') list = list.filter(u => u.project_id === projectFilter);
+    if (statusFilter !== 'all') list = list.filter(u => u.status === statusFilter);
+    if (search) list = list.filter(u =>
+      u.title.toLowerCase().includes(search.toLowerCase()) ||
+      u.number?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return list;
+  }, [uzgodnienia, filterTab, projectFilter, statusFilter, search, currentUser]);
+
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('pl-PL');
+  const formatDateTime = (d: string) => new Date(d).toLocaleString('pl-PL');
+  const getUserName = (u: any) => u ? `${u.first_name} ${u.last_name}` : 'Nieznany';
+  const isOverdue = (u: Uzgodnienie) =>
+    u.sla_deadline && !['approved', 'rejected', 'cancelled'].includes(u.status) && new Date(u.sla_deadline) < new Date();
+
+  // Create
+  const handleSave = async () => {
+    if (!currentUser || !form.title) return;
+    setSaving(true);
     try {
-      // Create action record
-      await supabase.from('approval_actions').insert({
-        request_id: request.id,
-        step: request.current_step,
-        user_id: currentUser.id,
-        action,
-        comment: approvalComment || null
-      });
+      const data = {
+        company_id: currentUser.company_id,
+        project_id: form.project_id || null,
+        title: form.title,
+        description: form.description || null,
+        priority: form.priority,
+        assigned_to_id: form.assigned_to_id || null,
+        sla_hours: form.sla_hours,
+        created_by_id: currentUser.id,
+        status: 'new' as UzgodnienieStatus
+      };
 
-      // Update request status
-      const template = templates.find(t => t.id === request.workflow_template_id);
-      const totalSteps = (template?.steps as any[])?.length || 1;
-
-      if (action === 'rejected') {
-        await supabase
-          .from('approval_requests')
-          .update({ status: 'rejected' })
-          .eq('id', request.id);
-      } else if (request.current_step >= totalSteps) {
-        await supabase
-          .from('approval_requests')
-          .update({ status: 'approved' })
-          .eq('id', request.id);
+      let uzgId: string;
+      if (editingUzgodnienie) {
+        await supabase.from('uzgodnienia').update(data).eq('id', editingUzgodnienie.id);
+        uzgId = editingUzgodnienie.id;
       } else {
-        await supabase
-          .from('approval_requests')
-          .update({ current_step: request.current_step + 1 })
-          .eq('id', request.id);
+        const { data: created } = await supabase.from('uzgodnienia').insert(data).select().single();
+        uzgId = created!.id;
+
+        // Log history
+        await supabase.from('uzgodnienia_history').insert({
+          uzgodnienie_id: uzgId,
+          action: 'created',
+          to_status: 'new',
+          user_id: currentUser.id
+        });
+
+        // Send email to assignee
+        if (form.assigned_to_id) {
+          const assignee = users?.find((u: any) => u.id === form.assigned_to_id);
+          if (assignee?.email) {
+            await supabase.functions.invoke('send-email', {
+              body: {
+                template: 'NOTIFICATION',
+                to: assignee.email,
+                data: {
+                  subject: `Nowe uzgodnienie: ${form.title}`,
+                  message: `Masz nowe uzgodnienie do rozpatrzenia: "${form.title}". Termin: ${form.sla_hours}h.`,
+                  actionUrl: window.location.origin,
+                  actionLabel: 'Przejdź do portalu'
+                }
+              }
+            });
+          }
+        }
       }
 
-      setShowApproveModal(false);
-      setApprovalComment('');
-      setSelectedRequest(null);
-      loadData();
+      setShowCreateModal(false);
+      setEditingUzgodnienie(null);
+      resetForm();
+      await loadData();
     } catch (err) {
-      console.error('Error processing approval:', err);
+      console.error('Error saving uzgodnienie:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Action: approve/reject/delegate
+  const handleAction = async () => {
+    if (!currentUser || !selectedUzgodnienie) return;
+    setProcessing(true);
+    try {
+      const newStatus: UzgodnienieStatus =
+        actionType === 'approve' ? 'approved' :
+        actionType === 'reject' ? 'rejected' :
+        actionType === 'delegate' ? 'delegated' :
+        selectedUzgodnienie.status;
+
+      const histData: any = {
+        uzgodnienie_id: selectedUzgodnienie.id,
+        action: actionType,
+        from_status: selectedUzgodnienie.status,
+        to_status: newStatus,
+        user_id: currentUser.id,
+        comment: actionComment || null
+      };
+
+      if (actionType === 'delegate' && delegateTo) {
+        histData.delegated_to_id = delegateTo;
+      }
+
+      // Update status
+      const updateData: any = { status: newStatus };
+      if (actionType === 'approve' || actionType === 'reject') {
+        updateData.resolved_at = new Date().toISOString();
+        updateData.resolved_by_id = currentUser.id;
+      }
+      if (actionType === 'delegate' && delegateTo) {
+        updateData.assigned_to_id = delegateTo;
+      }
+
+      await Promise.all([
+        supabase.from('uzgodnienia').update(updateData).eq('id', selectedUzgodnienie.id),
+        supabase.from('uzgodnienia_history').insert(histData)
+      ]);
+
+      // Notify assignee/creator
+      const notifyUser = actionType === 'delegate'
+        ? users?.find((u: any) => u.id === delegateTo)
+        : users?.find((u: any) => u.id === selectedUzgodnienie.created_by_id);
+
+      if (notifyUser?.email) {
+        const actionLabel = actionType === 'approve' ? 'zatwierdzone' : actionType === 'reject' ? 'odrzucone' : 'delegowane';
+        await supabase.functions.invoke('send-email', {
+          body: {
+            template: 'NOTIFICATION',
+            to: notifyUser.email,
+            data: {
+              subject: `Uzgodnienie ${selectedUzgodnienie.number || selectedUzgodnienie.title} — ${actionLabel}`,
+              message: `Uzgodnienie "${selectedUzgodnienie.title}" zostało ${actionLabel}.${actionComment ? `\n\nKomentarz: ${actionComment}` : ''}`,
+              actionUrl: window.location.origin,
+              actionLabel: 'Przejdź do portalu'
+            }
+          }
+        }).catch(() => {});
+      }
+
+      setShowActionModal(false);
+      setShowDetailModal(false);
+      setActionComment('');
+      setDelegateTo('');
+      await loadData();
+    } catch (err) {
+      console.error('Error processing action:', err);
     } finally {
       setProcessing(false);
     }
   };
 
-  // Create request
-  const handleCreateRequest = async () => {
-    if (!currentUser || !requestForm.subject) return;
-    setSaving(true);
-    try {
-      const template = templates.find(t => t.id === requestForm.template_id);
-
-      await supabase.from('approval_requests').insert({
-        company_id: currentUser.company_id,
-        subject: requestForm.subject,
-        description: requestForm.description,
-        entity_type: requestForm.entity_type,
-        project_id: requestForm.project_id || null,
-        workflow_template_id: requestForm.template_id || null,
-        status: template ? 'in_progress' : 'pending',
-        current_step: 1,
-        priority: requestForm.priority,
-        initiated_by_id: currentUser.id
-      });
-
-      setShowRequestModal(false);
-      resetRequestForm();
-      loadData();
-    } catch (err) {
-      console.error('Error creating request:', err);
-    } finally {
-      setSaving(false);
-    }
+  const handleOpenDetail = async (uzg: Uzgodnienie) => {
+    setSelectedUzgodnienie(uzg);
+    setShowDetailModal(true);
+    await loadHistory(uzg.id);
   };
 
-  const resetRequestForm = () => {
-    setRequestForm({
-      subject: '',
-      description: '',
-      entity_type: 'document',
-      project_id: '',
-      template_id: '',
-      priority: 'medium'
-    });
+  const handleDelete = async (uzg: Uzgodnienie) => {
+    if (!confirm('Czy na pewno chcesz usunąć to uzgodnienie?')) return;
+    await supabase.from('uzgodnienia').update({ deleted_at: new Date().toISOString() }).eq('id', uzg.id);
+    await loadData();
   };
 
-  // Template CRUD
-  const handleSaveTemplate = async () => {
-    if (!currentUser || !templateForm.name) return;
-    setSaving(true);
-    try {
-      const data = {
-        company_id: currentUser.company_id,
-        name: templateForm.name,
-        description: templateForm.description,
-        entity_types: templateForm.entity_types,
-        steps: templateForm.steps,
-        is_active: true
-      };
+  // PDF Export
+  const handleExportPDF = async (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    const projectUzg = uzgodnienia.filter(u => u.project_id === projectId);
 
-      if (editingTemplate) {
-        await supabase
-          .from('approval_workflow_templates')
-          .update(data)
-          .eq('id', editingTemplate.id);
-      } else {
-        await supabase.from('approval_workflow_templates').insert(data);
-      }
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Uzgodnienia — ${project?.name}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  h1 { color: #1e293b; }
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  th { background: #f1f5f9; padding: 8px; text-align: left; border: 1px solid #e2e8f0; }
+  td { padding: 8px; border: 1px solid #e2e8f0; font-size: 13px; }
+  .approved { color: #16a34a; } .rejected { color: #dc2626; } .pending { color: #2563eb; }
+</style></head>
+<body>
+<h1>Uzgodnienia: ${project?.name || 'Projekt'}</h1>
+<p>Wygenerowano: ${new Date().toLocaleString('pl-PL')}</p>
+<table>
+  <tr><th>Nr</th><th>Tytuł</th><th>Status</th><th>Priorytet</th><th>Przypisany</th><th>SLA</th><th>Data</th></tr>
+  ${projectUzg.map(u => `
+  <tr>
+    <td>${u.number || '—'}</td>
+    <td>${u.title}</td>
+    <td class="${u.status}">${STATUS_LABELS[u.status]}</td>
+    <td>${PRIORITY_LABELS[u.priority]}</td>
+    <td>${getUserName(u.assigned_to)}</td>
+    <td>${u.sla_deadline ? formatDateTime(u.sla_deadline) : '—'}</td>
+    <td>${formatDate(u.created_at)}</td>
+  </tr>`).join('')}
+</table>
+<p style="margin-top: 40px; color: #64748b; font-size: 12px;">MaxMaster Portal — Historia uzgodnień</p>
+</body></html>`;
 
-      setShowTemplateModal(false);
-      setEditingTemplate(null);
-      resetTemplateForm();
-      loadData();
-    } catch (err) {
-      console.error('Error saving template:', err);
-    } finally {
-      setSaving(false);
-    }
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `uzgodnienia_${project?.name?.replace(/\s+/g, '_') || 'projekt'}_${new Date().toISOString().split('T')[0]}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handleDeleteTemplate = async (template: ApprovalWorkflowTemplate) => {
-    if (!confirm('Czy na pewno chcesz usunąć ten szablon?')) return;
-    try {
-      await supabase
-        .from('approval_workflow_templates')
-        .update({ is_active: false })
-        .eq('id', template.id);
-      loadData();
-    } catch (err) {
-      console.error('Error deleting template:', err);
-    }
-  };
+  const resetForm = () => setForm({
+    project_id: '', title: '', description: '', priority: 'normal',
+    assigned_to_id: '', sla_hours: 24, plan_screenshot_url: ''
+  });
 
-  const resetTemplateForm = () => {
-    setTemplateForm({
-      name: '',
-      description: '',
-      entity_types: [],
-      steps: [{ name: 'Krok 1', approvers: [], all_must_approve: false }]
-    });
-  };
-
-  const addStep = () => {
-    setTemplateForm({
-      ...templateForm,
-      steps: [...templateForm.steps, { name: `Krok ${templateForm.steps.length + 1}`, approvers: [], all_must_approve: false }]
-    });
-  };
-
-  const removeStep = (index: number) => {
-    if (templateForm.steps.length <= 1) return;
-    setTemplateForm({
-      ...templateForm,
-      steps: templateForm.steps.filter((_, i) => i !== index)
-    });
-  };
-
-  const updateStep = (index: number, field: string, value: any) => {
-    const newSteps = [...templateForm.steps];
-    newSteps[index] = { ...newSteps[index], [field]: value };
-    setTemplateForm({ ...templateForm, steps: newSteps });
-  };
-
-  const tabs: { key: TabType; label: string; icon: React.ElementType; count?: number }[] = [
-    { key: 'pending', label: 'Do zatwierdzenia', icon: Clock, count: stats.pendingCount },
-    { key: 'my-requests', label: 'Moje wnioski', icon: User },
-    { key: 'all', label: 'Wszystkie', icon: FileText },
-    { key: 'templates', label: 'Szablony', icon: Settings }
+  const filterTabs: { key: FilterTab; label: string }[] = [
+    { key: 'mine', label: 'Moje uzgodnienia' },
+    { key: 'waiting', label: 'Czekam na decyzję' },
+    { key: 'all', label: 'Wszystkie' }
   ];
 
-  const getDisplayedRequests = () => {
-    switch (activeTab) {
-      case 'pending': return pendingForMe;
-      case 'my-requests': return myRequests;
-      case 'all': return requests;
-      default: return [];
-    }
-  };
-
-  const filteredRequests = useMemo(() => {
-    const displayed = getDisplayedRequests();
-    if (!search) return displayed;
-    return displayed.filter(r =>
-      r.subject.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [activeTab, requests, pendingForMe, myRequests, search]);
-
-  const priorityColors = {
-    low: 'bg-slate-100 text-slate-600',
-    medium: 'bg-blue-100 text-blue-600',
-    high: 'bg-orange-100 text-orange-600',
-    urgent: 'bg-red-100 text-red-600'
-  };
-
-  const priorityLabels = {
-    low: 'Niski',
-    medium: 'Średni',
-    high: 'Wysoki',
-    urgent: 'Pilny'
-  };
-
-  const entityTypeOptions: { value: ApprovalEntityType; label: string }[] = [
-    { value: 'document', label: 'Dokument' },
-    { value: 'estimate', label: 'Kosztorys' },
-    { value: 'offer', label: 'Oferta' },
-    { value: 'purchase_request', label: 'Zapotrzebowanie' },
-    { value: 'purchase_order', label: 'Zamówienie' },
-    { value: 'ticket', label: 'Zgłoszenie' },
-    { value: 'other', label: 'Inne' }
-  ];
+  const usersList = users || [];
 
   return (
     <div className="p-6">
+      {/* Header */}
       <div className="mb-6 flex justify-end">
-        <div className="flex gap-2">
-          {activeTab !== 'templates' && (
-            <button
-              onClick={() => { resetRequestForm(); setShowRequestModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="w-5 h-5" />
-              Nowy wniosek
-            </button>
-          )}
-          {activeTab === 'templates' && (
-            <button
-              onClick={() => { resetTemplateForm(); setEditingTemplate(null); setShowTemplateModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="w-5 h-5" />
-              Nowy szablon
-            </button>
-          )}
-        </div>
+        <button onClick={() => { resetForm(); setEditingUzgodnienie(null); setShowCreateModal(true); }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <Plus className="w-5 h-5" /> Nowe uzgodnienie
+        </button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-xl border border-slate-200">
-          <div className="flex items-center gap-2 text-amber-600 mb-2">
-            <Clock className="w-5 h-5" />
-            <span className="text-sm font-medium">Do zatwierdzenia</span>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        {[
+          { label: 'Moje uzgodnienia', value: stats.mine, icon: FileText, color: 'text-blue-600' },
+          { label: 'Czekam na decyzję', value: stats.waitingForMe, icon: Clock, color: 'text-amber-600' },
+          { label: 'Przeterminowane', value: stats.overdue, icon: AlertTriangle, color: 'text-red-600' },
+          { label: 'Zatwierdzono (m-c)', value: stats.approvedThisMonth, icon: CheckCircle, color: 'text-green-600' },
+          { label: 'Śr. czas odpowiedzi', value: null, formatted: stats.avgHours > 0 ? `${stats.avgHours.toFixed(1)}h` : '—', icon: BarChart3, color: 'text-purple-600' },
+        ].map(({ label, value, formatted, icon: Icon, color }) => (
+          <div key={label} className="bg-white p-4 rounded-xl border border-slate-200">
+            <div className={`flex items-center gap-2 ${color} mb-2`}>
+              <Icon className="w-5 h-5" />
+              <span className="text-sm font-medium">{label}</span>
+            </div>
+            <p className={`text-xl font-bold ${color}`}>{formatted || value}</p>
           </div>
-          <p className="text-2xl font-bold text-slate-900">{stats.pendingCount}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200">
-          <div className="flex items-center gap-2 text-green-600 mb-2">
-            <CheckCircle className="w-5 h-5" />
-            <span className="text-sm font-medium">Zatwierdzone</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{stats.approvedCount}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200">
-          <div className="flex items-center gap-2 text-red-600 mb-2">
-            <XCircle className="w-5 h-5" />
-            <span className="text-sm font-medium">Odrzucone</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{stats.rejectedCount}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200">
-          <div className="flex items-center gap-2 text-blue-600 mb-2">
-            <FileText className="w-5 h-5" />
-            <span className="text-sm font-medium">Wszystkie</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{stats.totalCount}</p>
-        </div>
+        ))}
       </div>
 
-      {/* Tabs */}
+      {/* Main panel */}
       <div className="bg-white rounded-xl border border-slate-200">
+        {/* Filter tabs */}
         <div className="border-b border-slate-200">
           <nav className="flex -mb-px">
-            {tabs.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm ${
-                  activeTab === tab.key
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
+            {filterTabs.map(tab => (
+              <button key={tab.key} onClick={() => setFilterTab(tab.key)}
+                className={`px-4 py-3 border-b-2 font-medium text-sm ${
+                  filterTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}>
                 {tab.label}
-                {tab.count !== undefined && tab.count > 0 && (
-                  <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full text-xs">
-                    {tab.count}
-                  </span>
+                {tab.key === 'waiting' && stats.waitingForMe > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">{stats.waitingForMe}</span>
                 )}
               </button>
             ))}
           </nav>
         </div>
 
-        {/* Search */}
-        {activeTab !== 'templates' && (
-          <div className="p-4 border-b border-slate-200">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Szukaj..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg"
-              />
-            </div>
+        {/* Filters */}
+        <div className="p-4 border-b border-slate-200 flex flex-wrap gap-4">
+          <div className="flex-1 min-w-64 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input type="text" placeholder="Szukaj..." value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg" />
           </div>
-        )}
+          <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-200 rounded-lg">
+            <option value="all">Wszystkie projekty</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-200 rounded-lg">
+            <option value="all">Wszystkie statusy</option>
+            {(Object.keys(STATUS_LABELS) as UzgodnienieStatus[]).map(s => (
+              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+            ))}
+          </select>
+          {projectFilter !== 'all' && (
+            <button onClick={() => handleExportPDF(projectFilter)}
+              className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm">
+              <Download className="w-4 h-4" /> Eksport PDF
+            </button>
+          )}
+        </div>
 
         {/* Content */}
         <div className="p-4">
@@ -445,517 +531,378 @@ export const ApprovalsPage: React.FC = () => {
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
             </div>
-          ) : activeTab === 'templates' ? (
-            templates.length === 0 ? (
-              <div className="text-center py-12">
-                <Settings className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 mb-4">Brak szablonów workflow</p>
-                <button
-                  onClick={() => { resetTemplateForm(); setShowTemplateModal(true); }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Utwórz pierwszy szablon
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {templates.map(template => (
-                  <div
-                    key={template.id}
-                    className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 group"
-                  >
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Users className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{template.name}</p>
-                      <p className="text-sm text-slate-500">
-                        {(template.steps as any[])?.length || 0} etapów •
-                        {template.entity_types?.length || 0} typów dokumentów
-                      </p>
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                      <button
-                        onClick={() => {
-                          setEditingTemplate(template);
-                          setTemplateForm({
-                            name: template.name,
-                            description: template.description || '',
-                            entity_types: template.entity_types || [],
-                            steps: (template.steps as any[]) || [{ name: 'Krok 1', approvers: [], all_must_approve: false }]
-                          });
-                          setShowTemplateModal(true);
-                        }}
-                        className="p-1.5 hover:bg-slate-200 rounded"
-                      >
-                        <Pencil className="w-4 h-4 text-slate-400" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTemplate(template)}
-                        className="p-1.5 hover:bg-red-100 rounded"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-400" />
-                  </div>
-                ))}
-              </div>
-            )
-          ) : filteredRequests.length === 0 ? (
+          ) : filteredUzgodnienia.length === 0 ? (
             <div className="text-center py-12">
               <CheckSquare className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500 mb-4">
-                {activeTab === 'pending' ? 'Brak wniosków do zatwierdzenia' : 'Brak wniosków'}
-              </p>
-              <button
-                onClick={() => { resetRequestForm(); setShowRequestModal(true); }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Utwórz wniosek
+              <p className="text-slate-500 mb-4">Brak uzgodnień</p>
+              <button onClick={() => { resetForm(); setShowCreateModal(true); }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                Utwórz pierwsze uzgodnienie
               </button>
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredRequests.map(request => (
-                <div
-                  key={request.id}
-                  className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer group"
-                  onClick={() => { setSelectedRequest(request); setShowDetailModal(true); }}
-                >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    request.status === 'pending' ? 'bg-slate-100' :
-                    request.status === 'in_progress' ? 'bg-amber-100' :
-                    request.status === 'approved' ? 'bg-green-100' : 'bg-red-100'
-                  }`}>
-                    {request.status === 'pending' ? (
-                      <Clock className="w-5 h-5 text-slate-600" />
-                    ) : request.status === 'in_progress' ? (
-                      <Clock className="w-5 h-5 text-amber-600" />
-                    ) : request.status === 'approved' ? (
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-600" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-900">{request.subject}</p>
-                    <p className="text-sm text-slate-500">
-                      {APPROVAL_ENTITY_TYPE_LABELS[request.entity_type]} •
-                      {getUserName(request.initiated_by_id)} •
-                      {formatDate(request.created_at)}
-                    </p>
-                  </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColors[request.priority || 'medium']}`}>
-                    {priorityLabels[request.priority || 'medium']}
-                  </span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${APPROVAL_REQUEST_STATUS_COLORS[request.status]}`}>
-                    {APPROVAL_REQUEST_STATUS_LABELS[request.status]}
-                  </span>
-                  {activeTab === 'pending' && request.status === 'in_progress' && (
-                    <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={() => { setSelectedRequest(request); setShowApproveModal(true); }}
-                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
-                      >
-                        Zatwierdź
-                      </button>
-                      <button
-                        onClick={() => handleApprove(request, 'rejected')}
-                        className="px-3 py-1.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50"
-                      >
-                        Odrzuć
+              {filteredUzgodnienia.map(uzg => {
+                const overdue = isOverdue(uzg);
+                return (
+                  <div key={uzg.id}
+                    onClick={() => handleOpenDetail(uzg)}
+                    className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer group">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      uzg.priority === 'urgent' ? 'bg-red-100' :
+                      uzg.priority === 'high' ? 'bg-amber-100' :
+                      uzg.status === 'approved' ? 'bg-green-100' : 'bg-blue-100'
+                    }`}>
+                      <CheckSquare className={`w-5 h-5 ${
+                        uzg.priority === 'urgent' ? 'text-red-600' :
+                        uzg.priority === 'high' ? 'text-amber-600' :
+                        uzg.status === 'approved' ? 'text-green-600' : 'text-blue-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-slate-900 truncate">{uzg.title}</p>
+                        {uzg.number && <span className="text-xs text-slate-400">{uzg.number}</span>}
+                        {overdue && <span className="flex items-center gap-1 text-xs text-red-600"><AlertTriangle className="w-3 h-3" />Przeterminowane</span>}
+                        {uzg.plan_screenshot_url && <MapPin className="w-3 h-3 text-slate-400" title="Przypisane do planu" />}
+                        {(uzg.photos?.length || 0) > 0 && <Image className="w-3 h-3 text-slate-400" title="Posiada zdjęcia" />}
+                      </div>
+                      <p className="text-sm text-slate-500 truncate">
+                        {uzg.project?.name || 'Bez projektu'}
+                        {uzg.assigned_to && ` • ${getUserName(uzg.assigned_to)}`}
+                        {uzg.sla_deadline && ` • SLA: ${formatDate(uzg.sla_deadline)}`}
+                      </p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium border flex-shrink-0 ${STATUS_COLORS[uzg.status]}`}>
+                      {STATUS_LABELS[uzg.status]}
+                    </span>
+                    <span className={`text-xs font-medium flex-shrink-0 ${PRIORITY_COLORS[uzg.priority]}`}>
+                      {PRIORITY_LABELS[uzg.priority]}
+                    </span>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 flex-shrink-0">
+                      {uzg.assigned_to_id === currentUser?.id && ['new', 'in_review', 'escalated', 'delegated'].includes(uzg.status) && (
+                        <>
+                          <button onClick={e => {
+                            e.stopPropagation();
+                            setSelectedUzgodnienie(uzg);
+                            setActionType('approve');
+                            setShowActionModal(true);
+                          }} className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200">
+                            Zatwierdź
+                          </button>
+                          <button onClick={e => {
+                            e.stopPropagation();
+                            setSelectedUzgodnienie(uzg);
+                            setActionType('reject');
+                            setShowActionModal(true);
+                          }} className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200">
+                            Odrzuć
+                          </button>
+                        </>
+                      )}
+                      <button onClick={e => { e.stopPropagation(); handleDelete(uzg); }}
+                        className="p-1 hover:bg-red-100 rounded">
+                        <Trash2 className="w-4 h-4 text-red-400" />
                       </button>
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
 
-      {/* Request Modal */}
-      {showRequestModal && (
+      {/* Create/Edit Modal */}
+      {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Nowy wniosek o zatwierdzenie</h2>
-              <button onClick={() => setShowRequestModal(false)} className="p-1 hover:bg-slate-100 rounded">
-                <X className="w-5 h-5" />
-              </button>
+          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold">{editingUzgodnienie ? 'Edytuj uzgodnienie' : 'Nowe uzgodnienie'}</h2>
+              <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Temat *</label>
-                <input
-                  type="text"
-                  value={requestForm.subject}
-                  onChange={e => setRequestForm({ ...requestForm, subject: e.target.value })}
-                  placeholder="np. Zatwierdzenie kosztorysu projektu X"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tytuł *</label>
+                <input type="text" value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                  placeholder="np. Zmiana trasy instalacji elektrycznej"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
-                <textarea
-                  value={requestForm.description}
-                  onChange={e => setRequestForm({ ...requestForm, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder="Szczegółowy opis wniosku..."
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Typ dokumentu</label>
-                  <select
-                    value={requestForm.entity_type}
-                    onChange={e => setRequestForm({ ...requestForm, entity_type: e.target.value as ApprovalEntityType })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  >
-                    {entityTypeOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
+                  <select value={form.project_id} onChange={e => setForm({ ...form, project_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                    <option value="">-- Wybierz --</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Priorytet</label>
-                  <select
-                    value={requestForm.priority}
-                    onChange={e => setRequestForm({ ...requestForm, priority: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  >
-                    <option value="low">Niski</option>
-                    <option value="medium">Średni</option>
-                    <option value="high">Wysoki</option>
-                    <option value="urgent">Pilny</option>
+                  <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value as UzgodnienePriority })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                    {(Object.entries(PRIORITY_LABELS) as [UzgodnienePriority, string][]).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
                   </select>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
-                <select
-                  value={requestForm.project_id}
-                  onChange={e => setRequestForm({ ...requestForm, project_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                >
-                  <option value="">-- Wybierz projekt --</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Odpowiedzialny</label>
+                  <select value={form.assigned_to_id} onChange={e => setForm({ ...form, assigned_to_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                    <option value="">-- Wybierz --</option>
+                    {usersList.map((u: any) => (
+                      <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">SLA (godziny)</label>
+                  <input type="number" min="1" value={form.sla_hours}
+                    onChange={e => setForm({ ...form, sla_hours: parseInt(e.target.value) || 24 })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
+                </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Szablon workflow</label>
-                <select
-                  value={requestForm.template_id}
-                  onChange={e => setRequestForm({ ...requestForm, template_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                >
-                  <option value="">-- Bez szablonu (ręczne zatwierdzanie) --</option>
-                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={() => setShowRequestModal(false)}
-                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleCreateRequest}
-                disabled={!requestForm.subject || saving}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Wyślij wniosek
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Template Modal */}
-      {showTemplateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-              <h2 className="text-lg font-semibold">
-                {editingTemplate ? 'Edytuj szablon' : 'Nowy szablon workflow'}
-              </h2>
-              <button onClick={() => setShowTemplateModal(false)} className="p-1 hover:bg-slate-100 rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-4 overflow-y-auto flex-1">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa szablonu *</label>
-                <input
-                  type="text"
-                  value={templateForm.name}
-                  onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })}
-                  placeholder="np. Zatwierdzanie kosztorysów"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                />
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
-                <textarea
-                  value={templateForm.description}
-                  onChange={e => setTemplateForm({ ...templateForm, description: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                />
+                <textarea value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                  rows={3} placeholder="Szczegóły uzgodnienia..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Typy dokumentów</label>
-                <div className="flex flex-wrap gap-2">
-                  {entityTypeOptions.map(opt => (
-                    <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={templateForm.entity_types.includes(opt.value)}
-                        onChange={e => {
-                          const newTypes = e.target.checked
-                            ? [...templateForm.entity_types, opt.value]
-                            : templateForm.entity_types.filter(t => t !== opt.value);
-                          setTemplateForm({ ...templateForm, entity_types: newTypes });
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-slate-700">{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-slate-700">Etapy zatwierdzania</label>
-                  <button
-                    onClick={addStep}
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    + Dodaj etap
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {templateForm.steps.map((step, index) => (
-                    <div key={index} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-medium text-slate-500">Etap {index + 1}</span>
-                        {templateForm.steps.length > 1 && (
-                          <button
-                            onClick={() => removeStep(index)}
-                            className="ml-auto p-1 hover:bg-red-100 rounded"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        type="text"
-                        value={step.name}
-                        onChange={e => updateStep(index, 'name', e.target.value)}
-                        placeholder="Nazwa etapu"
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg mb-2"
-                      />
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-1">Osoby zatwierdzające</label>
-                        <select
-                          multiple
-                          value={step.approvers}
-                          onChange={e => {
-                            const selected = Array.from(e.target.selectedOptions).map(o => o.value);
-                            updateStep(index, 'approvers', selected);
-                          }}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                          size={3}
-                        >
-                          {users.map(u => (
-                            <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={step.all_must_approve}
-                          onChange={e => updateStep(index, 'all_must_approve', e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded"
-                        />
-                        <span className="text-sm text-slate-700">Wszyscy muszą zatwierdzić</span>
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={() => setShowTemplateModal(false)}
-                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleSaveTemplate}
-                disabled={!templateForm.name || saving}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingTemplate ? 'Zapisz' : 'Utwórz'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Approve Modal */}
-      {showApproveModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="p-6">
-              <h2 className="text-xl font-bold text-slate-900 mb-4">Zatwierdź wniosek</h2>
-              <p className="text-slate-600 mb-4">{selectedRequest.subject}</p>
-              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Komentarz (opcjonalnie)
+                  <div className="flex items-center gap-2"><Image className="w-4 h-4" /> URL zdjęcia / screenshotu z planu</div>
                 </label>
-                <textarea
-                  value={approvalComment}
-                  onChange={e => setApprovalComment(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg resize-none"
-                  rows={3}
-                  placeholder="Dodaj komentarz..."
-                />
+                <input type="text" value={form.plan_screenshot_url}
+                  onChange={e => setForm({ ...form, plan_screenshot_url: e.target.value })}
+                  placeholder="https://... (link do screenshotu z zaznaczonym miejscem na planie)"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg" />
               </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setShowApproveModal(false); setApprovalComment(''); }}
-                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
-                  disabled={processing}
-                >
-                  Anuluj
-                </button>
-                <button
-                  onClick={() => handleApprove(selectedRequest, 'approved')}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
-                  disabled={processing}
-                >
-                  {processing && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Zatwierdź
-                </button>
-              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-3">
+              <button onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={handleSave} disabled={!form.title || saving}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {editingUzgodnienie ? 'Zapisz' : 'Utwórz'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Detail Modal */}
-      {showDetailModal && selectedRequest && (
+      {showDetailModal && selectedUzgodnienie && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Szczegóły wniosku</h2>
-              <button onClick={() => { setShowDetailModal(false); setSelectedRequest(null); }} className="p-1 hover:bg-slate-100 rounded">
-                <X className="w-5 h-5" />
-              </button>
+          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold">{selectedUzgodnienie.title}</h2>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[selectedUzgodnienie.status]}`}>
+                    {STATUS_LABELS[selectedUzgodnienie.status]}
+                  </span>
+                </div>
+                {selectedUzgodnienie.number && <p className="text-sm text-slate-500">{selectedUzgodnienie.number}</p>}
+              </div>
+              <button onClick={() => setShowDetailModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4 overflow-y-auto flex-1">
-              <h3 className="text-xl font-bold text-slate-900 mb-2">{selectedRequest.subject}</h3>
 
-              <div className="flex gap-2 mb-4">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${APPROVAL_REQUEST_STATUS_COLORS[selectedRequest.status]}`}>
-                  {APPROVAL_REQUEST_STATUS_LABELS[selectedRequest.status]}
-                </span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColors[selectedRequest.priority || 'medium']}`}>
-                  {priorityLabels[selectedRequest.priority || 'medium']}
-                </span>
+            <div className="p-4 space-y-4">
+              {/* Info grid */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg text-sm">
+                <div>
+                  <span className="text-slate-500">Projekt:</span>
+                  <span className="ml-2 font-medium">{selectedUzgodnienie.project?.name || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Priorytet:</span>
+                  <span className={`ml-2 font-medium ${PRIORITY_COLORS[selectedUzgodnienie.priority]}`}>
+                    {PRIORITY_LABELS[selectedUzgodnienie.priority]}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Odpowiedzialny:</span>
+                  <span className="ml-2 font-medium">{getUserName(selectedUzgodnienie.assigned_to)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Autor:</span>
+                  <span className="ml-2 font-medium">{getUserName(selectedUzgodnienie.created_by)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">SLA deadline:</span>
+                  <span className={`ml-2 font-medium ${isOverdue(selectedUzgodnienie) ? 'text-red-600' : 'text-slate-900'}`}>
+                    {selectedUzgodnienie.sla_deadline ? formatDateTime(selectedUzgodnienie.sla_deadline) : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Utworzono:</span>
+                  <span className="ml-2 font-medium">{formatDateTime(selectedUzgodnienie.created_at)}</span>
+                </div>
               </div>
 
-              {selectedRequest.description && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium text-slate-700 mb-1">Opis</h4>
-                  <p className="text-slate-600">{selectedRequest.description}</p>
+              {selectedUzgodnienie.description && (
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-slate-700">{selectedUzgodnienie.description}</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              {/* Plan screenshot */}
+              {selectedUzgodnienie.plan_screenshot_url && (
                 <div>
-                  <h4 className="text-sm font-medium text-slate-700 mb-1">Typ dokumentu</h4>
-                  <p className="text-slate-600">{APPROVAL_ENTITY_TYPE_LABELS[selectedRequest.entity_type]}</p>
+                  <h3 className="font-medium text-slate-800 mb-2 flex items-center gap-2"><MapPin className="w-4 h-4" /> Lokalizacja na planie</h3>
+                  <img src={selectedUzgodnienie.plan_screenshot_url} alt="Plan"
+                    className="max-w-full rounded-lg border border-slate-200" />
                 </div>
-                <div>
-                  <h4 className="text-sm font-medium text-slate-700 mb-1">Projekt</h4>
-                  <p className="text-slate-600">{(selectedRequest as any).project?.name || 'Nie przypisano'}</p>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-slate-700 mb-1">Wnioskodawca</h4>
-                  <p className="text-slate-600">{getUserName(selectedRequest.initiated_by_id)}</p>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-slate-700 mb-1">Data utworzenia</h4>
-                  <p className="text-slate-600">{formatDate(selectedRequest.created_at)}</p>
-                </div>
-              </div>
+              )}
 
-              {(selectedRequest as any).actions && (selectedRequest as any).actions.length > 0 && (
+              {/* Photos */}
+              {selectedUzgodnienie.photos && selectedUzgodnienie.photos.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium text-slate-700 mb-2">Historia zatwierdzeń</h4>
-                  <div className="space-y-2">
-                    {(selectedRequest as any).actions.map((action: any) => (
-                      <div key={action.id} className="flex items-center gap-3 p-2 bg-slate-50 rounded">
-                        {action.action === 'approved' ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-red-600" />
-                        )}
-                        <div className="flex-1">
-                          <p className="text-sm text-slate-700">
-                            {getUserName(action.user_id)} - {action.action === 'approved' ? 'Zatwierdzono' : 'Odrzucono'}
-                          </p>
-                          {action.comment && (
-                            <p className="text-xs text-slate-500">{action.comment}</p>
-                          )}
-                        </div>
-                        <span className="text-xs text-slate-400">{formatDate(action.created_at)}</span>
-                      </div>
+                  <h3 className="font-medium text-slate-800 mb-2 flex items-center gap-2"><Image className="w-4 h-4" /> Zdjęcia</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedUzgodnienie.photos.map(p => (
+                      <img key={p.id} src={p.url} alt={p.caption || 'Zdjęcie'}
+                        className="w-full h-24 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-90"
+                        onClick={() => window.open(p.url, '_blank')} />
                     ))}
                   </div>
                 </div>
               )}
+
+              {/* History */}
+              <div>
+                <h3 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
+                  <History className="w-4 h-4" /> Historia uzgodnienia
+                </h3>
+                {detailHistory.length === 0 ? (
+                  <p className="text-sm text-slate-500">Brak historii</p>
+                ) : (
+                  <div className="space-y-2">
+                    {detailHistory.map(h => (
+                      <div key={h.id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                            <User className="w-4 h-4 text-slate-500" />
+                          </div>
+                          <div className="w-0.5 bg-slate-200 flex-1 mt-1" />
+                        </div>
+                        <div className="pb-3 flex-1">
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="font-medium">{getUserName(h.user)}</span>
+                            <span className="text-slate-500">{ACTION_LABELS[h.action] || h.action}</span>
+                            {h.to_status && (
+                              <span className={`px-1.5 py-0.5 rounded text-xs ${STATUS_COLORS[h.to_status]}`}>
+                                {STATUS_LABELS[h.to_status]}
+                              </span>
+                            )}
+                            {h.delegated_to && (
+                              <span className="text-slate-500">→ {getUserName(h.delegated_to)}</span>
+                            )}
+                          </div>
+                          {h.comment && <p className="text-sm text-slate-600 mt-1 bg-slate-50 px-2 py-1 rounded">{h.comment}</p>}
+                          <p className="text-xs text-slate-400 mt-1">{formatDateTime(h.created_at)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={() => { setShowDetailModal(false); setSelectedRequest(null); }}
-                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
-              >
-                Zamknij
-              </button>
-              {selectedRequest.status === 'in_progress' && pendingForMe.some(r => r.id === selectedRequest.id) && (
-                <>
-                  <button
-                    onClick={() => { setShowDetailModal(false); setShowApproveModal(true); }}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                  >
-                    Zatwierdź
-                  </button>
-                  <button
-                    onClick={() => { setShowDetailModal(false); handleApprove(selectedRequest, 'rejected'); }}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                  >
-                    Odrzuć
-                  </button>
-                </>
+
+            {/* Action buttons */}
+            {selectedUzgodnienie.assigned_to_id === currentUser?.id &&
+             ['new', 'in_review', 'escalated', 'delegated'].includes(selectedUzgodnienie.status) && (
+              <div className="p-4 border-t flex flex-wrap gap-2">
+                <button onClick={() => { setActionType('approve'); setShowActionModal(true); }}
+                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                  <CheckCircle className="w-4 h-4" /> Zatwierdź
+                </button>
+                <button onClick={() => { setActionType('reject'); setShowActionModal(true); }}
+                  className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
+                  <XCircle className="w-4 h-4" /> Odrzuć
+                </button>
+                <button onClick={() => { setActionType('delegate'); setShowActionModal(true); }}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
+                  <ArrowRight className="w-4 h-4" /> Deleguj
+                </button>
+                <button onClick={() => { setActionType('comment'); setShowActionModal(true); }}
+                  className="flex items-center gap-2 px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-sm">
+                  <MessageSquare className="w-4 h-4" /> Komentarz
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Action Modal */}
+      {showActionModal && selectedUzgodnienie && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-lg font-semibold">
+                {actionType === 'approve' ? '✅ Zatwierdź uzgodnienie' :
+                 actionType === 'reject' ? '❌ Odrzuć uzgodnienie' :
+                 actionType === 'delegate' ? '➡️ Deleguj uzgodnienie' :
+                 '💬 Dodaj komentarz'}
+              </h2>
+              <button onClick={() => setShowActionModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-slate-600">
+                Uzgodnienie: <strong>{selectedUzgodnienie.title}</strong>
+              </p>
+
+              {actionType === 'delegate' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Deleguj do *</label>
+                  <select value={delegateTo} onChange={e => setDelegateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                    <option value="">-- Wybierz osobę --</option>
+                    {usersList.filter((u: any) => u.id !== currentUser?.id).map((u: any) => (
+                      <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Komentarz {actionType !== 'comment' && '(opcjonalnie)'}
+                </label>
+                <textarea value={actionComment}
+                  onChange={e => setActionComment(e.target.value)}
+                  rows={3} placeholder="Wpisz komentarz..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none" />
+              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-3">
+              <button onClick={() => setShowActionModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={handleAction}
+                disabled={processing || (actionType === 'delegate' && !delegateTo) || (actionType === 'comment' && !actionComment)}
+                className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 ${
+                  actionType === 'approve' ? 'bg-green-600 hover:bg-green-700' :
+                  actionType === 'reject' ? 'bg-red-600 hover:bg-red-700' :
+                  actionType === 'delegate' ? 'bg-purple-600 hover:bg-purple-700' :
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}>
+                {processing ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                 actionType === 'approve' ? <CheckCircle className="w-4 h-4" /> :
+                 actionType === 'reject' ? <XCircle className="w-4 h-4" /> :
+                 actionType === 'delegate' ? <ArrowRight className="w-4 h-4" /> :
+                 <MessageSquare className="w-4 h-4" />}
+                {actionType === 'approve' ? 'Zatwierdź' :
+                 actionType === 'reject' ? 'Odrzuć' :
+                 actionType === 'delegate' ? 'Deleguj' :
+                 'Zapisz komentarz'}
+              </button>
             </div>
           </div>
         </div>
