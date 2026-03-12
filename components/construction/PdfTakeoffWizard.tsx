@@ -540,6 +540,14 @@ export default function PdfTakeoffWizard({
     }
     setCreatingOffer(true);
     try {
+      // Get current user id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToast('Nie jesteś zalogowany', 'error');
+        setCreatingOffer(false);
+        return;
+      }
+
       // Get next offer number
       const { count: offerCount } = await supabase
         .from('offers')
@@ -553,10 +561,11 @@ export default function PdfTakeoffWizard({
         .from('offers')
         .insert({
           company_id: companyId,
+          created_by_id: user.id,
           number: offerNumber,
           name: `Przedmiar AI — Strona ${pageNumber}`,
           status: 'draft',
-          currency_id: 1, // Default PLN
+          currency_id: 1, // Default PLN (id=1)
         })
         .select()
         .single();

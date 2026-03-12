@@ -1260,10 +1260,9 @@ export const PlansWorkspace: React.FC = () => {
       const { data: newOffer, error: offerErr } = await supabase.from('offers').insert({
         project_id: selectedProject.id,
         company_id: currentUser.company_id || '',
-        title,
+        name: title,
         status: 'draft',
         currency_id: 1,
-        total_net: boqRows.reduce((s, r) => s + (r.quantity || 0), 0),
         created_by_id: currentUser.id,
       }).select().single();
       if (offerErr || !newOffer) throw offerErr || new Error('Nie udało się utworzyć oferty');
@@ -1278,16 +1277,14 @@ export const PlansWorkspace: React.FC = () => {
 
       // Add BOQ rows as offer items
       const items = boqRows.map((row, i) => ({
+        offer_id: newOffer.id,
         section_id: section.id,
-        name: row.name,
-        unit: row.unit,
+        name: row.name || 'Pozycja',
+        unit: row.unit || 'szt.',
         quantity: row.quantity || 0,
         unit_price: 0,
-        total_net: 0,
-        vat_rate: 23,
         sort_order: i,
         is_optional: false,
-        category: row.category || '',
       }));
       await supabase.from('offer_items').insert(items);
 
@@ -1596,7 +1593,7 @@ export const PlansWorkspace: React.FC = () => {
           number: offerNumber,
           name: `Przedmiar AI — ${activeFile.name || 'Rysunek'}`,
           status: 'draft',
-          currency_id: 'PLN',
+          currency_id: 1,
           object_name: activeFile.name || '',
         })
         .select()
@@ -1634,7 +1631,6 @@ export const PlansWorkspace: React.FC = () => {
           offer_id: newOffer.id,
           section_id: section.id,
           name: p.name || p.type || 'Pozycja',
-          description: p.description || '',
           quantity: p.count || 0,
           unit: p.unit || 'szt.',
           unit_price: 0,
