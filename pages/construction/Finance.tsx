@@ -90,6 +90,9 @@ export const FinancePage: React.FC = () => {
   const [savingBudget, setSavingBudget] = useState(false);
   const [showAddBudgetItemModal, setShowAddBudgetItemModal] = useState(false);
   const [budgetItemForm, setBudgetItemForm] = useState({ category: 'materialy', name: '', planned_amount: 0, actual_amount: 0, notes: '' });
+  const [editingBudgetItem, setEditingBudgetItem] = useState<BudgetItem | null>(null);
+  const [editingBudgetItemId, setEditingBudgetItemId] = useState<string | null>(null);
+  const [editingBudgetValue, setEditingBudgetValue] = useState<{planned: number; actual: number}>({ planned: 0, actual: 0 });
 
   // AI Analysis state
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
@@ -576,6 +579,20 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
     setBudgetItems(prev => prev.filter(i => i.id !== id));
   };
 
+  const handleUpdateBudgetItemAmounts = async (id: string) => {
+    const { error } = await supabase.from('budget_items').update({
+      planned_amount: editingBudgetValue.planned,
+      actual_amount: editingBudgetValue.actual,
+    }).eq('id', id);
+    if (!error) {
+      setBudgetItems(prev => prev.map(i => i.id === id
+        ? { ...i, planned_amount: editingBudgetValue.planned, actual_amount: editingBudgetValue.actual }
+        : i
+      ));
+    }
+    setEditingBudgetItemId(null);
+  };
+
   // ==================== OPERATION CRUD ====================
   const handleSaveOperation = async () => {
     if (!currentUser || !operationForm.amount) return;
@@ -778,6 +795,104 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
     XLSX.writeFile(wb, `Raport_Finansowy_${now.toISOString().split('T')[0]}.xlsx`);
   };
 
+  const handleMonthlyReportPDF = () => {
+    const doc = new jsPDF();
+    const now = new Date();
+    const year = budgetYear || now.getFullYear();
+    const project = projects.find(p => p.id === budgetProject);
+    
+    doc.setFontSize(20); doc.setTextColor(30, 58, 138);
+    doc.text('Raport Miesięczny — Budżet Projektu', 14, 20);
+    doc.setFontSize(11); doc.setTextColor(100);
+    doc.text(`MaxMaster Portal | ${now.toLocaleDateString('pl-PL')}`, 14, 28);
+    doc.text(`Projekt: ${project?.name || 'Brak projektu'} | Rok: ${year}`, 14, 35);
+
+    // Summary
+    autoTable(doc, {
+      startY: 42,
+      head: [['Wskaźnik', 'Wartość']],
+      body: [
+        ['Budżet planowany', formatCurrency(budgetKPIs.totalPlanned)],
+        ['Faktyczne wydatki', formatCurrency(budgetKPIs.totalActual)],
+        ['Pozostało', formatCurrency(budgetKPIs.remaining)],
+        ['Realizacja', `${(budgetKPIs.pctSpent * 100).toFixed(1)}%`],
+        ['Status', budgetKPIs.overTenPct ? '🚨 PRZEKROCZONY >10%' : budgetKPIs.overBudget ? '⚠️ Przekroczony' : budgetKPIs.warningThreshold ? '⚠️ >80% wykorzystane' : '✓ W normie'],
+      ],
+      headStyles: { fillColor: [30, 58, 138] },
+    });
+
+    // Categories
+    const prevY1 = (doc as any).lastAutoTable?.finalY || 110;
+    doc.setFontSize(13); doc.setTextColor(30);
+    doc.text('Realizacja wg kategorii', 14, prevY1 + 12);
+    autoTable(doc, {
+      startY: prevY1 + 16,
+      head: [['Kategoria', 'Planowane', 'Faktyczne', 'Odchylenie', '%']],
+      body: categoryAggregates.map(c => [
+        c.label,
+        formatCurrency(c.planned),
+        formatCurrency(c.actual),
+        `${c.deviation >= 0 ? '+' : ''}${formatCurrency(c.deviation)}`,
+        `${(c.pct * 100).toFixed(0)}%`,
+      ]),
+      headStyles: { fillColor: [30, 58, 138] },
+      styles: { fontSize: 10 },
+    });
+
+    // Budget items detail
+    if (budgetItems.length > 0) {
+      const prevY2 = (doc as any).lastAutoTable?.finalY || 160;
+      if (prevY2 < 240) {
+        doc.setFontSize(13); doc.text('Szczegóły pozycji', 14, prevY2 + 12);
+        autoTable(doc, {
+          startY: prevY2 + 16,
+          head: [['Kategoria', 'Pozycja', 'Plan PLN', 'Fakt PLN', 'Odch.']],
+          body: budgetItems.map(i => {
+            const dev = (i.actual_amount || 0) - (i.planned_amount || 0);
+            const cat = BUDGET_CATEGORIES.find(c => c.code === i.category)?.label || i.category;
+            return [cat, i.name, formatCurrency(i.planned_amount), formatCurrency(i.actual_amount), `${dev >= 0 ? '+' : ''}${formatCurrency(dev)}`];
+          }),
+          styles: { fontSize: 9 },
+          headStyles: { fillColor: [30, 58, 138] },
+        });
+      }
+    }
+
+    doc.save(`Raport_Miesięczny_${project?.name?.replace(/[^a-z0-9]/gi, '_') || 'Projekt'}_${year}.pdf`);
+  };
+
+  const handleAllProjectsXLSX = () => {
+    const now = new Date();
+    const wb = XLSX.utils.book_new();
+    // Overview sheet
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Sводний звіт — Wszystkie projekty', ''],
+      ['Data:', now.toLocaleDateString('pl-PL')],
+      [''],
+      ['Projekt', 'Przychody PLN', 'Koszty PLN', 'Bilans PLN', 'Marża %'],
+      ...projects.map(p => {
+        const pOps = operations.filter(o => o.project_id === p.id && o.status === 'completed');
+        const pInc = pOps.filter(o => o.operation_type === 'income').reduce((s, o) => s + o.amount, 0);
+        const pExp = pOps.filter(o => o.operation_type === 'expense').reduce((s, o) => s + o.amount, 0);
+        const pBal = pInc - pExp;
+        return [p.name, pInc, pExp, pBal, pInc > 0 ? (pBal / pInc * 100).toFixed(1) + '%' : '0%'];
+      }),
+      ['', '', '', '', ''],
+      ['ŁĄCZNIE', stats.income, stats.expense, stats.balance, stats.income > 0 ? (stats.balance / stats.income * 100).toFixed(1) + '%' : '0%'],
+    ]), 'Projekty_Zestawienie');
+    // Operations per project
+    projects.forEach(p => {
+      const pOps = operations.filter(o => o.project_id === p.id);
+      if (pOps.length === 0) return;
+      const sheetName = p.name.slice(0, 28).replace(/[\/:*?\[\]]/g, '_');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['Data', 'Opis', 'Typ', 'Kwota PLN'],
+        ...pOps.map(o => [formatDate(o.operation_date), o.description || '', o.operation_type === 'income' ? 'Przychód' : 'Wydatek', o.operation_type === 'income' ? o.amount : -o.amount]),
+      ]), sheetName);
+    });
+    XLSX.writeFile(wb, `Zestawienie_Projektów_${now.toISOString().split('T')[0]}.xlsx`);
+  };
+
   const handleGenerateActPDF = (act: FinanceAct) => {
     const doc = new jsPDF();
     const contractor = (act as any).contractor;
@@ -836,6 +951,10 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
           <button onClick={handleExportXLSX}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
             <Download className="w-4 h-4" /> Raport XLSX
+          </button>
+          <button onClick={handleAllProjectsXLSX}
+            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700">
+            <Download className="w-4 h-4" /> Zestawienie XLSX
           </button>
           {activeTab === 'operations' && (
             <button onClick={() => { resetOperationForm(); setEditingOperation(null); setShowOperationModal(true); }}
@@ -1087,6 +1206,12 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                   className="px-3 py-2 border border-slate-200 rounded-lg">
                   {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
+                {budgetProject && (
+                  <button onClick={handleMonthlyReportPDF}
+                    className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
+                    <FileText className="w-4 h-4" /> Raport miesięczny PDF
+                  </button>
+                )}
               </div>
 
               {!budgetProject ? (
@@ -1268,20 +1393,64 @@ Odpowiedź po polsku. Bardzo konkretnie.`;
                                       {catInfo?.label || item.category}
                                     </span>
                                   </td>
-                                  <td className="py-2 pr-3 text-right text-slate-600">{formatCurrency(item.planned_amount || 0)}</td>
-                                  <td className="py-2 pr-3 text-right font-medium">{formatCurrency(item.actual_amount || 0)}</td>
-                                  <td className={`py-2 pr-3 text-right font-semibold ${over ? 'text-red-600' : 'text-green-600'}`}>
-                                    {over ? '+' : ''}{formatCurrency(deviation)}
-                                    {item.planned_amount > 0 && (
-                                      <span className="text-xs ml-1 opacity-60">({(deviation / item.planned_amount * 100).toFixed(0)}%)</span>
-                                    )}
-                                  </td>
-                                  <td className="py-2">
-                                    <button onClick={() => handleDeleteBudgetItem(item.id!)}
-                                      className="p-1 hover:bg-red-100 rounded text-red-400 opacity-0 group-hover:opacity-100">
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
+                                  {editingBudgetItemId === item.id ? (
+                                    <>
+                                      <td className="py-1 pr-3">
+                                        <input type="number" value={editingBudgetValue.planned}
+                                          onChange={e => setEditingBudgetValue(v => ({ ...v, planned: parseFloat(e.target.value) || 0 }))}
+                                          className="w-24 px-2 py-1 border border-blue-300 rounded text-right text-sm" min="0" step="0.01" />
+                                      </td>
+                                      <td className="py-1 pr-3">
+                                        <input type="number" value={editingBudgetValue.actual}
+                                          onChange={e => setEditingBudgetValue(v => ({ ...v, actual: parseFloat(e.target.value) || 0 }))}
+                                          className="w-24 px-2 py-1 border border-blue-300 rounded text-right text-sm" min="0" step="0.01" />
+                                      </td>
+                                      <td className="py-1 pr-3 text-right text-sm text-slate-500">
+                                        {formatCurrency(editingBudgetValue.actual - editingBudgetValue.planned)}
+                                      </td>
+                                      <td className="py-1">
+                                        <div className="flex gap-1">
+                                          <button onClick={() => handleUpdateBudgetItemAmounts(item.id!)}
+                                            className="p-1 bg-green-100 hover:bg-green-200 rounded text-green-700">
+                                            <Save className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button onClick={() => setEditingBudgetItemId(null)}
+                                            className="p-1 hover:bg-slate-200 rounded text-slate-400">
+                                            <X className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <td className="py-2 pr-3 text-right text-slate-600 cursor-pointer hover:text-blue-600"
+                                        onClick={() => { setEditingBudgetItemId(item.id!); setEditingBudgetValue({ planned: item.planned_amount || 0, actual: item.actual_amount || 0 }); }}>
+                                        {formatCurrency(item.planned_amount || 0)}
+                                      </td>
+                                      <td className="py-2 pr-3 text-right font-medium cursor-pointer hover:text-blue-600"
+                                        onClick={() => { setEditingBudgetItemId(item.id!); setEditingBudgetValue({ planned: item.planned_amount || 0, actual: item.actual_amount || 0 }); }}>
+                                        {formatCurrency(item.actual_amount || 0)}
+                                      </td>
+                                      <td className={`py-2 pr-3 text-right font-semibold ${over ? 'text-red-600' : 'text-green-600'}`}>
+                                        {over ? '+' : ''}{formatCurrency(deviation)}
+                                        {item.planned_amount > 0 && (
+                                          <span className="text-xs ml-1 opacity-60">({(deviation / item.planned_amount * 100).toFixed(0)}%)</span>
+                                        )}
+                                      </td>
+                                      <td className="py-2">
+                                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
+                                          <button onClick={() => { setEditingBudgetItemId(item.id!); setEditingBudgetValue({ planned: item.planned_amount || 0, actual: item.actual_amount || 0 }); }}
+                                            className="p-1 hover:bg-blue-100 rounded text-blue-400">
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button onClick={() => handleDeleteBudgetItem(item.id!)}
+                                            className="p-1 hover:bg-red-100 rounded text-red-400">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </>
+                                  )}
                                 </tr>
                               );
                             })}
