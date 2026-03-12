@@ -837,7 +837,7 @@ export const HRCandidatesPage = () => {
                 testAttempts: testAttempts.filter(ta => ta.user_id === selectedCandidate.id).map(ta => ({
                     passed: ta.passed,
                     score: ta.score,
-                    date: ta.created_at
+                    date: ta.completed_at
                 }))
             };
 

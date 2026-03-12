@@ -137,11 +137,11 @@ export const BrigadeSchedulePage: React.FC = () => {
       if (projRes.error) throw projRes.error;
 
       const map = new Map<string, WorkerDay>();
-      (daysRes.data ?? []).forEach((d: WorkerDay) => {
+      (daysRes.data as unknown as WorkerDay[] ?? []).forEach((d: WorkerDay) => {
         map.set(`${d.user_id}::${d.date}`, d);
       });
       setWorkerDaysMap(map);
-      setProjects(projRes.data ?? []);
+      setProjects((projRes.data ?? []) as unknown as Project[]);
     } catch (e: any) {
       setError(e.message ?? 'Błąd ładowania danych');
     } finally {

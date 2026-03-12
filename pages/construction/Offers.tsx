@@ -477,8 +477,8 @@ export const OffersPage: React.FC = () => {
     main_material_side: '', minor_material_side: '',
     // Assignment
     assigned_user_id: '', planned_response_date: '',
-    // Notes
-    notes: ''
+    // Notes, Contact
+    notes: '', contact_person: '', phone: '', email: ''
   });
   const [offerGusLoading, setOfferGusLoading] = useState(false);
   const [offerGusError, setOfferGusError] = useState<string | null>(null);
@@ -910,7 +910,7 @@ export const OffersPage: React.FC = () => {
       object_city: '', object_postal_code: '', object_country: 'Polska',
       main_material_side: '', minor_material_side: '',
       assigned_user_id: '', planned_response_date: '',
-      notes: ''
+      notes: '', contact_person: '', phone: '', email: ''
     });
     setOfferGusError(null); setOfferGusSuccess(null);
     setOfferClientSearchQuery(''); setOfferShowClientDropdown(false);
@@ -2978,7 +2978,7 @@ export const OffersPage: React.FC = () => {
         if (normalizedSections.length > 0) requestAnimationFrame(revNext);
         showToast(`Zaimportowano ${normalizedSections.length} sekcji z kosztorysu`, 'success');
       } else {
-        showToast('Kosztorys nie zawiera pozycji do importu', 'warning');
+        showToast('Kosztorys nie zawiera pozycji do importu', 'info');
       }
 
       setImportedKosztorysName(investmentName + (clientName ? ` — ${clientName}` : ''));

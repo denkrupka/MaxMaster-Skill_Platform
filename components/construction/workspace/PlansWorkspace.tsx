@@ -662,7 +662,7 @@ export const PlansWorkspace: React.FC = () => {
           quantity: typeof t.quantity === 'number' ? t.quantity : 0,
           unit: t.unit || 'szt.',
           status: 'approved' as const,
-          sourceType: 'ai-recognition' as const,
+          sourceType: 'ai-detection' as const,
           sourceObjectIds: [],
           level: undefined,
         }));
