@@ -1251,6 +1251,56 @@ export const PlansWorkspace: React.FC = () => {
     }
   }, [boqRows, activeFile]);
 
+  const handleCreateOfferFromBoq = useCallback(async () => {
+    if (boqRows.length === 0 || !selectedProject || !currentUser) {
+      notify('Brak pozycji BOQ lub nie wybrano projektu', 'error');
+      return;
+    }
+    try {
+      const title = `Oferta z BOQ — ${activeFile?.name || 'Rysunek'} (${new Date().toLocaleDateString('pl-PL')})`;
+      const { data: newOffer, error: offerErr } = await supabase.from('offers').insert({
+        project_id: selectedProject.id,
+        company_id: currentUser.company_id || '',
+        title,
+        status: 'draft',
+        currency_id: 1,
+        total_net: boqRows.reduce((s, r) => s + (r.quantity || 0), 0),
+        created_by_id: currentUser.id,
+      }).select().single();
+      if (offerErr || !newOffer) throw offerErr || new Error('Nie udało się utworzyć oferty');
+
+      // Create single section
+      const { data: section, error: secErr } = await supabase.from('offer_sections').insert({
+        offer_id: newOffer.id,
+        name: 'Roboty z przedmiaru',
+        sort_order: 0,
+      }).select().single();
+      if (secErr || !section) throw secErr || new Error('Nie udało się utworzyć sekcji');
+
+      // Add BOQ rows as offer items
+      const items = boqRows.map((row, i) => ({
+        section_id: section.id,
+        name: row.name,
+        unit: row.unit,
+        quantity: row.quantity || 0,
+        unit_price: 0,
+        total_net: 0,
+        vat_rate: 23,
+        sort_order: i,
+        is_optional: false,
+        category: row.category || '',
+      }));
+      await supabase.from('offer_items').insert(items);
+
+      notify(`Oferta "${title}" została utworzona`);
+      setTimeout(() => {
+        navigate(`/construction/offers?offerId=${newOffer.id}`);
+      }, 1000);
+    } catch (err: any) {
+      notify(err.message || 'Błąd tworzenia oferty', 'error');
+    }
+  }, [boqRows, selectedProject, currentUser, activeFile, navigate, notify]);
+
   const handleShareLink = useCallback(() => {
     if (!selectedPlan) return;
     const shareUrl = `${window.location.origin}/#/public/plan-view?planId=${selectedPlan.id}`;
@@ -3818,6 +3868,7 @@ export const PlansWorkspace: React.FC = () => {
           onExportBoq={handleExport}
           onExportBoqXlsx={handleExportXlsx}
           onGenerateBoq={handleGenerateBoq}
+          onCreateOfferFromBoq={handleCreateOfferFromBoq}
           onGenerateBoqAi={handleGenerateBoqAi}
           onAnalyze={handleAnalyze}
           onAiRecognize={handleAiRecognize}

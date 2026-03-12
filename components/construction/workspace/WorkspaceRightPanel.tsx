@@ -6,7 +6,7 @@ import {
   Search, Eye, EyeOff, Link2, Copy, Filter, Download,
   Plus, Minus, Edit3, Trash2, ExternalLink, RefreshCw,
   BarChart3, Hash, ArrowUpDown, Loader2, Split, Merge,
-  FileCode, Shield, Focus, Upload, RotateCcw, Terminal
+  FileCode, Shield, Focus, Upload, RotateCcw, Terminal, FilePlus
 } from 'lucide-react';
 import type {
   RightTab, DrawingObject, BoqRow, AiSuggestion,
@@ -57,6 +57,7 @@ interface WorkspaceRightPanelProps {
   onExportBoq: () => void;
   onExportBoqXlsx?: () => void;
   onGenerateBoq: () => void;
+  onCreateOfferFromBoq?: () => void;
   onGenerateBoqAi: () => void;
   onAnalyze: () => void;
   onAiRecognize: () => void;
@@ -306,18 +307,27 @@ const OverviewTab: React.FC<WorkspaceRightPanelProps> = (props) => {
           {props.boqStatus === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookOpen className="w-3.5 h-3.5" />} Generuj BOQ
         </button>
         {props.boqRows.length > 0 && (
-          <div className="flex gap-1">
-            <button onClick={props.onExportBoq}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium bg-slate-50 text-slate-700 hover:bg-slate-100 transition"
-              title="Eksportuj do CSV">
-              <Download className="w-3.5 h-3.5" /> CSV
-            </button>
-            <button onClick={props.onExportBoqXlsx}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
-              title="Eksportuj do Excel (.xlsx)">
-              <Download className="w-3.5 h-3.5" /> Excel
-            </button>
-          </div>
+          <>
+            <div className="flex gap-1">
+              <button onClick={props.onExportBoq}
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium bg-slate-50 text-slate-700 hover:bg-slate-100 transition"
+                title="Eksportuj do CSV">
+                <Download className="w-3.5 h-3.5" /> CSV
+              </button>
+              <button onClick={props.onExportBoqXlsx}
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                title="Eksportuj do Excel (.xlsx)">
+                <Download className="w-3.5 h-3.5" /> Excel
+              </button>
+            </div>
+            {props.onCreateOfferFromBoq && (
+              <button onClick={props.onCreateOfferFromBoq}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-600 text-white hover:bg-violet-700 transition"
+                title="Utwórz ofertę z pozycji BOQ">
+                <FilePlus className="w-3.5 h-3.5" /> Utwórz ofertę z BOQ
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
