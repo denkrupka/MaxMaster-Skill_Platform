@@ -141,11 +141,11 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
         empFills[v.name] = emp.contract_end_date;
       }
       if (v.name === 'rodzaj_umowy') {
-        empFills[v.name] = emp.contract_type === 'full_time' ? 'czas nieokreślony' : 
+        empFills[v.name] = (emp.contract_type as string) === 'full_time' ? 'czas nieokreślony' : 
           emp.contract_end_date ? 'czas określony' : 'czas nieokreślony';
       }
       if (v.name === 'wymiar_czasu') {
-        empFills[v.name] = emp.contract_type === 'part_time' ? '1/2 etatu' : 'pełny etat (8h/dobę, 40h/tydzień)';
+        empFills[v.name] = (emp.contract_type as string) === 'part_time' ? '1/2 etatu' : 'pełny etat (8h/dobę, 40h/tydzień)';
       }
     });
     setValues(prev => ({ ...prev, ...empFills }));
@@ -251,7 +251,7 @@ export const DocumentTemplateEditor: React.FC<Props> = ({ onClose, onCreated, in
     return acc;
   }, {});
 
-  const employees = users.filter(u => u.status !== 'resigned' && u.status !== 'rejected');
+  const employees = users.filter(u => u.status !== ('resigned' as any) && u.status !== 'rejected');
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">

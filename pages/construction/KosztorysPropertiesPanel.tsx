@@ -120,8 +120,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <label className="block text-xs font-medium text-gray-500 mb-1">Jednostka</label>
           <input
             type="text"
-            value={position.unit}
-            onChange={e => onUpdate({ unit: e.target.value })}
+            value={typeof position.unit === 'object' ? (position.unit as any).label : position.unit}
+            onChange={e => onUpdate({ unit: { ...(typeof position.unit === 'object' ? position.unit : { unitIndex: '' }), label: e.target.value } as any })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           />
         </div>
@@ -132,19 +132,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Robocizna:</span>
-              <span className="font-medium">{formatCurrency(calculationResult.laborCost)} zł</span>
+              <span className="font-medium">{formatCurrency(calculationResult.laborTotal)} zł</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Materiały:</span>
-              <span className="font-medium">{formatCurrency(calculationResult.materialCost)} zł</span>
+              <span className="font-medium">{formatCurrency(calculationResult.materialTotal)} zł</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Sprzęt:</span>
-              <span className="font-medium">{formatCurrency(calculationResult.equipmentCost)} zł</span>
+              <span className="font-medium">{formatCurrency(calculationResult.equipmentTotal)} zł</span>
             </div>
             <div className="flex justify-between text-sm font-bold border-t border-gray-200 pt-2 mt-2">
               <span>Razem:</span>
-              <span className="text-blue-700">{formatCurrency(calculationResult.totalCost)} zł</span>
+              <span className="text-blue-700">{formatCurrency(calculationResult.totalWithOverheads)} zł</span>
             </div>
           </div>
           {showDetailedOverheads && overheads.length > 0 && (
@@ -155,7 +155,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               {overheads.map(oh => (
                 <div key={oh.id} className="flex justify-between text-xs text-gray-500 mb-1">
                   <span>{oh.name}</span>
-                  <span>{oh.rate}%</span>
+                  <span>{oh.value}%</span>
                 </div>
               ))}
             </div>
@@ -182,8 +182,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <input
             type="number"
             step="0.0001"
-            value={resource.norm}
-            onChange={e => onUpdate({ norm: parseFloat(e.target.value) || 0 })}
+            value={typeof resource.norm === 'object' ? (resource.norm as any).value : resource.norm}
+            onChange={e => onUpdate({ norm: typeof resource.norm === 'object' ? { ...(resource.norm as any), value: parseFloat(e.target.value) || 0 } : parseFloat(e.target.value) || 0 } as any)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           />
         </div>
@@ -192,8 +192,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <input
             type="number"
             step="0.01"
-            value={resource.unitPrice}
-            onChange={e => onUpdate({ unitPrice: parseFloat(e.target.value) || 0 })}
+            value={typeof resource.unitPrice === 'object' ? (resource.unitPrice as any).value : resource.unitPrice}
+            onChange={e => onUpdate({ unitPrice: typeof resource.unitPrice === 'object' ? { ...(resource.unitPrice as any), value: parseFloat(e.target.value) || 0 } : parseFloat(e.target.value) || 0 } as any)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           />
         </div>
@@ -202,8 +202,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <label className="block text-xs font-medium text-gray-500 mb-1">Jednostka</label>
         <input
           type="text"
-          value={resource.unit}
-          onChange={e => onUpdate({ unit: e.target.value })}
+          value={typeof resource.unit === 'object' ? (resource.unit as any).label : resource.unit}
+          onChange={e => onUpdate({ unit: { ...(typeof resource.unit === 'object' ? resource.unit : { unitIndex: '' }), label: e.target.value } as any })}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
         />
       </div>

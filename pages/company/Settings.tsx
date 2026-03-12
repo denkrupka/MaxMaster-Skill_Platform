@@ -566,22 +566,24 @@ export const CompanySettingsPage: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-slate-100 rounded-lg p-1 overflow-x-auto w-full lg:w-fit">
+      <div className="mb-6 bg-slate-100 rounded-lg p-1 overflow-x-auto w-full">
         <div className="flex gap-1 min-w-max">
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
-              activeTab === tab.key
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition whitespace-nowrap ${
+                activeTab === tab.key
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              {tab.icon}
+              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="sm:hidden">{tab.label.slice(0, 6)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════

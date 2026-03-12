@@ -66,7 +66,8 @@ export type SourceType =
   | 'geometry'
   | 'manual-measurement'
   | 'ai-detection'
-  | 'mixed';
+  | 'mixed'
+  | 'DWG';
 
 export type BoqRowStatus =
   | 'auto-generated'
@@ -190,7 +191,7 @@ export interface AiSuggestion {
 
 export interface MeasurementItem {
   id: string;
-  type: 'length' | 'area' | 'count' | 'polyline';
+  type: 'length' | 'area' | 'count' | 'polyline' | 'angle';
   value: number;
   unit: string;
   label?: string;
