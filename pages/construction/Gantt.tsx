@@ -9,8 +9,12 @@ import {
   MoreHorizontal, ArrowRight, Undo2, Redo2, Copy, ClipboardPaste,
   HelpCircle, MoveRight, MoveLeft, CheckCircle2, Diamond,
   Shield, Map, Wrench, Package, FileQuestion, Camera, Layers,
-  TrendingUp, Target, BarChart3, Activity, Bookmark, BookmarkCheck
+  TrendingUp, Target, BarChart3, Activity, Bookmark, BookmarkCheck,
+  Sparkles, Bell, RefreshCw
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { Project, GanttTask, GanttDependency, GanttDependencyType, Offer, KosztorysEstimate } from '../../types';
@@ -349,6 +353,15 @@ export const GanttPage: React.FC = () => {
 
   // Advanced panel toggle
   const [showAdvancedPanel, setShowAdvancedPanel] = useState<string | null>(null); // 'baseline' | 'lookahead' | 'zones' | 'materials' | 'rfis' | 'insights'
+
+  // AI Optimization
+  const [aiOptimizing, setAiOptimizing] = useState(false);
+
+  // Alerts panel
+  const [showAlertsPanel, setShowAlertsPanel] = useState(false);
+
+  // Auto-shift dialog
+  const [showShiftDialog, setShowShiftDialog] = useState<{ task: GanttTaskWithChildren; overdueDays: number; dependents: GanttTaskWithChildren[] } | null>(null);
 
   // Load evidence when evidence modal opens for a task
   useEffect(() => {
@@ -1530,6 +1543,303 @@ export const GanttPage: React.FC = () => {
     await loadGanttData();
   };
 
+  // ========== EXPORT PDF ==========
+  const handleExportPDF = () => {
+    if (!selectedProject) return;
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const title = `Harmonogram — ${selectedProject.name}`;
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, 14, 18);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Wygenerowano: ${new Date().toLocaleDateString('pl-PL')}`, 14, 25);
+
+      const rows = allFlatTasks.map(t => [
+        t.wbs || '',
+        (t.title || '').substring(0, 50),
+        t.start_date ? new Date(t.start_date).toLocaleDateString('pl-PL') : '–',
+        t.end_date ? new Date(t.end_date).toLocaleDateString('pl-PL') : '–',
+        t.duration ? `${t.duration} dni` : '–',
+        `${t.progress || 0}%`,
+        t.priority || 'normal',
+        (t as any).lps_status || '–',
+        t.is_milestone ? 'Tak' : 'Nie',
+      ]);
+
+      autoTable(doc, {
+        startY: 30,
+        head: [['SPP', 'Nazwa', 'Rozpoczęcie', 'Zakończenie', 'Czas', 'Postęp', 'Priorytet', 'LPS', 'Kamień']],
+        body: rows,
+        styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: 14 },
+          1: { cellWidth: 70 },
+          2: { cellWidth: 22 },
+          3: { cellWidth: 22 },
+          4: { cellWidth: 14 },
+          5: { cellWidth: 14 },
+          6: { cellWidth: 18 },
+          7: { cellWidth: 14 },
+          8: { cellWidth: 14 },
+        },
+      });
+      doc.save(`harmonogram_${selectedProject.name}_${new Date().toISOString().split('T')[0]}.pdf`);
+      showSuccess('Eksport PDF gotowy.');
+    } catch (err: any) {
+      showError('Błąd eksportu PDF: ' + (err?.message || err));
+    }
+  };
+
+  // ========== EXPORT XLSX ==========
+  const handleExportXLSX = () => {
+    if (!selectedProject) return;
+    try {
+      const wsData = [
+        ['SPP', 'Nazwa zadania', 'Data rozpoczęcia', 'Data zakończenia', 'Czas trwania (dni)', 'Postęp (%)', 'Priorytet', 'LPS Status', 'Kamień milowy', 'Przypisany', 'Strefy', 'Uwagi'],
+        ...allFlatTasks.map(t => {
+          const assignedUser = users.find(u => u.id === t.assigned_to_id);
+          return [
+            t.wbs || '',
+            t.title || '',
+            t.start_date ? t.start_date.split('T')[0] : '',
+            t.end_date ? t.end_date.split('T')[0] : '',
+            t.duration || 0,
+            t.progress || 0,
+            t.priority || 'normal',
+            (t as any).lps_status || '',
+            t.is_milestone ? 'Tak' : 'Nie',
+            assignedUser ? `${assignedUser.first_name || ''} ${assignedUser.last_name || ''}`.trim() : '',
+            (t as any).zone_id || '',
+            t.notes || '',
+          ];
+        }),
+      ];
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      // Column widths
+      ws['!cols'] = [
+        { wch: 8 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+        { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 30 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'Harmonogram');
+
+      // Dependencies sheet
+      if (dependencies.length > 0) {
+        const depData = [
+          ['Poprzednik ID', 'Poprzednik', 'Następnik ID', 'Następnik', 'Typ', 'Opóźnienie (dni)'],
+          ...dependencies.map(d => {
+            const pred = allFlatTasks.find(t => t.id === d.predecessor_id);
+            const succ = allFlatTasks.find(t => t.id === d.successor_id);
+            return [d.predecessor_id, pred?.title || '', d.successor_id, succ?.title || '', d.dependency_type, d.lag || 0];
+          }),
+        ];
+        const depsWs = XLSX.utils.aoa_to_sheet(depData);
+        XLSX.utils.book_append_sheet(wb, depsWs, 'Zależności');
+      }
+
+      XLSX.writeFile(wb, `harmonogram_${selectedProject.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      showSuccess('Eksport XLSX gotowy.');
+    } catch (err: any) {
+      showError('Błąd eksportu XLSX: ' + (err?.message || err));
+    }
+  };
+
+  // ========== AI TASK ORDER OPTIMIZATION ==========
+  const handleAIOptimizeOrder = async () => {
+    if (!selectedProject || allFlatTasks.length === 0) return;
+    if (!confirm(`AI przeanalizuje ${allFlatTasks.length} zadań i ułoży je w poprawnej kolejności budowlanej. Przeliczy też daty. Kontynuować?`)) return;
+    setAiOptimizing(true);
+    try {
+      const taskPayload = allFlatTasks.map(t => ({ id: t.id, title: t.title, parent_id: t.parent_id }));
+      const { data, error } = await supabase.functions.invoke('gantt-ai-optimize', {
+        body: { tasks: taskPayload }
+      });
+      if (error) throw new Error(error.message || 'Błąd AI');
+      if (!data?.success || !data?.order) throw new Error(data?.error || 'AI nie zwróciło kolejności');
+
+      const order: string[] = data.order;
+      // Apply sort_order based on AI order
+      let idx = 0;
+      for (const taskId of order) {
+        await supabase.from('gantt_tasks').update({ sort_order: idx }).eq('id', taskId);
+        idx++;
+      }
+
+      // Recalculate dates based on new order (using autoSchedule logic)
+      const startDate = harmonogramStart || allFlatTasks.find(t => t.start_date)?.start_date?.split('T')[0] || new Date().toISOString().split('T')[0];
+      
+      // For tasks without FS dependencies, assign sequential dates
+      const leafTasks = allFlatTasks.filter(t => !isParentTask(t) && t.start_date);
+      const taskDurations: Record<string, number> = {};
+      leafTasks.forEach(t => { taskDurations[t.id] = t.duration || 1; });
+
+      let currentDate = new Date(startDate);
+      for (const taskId of order) {
+        const task = allFlatTasks.find(t => t.id === taskId);
+        if (!task || isParentTask(task)) continue;
+        // Check if this task has predecessor dependency
+        const hasPredecessor = dependencies.some(d => d.successor_id === taskId);
+        if (!hasPredecessor) {
+          const dur = task.duration || 1;
+          const endDate = new Date(currentDate);
+          endDate.setDate(endDate.getDate() + dur - 1);
+          await supabase.from('gantt_tasks').update({
+            start_date: currentDate.toISOString().split('T')[0],
+            end_date: endDate.toISOString().split('T')[0],
+          }).eq('id', taskId);
+          currentDate.setDate(currentDate.getDate() + dur);
+        }
+      }
+
+      showSuccess(`AI zoptymalizowało kolejność ${order.length} zadań.`);
+      await loadGanttDataKeepScroll();
+    } catch (err: any) {
+      showError('Błąd optymalizacji AI: ' + (err?.message || err));
+    } finally {
+      setAiOptimizing(false);
+    }
+  };
+
+  // ========== FETCH COMPLETION FROM TASKS MODULE ==========
+  const handleFetchFromTasks = async () => {
+    if (!selectedProject) return;
+    setSaving(true);
+    try {
+      // Fetch tasks from the project_tasks module for this project
+      const { data: projectTasks, error } = await supabase
+        .from('project_tasks')
+        .select('id, title, status, progress, actual_hours, estimated_hours')
+        .eq('project_id', selectedProject.id);
+
+      if (error) throw new Error(error.message);
+      if (!projectTasks || projectTasks.length === 0) {
+        showError('Brak zadań w module Zadania dla tego projektu.');
+        return;
+      }
+
+      let updatedCount = 0;
+      for (const ganttTask of allFlatTasks) {
+        // Match by title (case-insensitive)
+        const matchingTask = projectTasks.find((t: any) =>
+          t.title?.toLowerCase().trim() === ganttTask.title?.toLowerCase().trim()
+        );
+        if (!matchingTask) continue;
+
+        let newProgress = ganttTask.progress || 0;
+        if (matchingTask.status === 'done' || matchingTask.status === 'completed') {
+          newProgress = 100;
+        } else if (matchingTask.progress != null) {
+          newProgress = matchingTask.progress;
+        } else if (matchingTask.status === 'in_progress') {
+          newProgress = 50;
+        }
+
+        if (newProgress !== ganttTask.progress) {
+          await supabase.from('gantt_tasks').update({
+            progress: newProgress,
+            has_custom_progress: true,
+          }).eq('id', ganttTask.id);
+          updatedCount++;
+        }
+      }
+
+      showSuccess(`Pobrano statusy z modułu Zadania. Zaktualizowano ${updatedCount} zadań.`);
+      await loadGanttDataKeepScroll();
+    } catch (err: any) {
+      showError('Błąd pobierania z Zadania: ' + (err?.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ========== AUTO-SHIFT DEPENDENT TASKS ==========
+  const checkAndShowShiftDialog = useCallback((task: GanttTaskWithChildren) => {
+    if (!task.end_date || task.progress >= 100) return;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const end = new Date(task.end_date); end.setHours(0, 0, 0, 0);
+    const daysOverdue = Math.ceil((today.getTime() - end.getTime()) / 86400000);
+    if (daysOverdue <= 0) return;
+
+    const dependents = allFlatTasks.filter(t =>
+      dependencies.some(d => d.predecessor_id === task.id && d.successor_id === t.id)
+    );
+    if (dependents.length === 0) return;
+    setShowShiftDialog({ task, overdueDays: daysOverdue, dependents });
+  }, [allFlatTasks, dependencies]);
+
+  const handleAutoShiftDependents = async () => {
+    if (!showShiftDialog || !selectedProject) return;
+    const { task, overdueDays } = showShiftDialog;
+    setSaving(true);
+    try {
+      // Find all tasks that depend on this task (transitively)
+      const collectDependents = (taskId: string, visited = new Set<string>()): string[] => {
+        if (visited.has(taskId)) return [];
+        visited.add(taskId);
+        const directDeps = dependencies
+          .filter(d => d.predecessor_id === taskId)
+          .map(d => d.successor_id);
+        return [...directDeps, ...directDeps.flatMap(id => collectDependents(id, visited))];
+      };
+
+      const allDependentIds = collectDependents(task.id);
+      let shifted = 0;
+      for (const depId of allDependentIds) {
+        const depTask = allFlatTasks.find(t => t.id === depId);
+        if (!depTask?.start_date) continue;
+        const newStart = new Date(depTask.start_date);
+        newStart.setDate(newStart.getDate() + overdueDays);
+        const newEnd = depTask.end_date ? new Date(depTask.end_date) : new Date(newStart);
+        newEnd.setDate(newEnd.getDate() + overdueDays);
+        await supabase.from('gantt_tasks').update({
+          start_date: newStart.toISOString().split('T')[0],
+          end_date: newEnd.toISOString().split('T')[0],
+        }).eq('id', depId);
+        shifted++;
+      }
+      setShowShiftDialog(null);
+      showSuccess(`Przesunięto ${shifted} zależnych zadań o ${overdueDays} dni.`);
+      await loadGanttDataKeepScroll();
+    } catch (err: any) {
+      showError('Błąd przesuwania zadań: ' + (err?.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ========== SEND ALERT EMAIL ==========
+  const handleSendAlertEmail = async (task: GanttTaskWithChildren) => {
+    if (!selectedProject) return;
+    const assignedUser = users.find(u => u.id === task.assigned_to_id);
+    if (!assignedUser?.email) {
+      showError('Brak adresu e-mail przypisanego użytkownika.');
+      return;
+    }
+    try {
+      const deadline = task.end_date ? new Date(task.end_date).toLocaleDateString('pl-PL') : '–';
+      const { error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: assignedUser.email,
+          template: 'GENERIC',
+          data: {
+            title: `⚠️ Zadanie "${task.title}" wymaga uwagi`,
+            message: `Zadanie <strong>${task.title}</strong> w projekcie <strong>${selectedProject.name}</strong> jest opóźnione lub zbliża się termin.<br><br>Termin: ${deadline}<br>Postęp: ${task.progress || 0}%`,
+            actionUrl: `${window.location.origin}/construction/gantt`,
+            actionText: 'Otwórz harmonogram',
+          },
+        }
+      });
+      if (error) throw error;
+      showSuccess(`Powiadomienie wysłane do ${assignedUser.first_name || ''} ${assignedUser.last_name || ''}.`);
+    } catch (err: any) {
+      showError('Błąd wysyłania powiadomienia: ' + (err?.message || err));
+    }
+  };
+
   // ========== DRAG HANDLERS FOR GANTT BARS ==========
   const handleBarMouseDown = (e: React.MouseEvent, task: GanttTaskWithChildren, mode: 'move' | 'resize-start' | 'resize-end') => {
     e.preventDefault();
@@ -2222,6 +2532,14 @@ export const GanttPage: React.FC = () => {
           className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-medium">
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} Planuj
         </button>
+        <button onClick={handleAIOptimizeOrder} disabled={aiOptimizing || allFlatTasks.length === 0} title="Optymalizuj kolejność zadań za pomocą AI"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 text-sm font-medium">
+          {aiOptimizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Optymalizuj kolejność
+        </button>
+        <button onClick={handleFetchFromTasks} disabled={saving} title="Pobierz statusy wykonania z modułu Zadania"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 text-sm font-medium">
+          <RefreshCw className="w-3.5 h-3.5" /> Pobierz z zadań
+        </button>
 
         {/* Group: Undo/Redo */}
         <div className="h-5 w-px bg-slate-200" />
@@ -2247,6 +2565,17 @@ export const GanttPage: React.FC = () => {
           <Filter className="w-4 h-4" />
           {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{activeFilterCount}</span>}
         </button>
+        {/* Alerts */}
+        {(() => {
+          const alertCount = allFlatTasks.filter(t => getDeadlineStatus(t) === 'overdue' || getDeadlineStatus(t) === 'due-soon').length;
+          return (
+            <button onClick={() => setShowAlertsPanel(prev => !prev)} title="Alerty — zadania w ryzyku"
+              className={`p-1.5 rounded-lg relative ${showAlertsPanel ? 'bg-red-100 text-red-600' : 'hover:bg-slate-100 text-slate-500'}`}>
+              <Bell className="w-4 h-4" />
+              {alertCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{alertCount}</span>}
+            </button>
+          );
+        })()}
         {/* Help */}
         <button onClick={() => setShowHelp(prev => !prev)} title="Pomoc i legenda (?)"
           className={`p-1.5 rounded-lg ${showHelp ? 'bg-blue-100 text-blue-600' : 'hover:bg-slate-100 text-slate-500'}`}>
@@ -2314,6 +2643,14 @@ export const GanttPage: React.FC = () => {
               <button onClick={() => { handleExportCSV(); setShowSettingsMenu(false); }}
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                 <Download className="w-4 h-4" /> Eksportuj CSV
+              </button>
+              <button onClick={() => { handleExportPDF(); setShowSettingsMenu(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-red-500" /> Eksportuj PDF
+              </button>
+              <button onClick={() => { handleExportXLSX(); setShowSettingsMenu(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                <FileDown className="w-4 h-4 text-green-600" /> Eksportuj XLSX
               </button>
               <button onClick={() => { handleImportJSON(); setShowSettingsMenu(false); }}
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
@@ -3919,6 +4256,107 @@ export const GanttPage: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* ========== ALERTS PANEL ========== */}
+      {showAlertsPanel && (
+        <div className="fixed top-14 right-4 z-[150] bg-white rounded-xl shadow-2xl border border-slate-200 w-96 max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="p-4 border-b border-slate-200 flex justify-between items-center sticky top-0 bg-white rounded-t-xl">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <Bell className="w-4 h-4 text-red-500" /> Alerty
+            </h3>
+            <button onClick={() => setShowAlertsPanel(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4 text-slate-400" /></button>
+          </div>
+          <div className="p-3 space-y-2">
+            {(() => {
+              const alertTasks = allFlatTasks.filter(t => {
+                const s = getDeadlineStatus(t);
+                return s === 'overdue' || s === 'due-soon';
+              });
+              if (alertTasks.length === 0) {
+                return <div className="text-center py-6 text-sm text-slate-400">Brak alertów 🎉 Wszystkie zadania w terminie.</div>;
+              }
+              return alertTasks.map(task => {
+                const status = getDeadlineStatus(task);
+                const assignedUser = users.find(u => u.id === task.assigned_to_id);
+                const daysLeft = task.end_date ? Math.ceil((new Date(task.end_date).getTime() - new Date().setHours(0,0,0,0)) / 86400000) : null;
+                return (
+                  <div key={task.id} className={`rounded-lg border p-3 ${status === 'overdue' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <div className="flex items-start gap-2">
+                      {status === 'overdue'
+                        ? <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                        : <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-slate-800 truncate">{task.title}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {status === 'overdue'
+                            ? `⛔ Spóźnione o ${Math.abs(daysLeft || 0)} dni`
+                            : `⚠️ Termin za ${daysLeft} dni`}
+                          {task.end_date && ` — ${new Date(task.end_date).toLocaleDateString('pl-PL')}`}
+                        </div>
+                        <div className="text-xs text-slate-400">Postęp: {task.progress || 0}%{assignedUser ? ` · ${assignedUser.first_name || ''} ${assignedUser.last_name || ''}`.trim() : ''}</div>
+                        <div className="flex gap-2 mt-2">
+                          <button onClick={() => { setSelectedTaskId(task.id); setShowAlertsPanel(false); checkAndShowShiftDialog(task); }}
+                            className="px-2 py-1 text-xs bg-white border border-slate-200 rounded hover:bg-slate-50 text-slate-600">
+                            Przesuń zależne
+                          </button>
+                          {assignedUser?.email && (
+                            <button onClick={() => handleSendAlertEmail(task)}
+                              className="px-2 py-1 text-xs bg-white border border-slate-200 rounded hover:bg-slate-50 text-slate-600">
+                              Wyślij e-mail
+                            </button>
+                          )}
+                          <button onClick={() => { openEditPhase(task); setShowAlertsPanel(false); }}
+                            className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">
+                            Edytuj
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ========== AUTO-SHIFT DIALOG ========== */}
+      {showShiftDialog && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] p-4" onClick={() => setShowShiftDialog(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500" /> Zadanie opóźnione
+              </h2>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600 mb-3">
+                Zadanie <strong>"{showShiftDialog.task.title}"</strong> jest opóźnione o{' '}
+                <strong className="text-red-600">{showShiftDialog.overdueDays} dni</strong>.
+              </p>
+              <p className="text-sm text-slate-600 mb-4">
+                Znaleziono <strong>{showShiftDialog.dependents.length}</strong> zależnych zadań:
+              </p>
+              <ul className="space-y-1 mb-4 max-h-40 overflow-y-auto">
+                {showShiftDialog.dependents.map(dep => (
+                  <li key={dep.id} className="text-xs text-slate-500 flex items-center gap-2">
+                    <ArrowRight className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                    {dep.title} {dep.start_date ? `(${new Date(dep.start_date).toLocaleDateString('pl-PL')})` : ''}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-sm text-slate-600">Przesunąć wszystkie zależne zadania o <strong>{showShiftDialog.overdueDays} dni</strong> do przodu?</p>
+            </div>
+            <div className="p-5 border-t border-slate-200 flex justify-end gap-3">
+              <button onClick={() => setShowShiftDialog(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">Nie, zostawiaj</button>
+              <button onClick={handleAutoShiftDependents} disabled={saving}
+                className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm flex items-center gap-2 disabled:opacity-50">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />} Tak, przesuń
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========== HELP / LEGEND OVERLAY ========== */}
       {showHelp && (
