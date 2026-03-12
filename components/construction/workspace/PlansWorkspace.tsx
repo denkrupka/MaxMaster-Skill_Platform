@@ -763,6 +763,8 @@ export const PlansWorkspace: React.FC = () => {
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedProject || !currentUser) return;
+    setIsUploading(true);
+    setUploadFileName(file.name);
 
     try {
       const safeName = sanitizeFileName(file.name);
@@ -804,13 +806,15 @@ export const PlansWorkspace: React.FC = () => {
       });
       if (insertErr) throw insertErr;
 
-      notify('Plik zostal przeslany');
+      notify('Plik został przesłany!');
       loadPlansData();
     } catch (err: any) {
-      notify(err.message || 'Blad przesylania pliku', 'error');
+      notify(err.message || 'Błąd przesyłania pliku', 'error');
+    } finally {
+      setIsUploading(false);
+      setUploadFileName('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-
-    if (fileInputRef.current) fileInputRef.current.value = '';
   }, [selectedProject, currentUser, allPlans.length, notify]);
 
   // ---- Convert ----
@@ -3554,16 +3558,31 @@ export const PlansWorkspace: React.FC = () => {
                         </span>
                         {authorInfo && <span className="text-[10px] text-slate-500 font-medium">· {authorInfo}</span>}
                         {v.file_size && (
-                          <span className="text-[10px] text-slate-400">{(v.file_size / 1024 / 1024).toFixed(1)} MB</span>
+                          <span className="text-[10px] text-slate-400">{v.file_size > 1048576 ? `${(v.file_size / 1048576).toFixed(1)} MB` : `${Math.round(v.file_size / 1024)} KB`}</span>
+                        )}
+                        {(v as any).original_filename && (
+                          <span className="text-[10px] text-slate-300 truncate max-w-[100px]" title={(v as any).original_filename}>{(v as any).original_filename}</span>
                         )}
                       </div>
                     </div>
-                    {v.id !== selectedPlan?.id && (
-                      <button
-                        onClick={() => handleSwitchVersion(v)}
-                        className="text-[10px] px-2.5 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 rounded-lg transition font-medium"
-                      >Otworz</button>
-                    )}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {v.file_url && (
+                        <a
+                          href={v.file_url}
+                          download={v.original_filename || v.name}
+                          title="Pobierz tę wersję"
+                          className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition"
+                        >
+                          <Download className="w-3 h-3" />
+                        </a>
+                      )}
+                      {v.id !== selectedPlan?.id && (
+                        <button
+                          onClick={() => handleSwitchVersion(v)}
+                          className="text-[10px] px-2.5 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 rounded-lg transition font-medium"
+                        >Otwórz</button>
+                      )}
+                    </div>
                   </div>
                   );
                 })
