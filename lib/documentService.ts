@@ -430,41 +430,14 @@ export async function removeContractorCategory(
  * and falls back to reading the current counter from
  * document_numbering (SELECT only — no increment on the client).
  */
-export async function generateDocumentNumber(
-  companyId: string,
-  templateType: string,
-): Promise<string> {
-  // Try Edge Function first
-  try {
-    const { data, error } = await supabase.functions.invoke(
-      'generate-document-number',
-      {
-        body: { company_id: companyId, template_type: templateType },
-      },
-    );
-
-    if (!error && data?.number) {
-      return data.number as string;
-    }
-  } catch {
-    // Edge Function not deployed — fall through to fallback
+export async function generateDocumentNumber(companyId: string, templateType: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('generate-document-number', {
+    body: { template_type: templateType }
+  });
+  if (error || !data?.number) {
+    // Fallback: DRAFT номер
+    const ts = Date.now().toString(36).toUpperCase();
+    return `DRAFT-${ts}`;
   }
-
-  // Fallback: read current counter (SELECT only, no increment)
-  const year = new Date().getFullYear();
-  const prefix = templateType.toUpperCase().slice(0, 3);
-
-  const { data: numbering } = await supabase
-    .from('document_numbering')
-    .select('last_number')
-    .eq('company_id', companyId)
-    .eq('prefix', prefix)
-    .eq('year', year)
-    .maybeSingle();
-
-  if (numbering?.last_number) {
-    return `DRAFT-${prefix}-${year}-${String(numbering.last_number + 1).padStart(4, '0')}`;
-  }
-
-  return `DRAFT-${prefix}-${year}-0001`;
+  return data.number;
 }
