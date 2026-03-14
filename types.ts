@@ -2696,89 +2696,126 @@ export interface PlanComponent {
 }
 
 // =====================================================
-// МОДУЛЬ: DMS (ДОКУМЕНТЫ)
+// МОДУЛЬ: DOCUMENTS (ШАБЛОНЫ / ДОГОВОРЫ)
 // =====================================================
 
-export type DMSDocumentStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'archived';
+export type DocumentTemplateType = 'contract' | 'protocol' | 'annex' | 'other';
+export type DocumentStatus = 'draft' | 'completed' | 'archived';
+export type ContractorCategoryType = 'client' | 'supplier' | 'employee' | 'partner';
 
-export interface DMSFolder {
-  id: string;
-  project_id?: string;
-  company_id: string;
-  parent_id?: string;
-  name: string;
-  description?: string;
-  color: string;
-  icon?: string;
-  is_system: boolean;
-  permissions: Record<string, any>;
-  sort_order: number;
-  created_by_id: string;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  children?: DMSFolder[];
-  documents?: DMSDocument[];
+export interface TemplateVariable {
+  /** Placeholder key, e.g. "contractor_name" */
+  key: string;
+  /** Human-readable label */
+  label: string;
+  /** Data source: contractors | projects | companies | employees | manual */
+  source: 'contractors' | 'projects' | 'companies' | 'employees' | 'manual';
+  /** Input type hint: text | date | number | select */
+  type: 'text' | 'date' | 'number' | 'select';
+  /** Optional list of allowed values (for type=select) */
+  options?: string[];
+  /** Default value */
+  defaultValue?: string;
 }
 
-export type DMSFile = DMSDocument;
+export interface TemplateSection {
+  title?: string;
+  body: string;
+}
 
-export interface DMSDocument {
+export interface DocumentTemplate {
   id: string;
-  folder_id: string;
-  project_id?: string;
   company_id: string;
   name: string;
+  type: DocumentTemplateType;
   description?: string;
-  file_name: string;
-  file_url?: string;
-  mime_type?: string;
-  size?: number;
-  thumbnail_url?: string;
-  storage_path: string;
-  file_type: string;
-  file_size: number;
-  preview_path?: string;
-  status: DMSDocumentStatus;
-  version: number;
-  tags: string[];
-  metadata: Record<string, any>;
-  is_template: boolean;
-  template_id?: string;
-  uploaded_by_id: string;
-  created_by_id?: string;
+  /** Ordered sections that make up the template body */
+  content: TemplateSection[];
+  /** Variables / placeholders used in the template */
+  variables: TemplateVariable[];
+  is_active: boolean;
   created_at: string;
   updated_at: string;
-  deleted_at?: string;
-  uploaded_by?: User;
-  versions?: DMSDocumentVersion[];
-  permissions?: DMSDocumentPermission[];
+  created_by: string;
 }
 
-export interface DMSDocumentVersion {
+/**
+ * Named `DocumentRecord` to avoid collision with the global `Document` type.
+ */
+export interface DocumentRecord {
   id: string;
-  document_id: string;
-  version: number;
-  file_name: string;
-  storage_path: string;
-  file_size: number;
-  change_notes?: string;
-  created_by_id: string;
+  company_id: string;
+  template_id: string;
+  project_id?: string;
+  contractor_id?: string;
+  number?: string;
+  name: string;
+  status: DocumentStatus;
+  /** Filled-in variable values (key → value) */
+  data: Record<string, string>;
+  pdf_path?: string;
+  notes?: string;
   created_at: string;
-  created_by?: User;
+  updated_at: string;
+  created_by: string;
+  /** Joined template info (populated by select) */
+  document_templates?: Pick<DocumentTemplate, 'name' | 'type' | 'content' | 'variables'>;
 }
 
-export interface DMSDocumentPermission {
+export interface ContractorCategory {
   id: string;
-  document_id: string;
-  user_id?: string;
-  role_id?: string;
-  can_view: boolean;
-  can_edit: boolean;
-  can_delete: boolean;
-  can_share: boolean;
+  company_id: string;
+  contractor_id: string;
+  category: ContractorCategoryType;
   created_at: string;
 }
+
+export interface DocumentFilters {
+  status?: DocumentStatus;
+  templateType?: DocumentTemplateType;
+  projectId?: string;
+  contractorId?: string;
+}
+
+export interface AutofillData {
+  contractor?: Record<string, any>;
+  project?: Record<string, any>;
+  company?: Record<string, any>;
+}
+
+// Input types for create / update operations
+
+export interface CreateTemplateInput {
+  company_id: string;
+  name: string;
+  type: DocumentTemplateType;
+  description?: string;
+  content: TemplateSection[];
+  variables: TemplateVariable[];
+  is_active?: boolean;
+  created_by: string;
+}
+
+export type UpdateTemplateInput = Partial<
+  Omit<CreateTemplateInput, 'company_id' | 'created_by'>
+>;
+
+export interface CreateDocumentInput {
+  company_id: string;
+  template_id: string;
+  project_id?: string;
+  contractor_id?: string;
+  number?: string;
+  name: string;
+  status?: DocumentStatus;
+  data: Record<string, string>;
+  notes?: string;
+  created_by: string;
+}
+
+export type UpdateDocumentInput = Partial<
+  Omit<CreateDocumentInput, 'company_id' | 'created_by'>
+>;
 
 // =====================================================
 // МОДУЛЬ: ФИНАНСЫ (FINANSE)
@@ -3558,9 +3595,6 @@ export type StockOperationType = 'receipt' | 'issue' | 'transfer' | 'inventory';
 
 export type ApprovalRequestStatus = 'pending' | 'in_progress' | 'approved' | 'rejected' | 'cancelled';
 export type ApprovalActionType = 'approved' | 'rejected' | 'returned' | 'delegated';
-
-export type DMSPermission = 'view' | 'download' | 'edit' | 'delete' | 'manage';
-export type DMSActivityAction = 'created' | 'viewed' | 'downloaded' | 'updated' | 'renamed' | 'moved' | 'deleted' | 'restored' | 'permission_changed' | 'version_created';
 
 export type MarkupType = 'line' | 'arrow' | 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'polyline' | 'freehand' | 'text' | 'measurement';
 
