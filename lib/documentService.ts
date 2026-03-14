@@ -756,3 +756,134 @@ export async function getSignatureRequests(documentId: string): Promise<any[]> {
     .order('created_at', { ascending: false });
   return data || [];
 }
+
+// ===== ЭТАП 3: Track Changes + Комментарии =====
+
+// Получить diff между двумя версиями документа
+export function getVersionDiff(
+  oldData: Record<string, any>, newData: Record<string, any>
+): Array<{ key: string; old: any; new: any; type: 'added' | 'removed' | 'changed' }> {
+  const changes: Array<{ key: string; old: any; new: any; type: 'added' | 'removed' | 'changed' }> = [];
+  const allKeys = new Set([...Object.keys(oldData || {}), ...Object.keys(newData || {})]);
+  for (const key of allKeys) {
+    const oldVal = oldData?.[key];
+    const newVal = newData?.[key];
+    if (oldVal === undefined && newVal !== undefined) {
+      changes.push({ key, old: null, new: newVal, type: 'added' });
+    } else if (oldVal !== undefined && newVal === undefined) {
+      changes.push({ key, old: oldVal, new: null, type: 'removed' });
+    } else if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+      changes.push({ key, old: oldVal, new: newVal, type: 'changed' });
+    }
+  }
+  return changes;
+}
+
+// Комментарии к документу
+export async function getDocumentComments(documentId: string): Promise<any[]> {
+  const { data } = await supabase
+    .from('document_comments')
+    .select('*')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+export async function addDocumentComment(
+  documentId: string, companyId: string, authorId: string, authorName: string,
+  content: string, fieldKey?: string, parentId?: string
+): Promise<any> {
+  const { data, error } = await supabase
+    .from('document_comments')
+    .insert({
+      company_id: companyId,
+      document_id: documentId,
+      author_id: authorId,
+      author_name: authorName,
+      content,
+      field_key: fieldKey || null,
+      parent_id: parentId || null
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function resolveComment(commentId: string, userId: string): Promise<void> {
+  await supabase
+    .from('document_comments')
+    .update({ resolved: true, resolved_by: userId, resolved_at: new Date().toISOString() })
+    .eq('id', commentId);
+}
+
+// ===== ЭТАП 4: AI Анализ =====
+
+// Анализ документа через Gemini (Edge Function)
+export async function analyzeDocument(
+  documentId: string, companyId: string, analysisType: string,
+  documentContent: Record<string, any>, templateName: string
+): Promise<{ result: any; id: string }> {
+  const { data, error } = await supabase.functions.invoke('analyze-document', {
+    body: {
+      document_id: documentId,
+      company_id: companyId,
+      analysis_type: analysisType,
+      document_content: documentContent,
+      template_name: templateName
+    }
+  });
+  if (error) throw error;
+  return data;
+}
+
+// Получить историю AI анализов
+export async function getDocumentAnalyses(documentId: string): Promise<any[]> {
+  const { data } = await supabase
+    .from('document_ai_analyses')
+    .select('*')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: false });
+  return data || [];
+}
+
+// Автогенерация документа на основе контекста
+export async function generateDocumentContent(
+  templateId: string, context: Record<string, any>
+): Promise<Record<string, any>> {
+  const { data, error } = await supabase.functions.invoke('generate-document-content', {
+    body: { template_id: templateId, context }
+  });
+  if (error) throw error;
+  return data;
+}
+
+// Получить автоматизации компании
+export async function getDocumentAutomations(companyId: string): Promise<any[]> {
+  const { data } = await supabase
+    .from('document_automations')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+  return data || [];
+}
+
+export async function saveDocumentAutomation(
+  companyId: string, userId: string,
+  automation: { name: string; trigger_type: string; trigger_config: any; action_type: string; action_config: any }
+): Promise<any> {
+  const { data, error } = await supabase
+    .from('document_automations')
+    .insert({ ...automation, company_id: companyId, created_by: userId })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function toggleAutomation(automationId: string, isActive: boolean): Promise<void> {
+  await supabase
+    .from('document_automations')
+    .update({ is_active: isActive })
+    .eq('id', automationId);
+}

@@ -13,6 +13,7 @@ import {
   getDocumentVersions, restoreDocumentVersion, getDocumentAuditLog, logDocumentEvent,
   createPublicLink, getPublicLinks, deactivatePublicLink,
   createSignatureRequest, getSignatureRequests,
+  getVersionDiff, getDocumentComments, addDocumentComment, resolveComment, analyzeDocument, getDocumentAnalyses,
 } from '../../lib/documentService';
 import type {
   DocumentTemplate, DocumentRecord, TemplateVariable,
@@ -767,12 +768,17 @@ const SettingsTab = ({ companyId }: { companyId: string }) => {
 function DocumentDetailsPanel({ doc, companyId, userId, onClose }: {
   doc: DocumentRecord; companyId: string; userId: string; onClose: () => void;
 }) {
-  const [detailTab, setDetailTab] = useState<'versions'|'signatures'|'audit'|'links'>('versions');
+  const [detailTab, setDetailTab] = useState<'versions'|'signatures'|'comments'|'ai'|'audit'|'links'>('versions');
   const [versions, setVersions] = useState<any[]>([]);
   const [signatures, setSignatures] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [publicLinks, setPublicLinks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [analyses, setAnalyses] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<string | null>(null);
 
   useEffect(() => { loadData(); }, [detailTab, doc.id]);
 
@@ -783,12 +789,16 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose }: {
       else if (detailTab === 'signatures') setSignatures(await getSignatureRequests(doc.id));
       else if (detailTab === 'audit') setAuditLog(await getDocumentAuditLog(doc.id));
       else if (detailTab === 'links') setPublicLinks(await getPublicLinks(doc.id));
+      else if (detailTab === 'comments') setComments(await getDocumentComments(doc.id));
+      else if (detailTab === 'ai') setAnalyses(await getDocumentAnalyses(doc.id));
     } finally { setLoading(false); }
   }
 
   const tabs = [
     { key: 'versions' as const, label: 'Wersje', icon: '📋' },
     { key: 'signatures' as const, label: 'Podpisy', icon: '✍️' },
+    { key: 'comments' as const, label: 'Komentarze', icon: '💬' },
+    { key: 'ai' as const, label: 'AI', icon: '🤖' },
     { key: 'audit' as const, label: 'Historia', icon: '📜' },
     { key: 'links' as const, label: 'Linki', icon: '🔗' },
   ];
@@ -905,6 +915,88 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose }: {
                   <span className="text-slate-800 font-medium">{a.action.replace(/_/g, ' ')}</span>
                 </div>
               ))}
+            </div>
+          ) : detailTab === 'comments' ? (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input type="text" value={newComment} onChange={e => setNewComment(e.target.value)}
+                  placeholder="Napisz komentarz..." className="flex-1 px-3 py-2 text-sm border rounded-lg"
+                  onKeyDown={e => { if (e.key === 'Enter' && newComment.trim()) {
+                    addDocumentComment(doc.id, companyId, userId, 'Admin', newComment.trim())
+                      .then(() => { setNewComment(''); loadData(); });
+                  }}} />
+                <button onClick={async () => {
+                  if (!newComment.trim()) return;
+                  await addDocumentComment(doc.id, companyId, userId, 'Admin', newComment.trim());
+                  setNewComment(''); loadData();
+                }} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">Wyślij</button>
+              </div>
+              {comments.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">Brak komentarzy</p>
+              ) : comments.map(c => (
+                <div key={c.id} className={`p-3 rounded-lg ${c.resolved ? 'bg-green-50 opacity-60' : 'bg-slate-50'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium">{c.author_name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleString('pl-PL')}</span>
+                      {!c.resolved && (
+                        <button onClick={() => resolveComment(c.id, userId).then(() => loadData())}
+                          className="text-xs text-green-600 hover:underline">✓ Rozwiąż</button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-600">{c.content}</p>
+                  {c.resolved && <p className="text-xs text-green-600 mt-1">✓ Rozwiązano</p>}
+                </div>
+              ))}
+            </div>
+          ) : detailTab === 'ai' ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { type: 'review', label: 'Przegląd dokumentu', icon: '🔍' },
+                  { type: 'risk', label: 'Analiza ryzyk', icon: '⚠️' },
+                  { type: 'summary', label: 'Podsumowanie', icon: '📝' },
+                  { type: 'clause_check', label: 'Sprawdzenie klauzul', icon: '⚖️' },
+                ].map(a => (
+                  <button key={a.type} onClick={async () => {
+                    setAiLoading(true); setAiResult(null);
+                    try {
+                      const res = await analyzeDocument(doc.id, companyId, a.type, doc.data || {}, doc.name);
+                      setAiResult(res.result?.text || 'Brak wyniku');
+                      loadData();
+                    } catch (err: any) { setAiResult('Błąd: ' + err.message); }
+                    finally { setAiLoading(false); }
+                  }} disabled={aiLoading}
+                    className="p-3 text-left bg-slate-50 hover:bg-blue-50 rounded-lg border hover:border-blue-200 transition-colors disabled:opacity-50">
+                    <span className="text-lg">{a.icon}</span>
+                    <p className="text-sm font-medium mt-1">{a.label}</p>
+                  </button>
+                ))}
+              </div>
+              {aiLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="animate-spin h-6 w-6 text-blue-500 mr-2" />
+                  <span className="text-sm text-slate-500">Analizuję dokument...</span>
+                </div>
+              )}
+              {aiResult && (
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm font-medium text-blue-700 mb-2">Wynik analizy AI</p>
+                  <div className="text-sm text-slate-700 whitespace-pre-wrap">{aiResult}</div>
+                </div>
+              )}
+              {analyses.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-slate-500 mb-2">Historia analiz</p>
+                  {analyses.map(a => (
+                    <div key={a.id} className="p-2 border-b text-xs flex justify-between">
+                      <span>{a.analysis_type} — {new Date(a.created_at).toLocaleString('pl-PL')}</span>
+                      <button onClick={() => setAiResult(a.result?.text)} className="text-blue-600 hover:underline">Pokaż</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
