@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  FileText, Plus, Search, Eye, Download, Pencil, Trash2,
+  FileText, Plus, Search, Eye, Download, Pencil, Trash2, Archive,
   ChevronLeft, ChevronRight, Check, X, Loader2,
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -8,12 +8,14 @@ import { supabase } from '../../lib/supabase';
 import {
   fetchTemplates, fetchTemplate, createTemplate, updateTemplate, deleteTemplate,
   fetchDocuments, fetchDocument, createDocument, updateDocument,
-  getAutofillData, applyAutofill, renderTemplate,
+  getAutofillData, applyAutofill, renderTemplate, generatePDF,
+  fetchDocumentSettings, updateDocumentSettings,
 } from '../../lib/documentService';
 import type {
   DocumentTemplate, DocumentRecord, TemplateVariable,
   DocumentTemplateType, DocumentStatus, TemplateSection,
   CreateTemplateInput, CreateDocumentInput,
+  DocumentSettings, NumberingConfig,
 } from '../../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -52,10 +54,11 @@ const Spinner = () => (
   </div>
 );
 
-const Empty = ({ label }: { label: string }) => (
+const Empty = ({ label, action }: { label: string; action?: { text: string; onClick: () => void } }) => (
   <div className="flex flex-col items-center gap-3 py-16 text-slate-400">
     <FileText className="w-12 h-12" />
     <p className="text-sm">{label}</p>
+    {action && <button onClick={action.onClick} className="flex items-center gap-1 text-sm text-blue-600 hover:underline"><Plus className="w-4 h-4" /> {action.text}</button>}
   </div>
 );
 
@@ -80,6 +83,12 @@ const TemplateModal = ({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, []);
+
   const updateSection = (i: number, field: keyof TemplateSection, val: string) =>
     setSections(s => s.map((sec, idx) => idx === i ? { ...sec, [field]: val } : sec));
   const moveSection = (i: number, dir: -1 | 1) => {
@@ -102,18 +111,18 @@ const TemplateModal = ({
         await createTemplate(inp);
       }
       onSaved();
-    } catch (e: any) { setErr(e.message ?? 'Błąd zapisu'); }
+    } catch (e: any) { setErr(e.message ?? 'Wystąpił błąd podczas zapisu. Spróbuj ponownie.'); }
     finally { setSaving(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-8">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-semibold text-slate-800">
             {existing ? 'Edytuj szablon' : 'Nowy szablon'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Zamknij" title="Zamknij"><X className="w-5 h-5" /></button>
         </div>
         <div className="px-6 py-4 space-y-4">
           {/* Meta */}
@@ -163,7 +172,7 @@ const TemplateModal = ({
                       <ChevronRight className="w-4 h-4" />
                     </button>
                     <button onClick={() => setSections(s => s.filter((_, idx) => idx !== i))}
-                      className="text-red-400 hover:text-red-600">
+                      className="text-red-400 hover:text-red-600" aria-label="Usuń" title="Usuń">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -249,22 +258,44 @@ const DocumentWizard = ({
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState('');
   const [saving, setSaving] = useState(false);
+  const [stepLoading, setStepLoading] = useState(false);
   const [err, setErr] = useState('');
 
   const tpl = templates.find(t => t.id === templateId);
 
-  const handleStep2Next = async () => {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, []);
+
+  // Step 1 → 2 or 3 (auto-skip if all vars are autofill)
+  const handleStep1Next = async () => {
     if (!tpl) return;
-    const autofill = await getAutofillData(companyId, contractorId || undefined, projectId || undefined);
-    const filled = applyAutofill(tpl.variables, autofill);
-    setFormData(filled);
-    setStep(3);
+    setStepLoading(true);
+    try {
+      const autofill = await getAutofillData(companyId, contractorId || undefined, projectId || undefined);
+      const filled = applyAutofill(tpl.variables, autofill);
+      setFormData(filled);
+      // Auto-skip variables step if all variables are autofilled
+      if (tpl.variables.length > 0 && tpl.variables.every(v => v.source !== 'manual')) {
+        setPreview(renderTemplate(tpl, filled));
+        setStep(3);
+      } else {
+        setStep(2);
+      }
+    } finally {
+      setStepLoading(false);
+    }
   };
 
-  const handleStep3Next = () => {
+  // Step 2 → 3
+  const handleStep2Next = () => {
     if (!tpl) return;
+    setStepLoading(true);
     setPreview(renderTemplate(tpl, formData));
-    setStep(4);
+    setStep(3);
+    setStepLoading(false);
   };
 
   const save = async (status: 'draft' | 'completed') => {
@@ -280,38 +311,47 @@ const DocumentWizard = ({
       };
       await createDocument(inp);
       onSaved();
-    } catch (e: any) { setErr(e.message ?? 'Błąd zapisu'); }
+    } catch (e: any) { setErr(e.message ?? 'Wystąpił błąd podczas zapisu. Spróbuj ponownie.'); }
     finally { setSaving(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-xl my-8">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
+          <div className="flex-1">
             <h2 className="text-lg font-semibold text-slate-800">Nowy dokument</h2>
-            <p className="text-xs text-slate-400">Krok {step} z 4</p>
+            <p className="text-xs text-slate-400">Krok {step} z 3</p>
+            {/* Progress bar */}
+            <div className="flex gap-1.5 mt-2">
+              {[1, 2, 3].map(n => (
+                <div key={n} className={`h-1.5 flex-1 rounded-full transition-colors ${n < step ? 'bg-blue-600' : n === step ? 'bg-blue-400' : 'bg-slate-200'}`} />
+              ))}
+            </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 ml-4" aria-label="Zamknij" title="Zamknij"><X className="w-5 h-5" /></button>
         </div>
         {/* Steps */}
         <div className="px-6 py-4 min-h-[200px]">
+          {/* Step 1: select template + contractor + project */}
           {step === 1 && (
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-slate-700">Wybierz szablon</p>
-              <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                value={templateId} onChange={e => setTemplateId(e.target.value)}>
-                <option value="">-- wybierz szablon --</option>
-                {templates.filter(t => t.is_active).map(t => (
-                  <option key={t.id} value={t.id}>{t.name} ({TYPE_LABELS[t.type]})</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {step === 2 && (
             <div className="space-y-4">
-              <p className="text-sm font-medium text-slate-700">Kontrahent i projekt</p>
+              {templates.filter(t => t.is_active).length === 0 && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  Brak aktywnych szablonów. Najpierw utwórz szablon w zakładce <strong>Szablony</strong>.
+                </p>
+              )}
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">Wybierz szablon</p>
+                <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                  value={templateId} onChange={e => setTemplateId(e.target.value)}>
+                  <option value="">-- wybierz szablon --</option>
+                  {templates.filter(t => t.is_active).map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({TYPE_LABELS[t.type]})</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Kontrahent</label>
                 <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
@@ -319,6 +359,17 @@ const DocumentWizard = ({
                   <option value="">-- brak --</option>
                   {contractors.map(c => <option key={c.id} value={c.id}>{c.name ?? c.company_name ?? c.id}</option>)}
                 </select>
+                {contractorId && (() => {
+                  const c = contractors.find(x => x.id === contractorId);
+                  return c ? (
+                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-slate-600 space-y-0.5">
+                      <p className="font-medium text-blue-700">Dane kontrahenta</p>
+                      {c.company_name && <p>Firma: {c.company_name}</p>}
+                      {c.nip && <p>NIP: {c.nip}</p>}
+                      {c.address && <p>Adres: {c.address}</p>}
+                    </div>
+                  ) : null;
+                })()}
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Projekt</label>
@@ -330,7 +381,8 @@ const DocumentWizard = ({
               </div>
             </div>
           )}
-          {step === 3 && tpl && (
+          {/* Step 2: fill variables */}
+          {step === 2 && tpl && (
             <div className="space-y-3">
               <p className="text-sm font-medium text-slate-700">Uzupełnij zmienne</p>
               {tpl.variables.length === 0 && <p className="text-sm text-slate-400">Brak zmiennych w szablonie.</p>}
@@ -349,10 +401,20 @@ const DocumentWizard = ({
               ))}
             </div>
           )}
-          {step === 4 && (
+          {/* Step 3: preview */}
+          {step === 3 && (
             <div>
+              {tpl && (
+                <div className="mb-3 text-sm text-slate-500 space-y-0.5">
+                  <p><span className="font-medium text-slate-700">Szablon:</span> {tpl.name}</p>
+                  {contractorId && (() => {
+                    const c = contractors.find(x => x.id === contractorId);
+                    return c ? <p><span className="font-medium text-slate-700">Kontrahent:</span> {c.name ?? c.company_name}</p> : null;
+                  })()}
+                </div>
+              )}
               <p className="text-sm font-medium text-slate-700 mb-3">Podgląd dokumentu</p>
-              <div className="border border-slate-200 rounded-lg p-4 text-sm text-slate-700 max-h-64 overflow-y-auto prose prose-sm"
+              <div className="border border-slate-200 rounded-lg p-4 text-sm text-slate-700 max-h-[480px] overflow-y-auto prose prose-sm"
                 dangerouslySetInnerHTML={{ __html: preview }} />
             </div>
           )}
@@ -365,7 +427,7 @@ const DocumentWizard = ({
             <ChevronLeft className="w-4 h-4" /> Wstecz
           </button>
           <div className="flex gap-2">
-            {step === 4 && (
+            {step === 3 && (
               <>
                 <button onClick={() => save('draft')} disabled={saving}
                   className="px-3 py-2 text-sm border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-60">
@@ -377,16 +439,17 @@ const DocumentWizard = ({
                 </button>
               </>
             )}
-            {step < 4 && (
+            {step < 3 && (
               <button
                 onClick={() => {
                   if (step === 1 && !templateId) { setErr('Wybierz szablon'); return; }
                   setErr('');
+                  if (step === 1) { handleStep1Next(); return; }
                   if (step === 2) { handleStep2Next(); return; }
-                  if (step === 3) { handleStep3Next(); return; }
-                  setStep(s => s + 1);
                 }}
-                className="flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                disabled={stepLoading}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60">
+                {stepLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Dalej <ChevronRight className="w-4 h-4" />
               </button>
             )}
@@ -410,6 +473,12 @@ const DocumentView = ({ docId, onClose, onRefresh }: { docId: string; onClose: (
       .catch(() => { setViewError('Nie udało się załadować dokumentu'); setLoading(false); });
   }, [docId]);
 
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, []);
+
   const archive = async () => {
     if (!doc) return;
     try {
@@ -420,19 +489,33 @@ const DocumentView = ({ docId, onClose, onRefresh }: { docId: string; onClose: (
     }
   };
 
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPDF = async (id: string) => {
+    try {
+      setPdfLoading(true);
+      const url = await generatePDF(id);
+      window.open(url, '_blank');
+    } catch {
+      setViewError('Nie udało się wygenerować PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const renderedHtml = doc?.document_templates
     ? renderTemplate(doc.document_templates as DocumentTemplate, doc.data)
     : '';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-8">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <h2 className="text-lg font-semibold text-slate-800">{doc?.name ?? '...'}</h2>
             {doc && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[doc.status]}`}>{STATUS_LABELS[doc.status]}</span>}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Zamknij" title="Zamknij"><X className="w-5 h-5" /></button>
         </div>
         <div className="px-6 py-4">
           {viewError && (
@@ -447,17 +530,200 @@ const DocumentView = ({ docId, onClose, onRefresh }: { docId: string; onClose: (
           )}
         </div>
         <div className="flex justify-between px-6 py-4 border-t">
-          <button onClick={() => alert('PDF generation coming soon')}
-            className="flex items-center gap-2 px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50">
-            <Download className="w-4 h-4" /> Pobierz PDF
+          <button
+            onClick={() => doc && handleDownloadPDF(doc.id)}
+            disabled={pdfLoading || !doc}
+            aria-label="Pobierz PDF" title="Pobierz PDF"
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">
+            {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Pobierz PDF
           </button>
           {doc?.status !== 'archived' && (
             <button onClick={archive}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50">
-              <Trash2 className="w-4 h-4" /> Archiwizuj
+              className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
+              <Archive className="w-4 h-4" /> Archiwizuj
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Settings Tab ─────────────────────────────────────────────────────────────
+
+const DOC_TYPE_LABELS: Record<DocumentTemplateType, string> = {
+  contract: 'Umowa',
+  protocol: 'Protokół',
+  annex: 'Aneks',
+  other: 'Inne',
+};
+
+const DEFAULT_NUMBERING: Record<DocumentTemplateType, NumberingConfig> = {
+  contract:  { prefix: 'CON', separator: '/', digits: 3, reset: 'yearly' },
+  protocol:  { prefix: 'PRO', separator: '/', digits: 3, reset: 'yearly' },
+  annex:     { prefix: 'ANX', separator: '/', digits: 3, reset: 'yearly' },
+  other:     { prefix: 'DOC', separator: '/', digits: 3, reset: 'yearly' },
+};
+
+const buildPreview = (cfg: NumberingConfig): string => {
+  const year  = new Date().getFullYear();
+  const month = String(new Date().getMonth() + 1).padStart(2, '0');
+  const num   = String(1).padStart(cfg.digits, '0');
+  const sep   = cfg.separator;
+  if (cfg.reset === 'monthly') return `${cfg.prefix}${sep}${year}${sep}${month}${sep}${num}`;
+  if (cfg.reset === 'never')   return `${cfg.prefix}${sep}${num}`;
+  return `${cfg.prefix}${sep}${year}${sep}${num}`;
+};
+
+const SettingsTab = ({ companyId }: { companyId: string }) => {
+  const [numbering, setNumbering] = useState<Record<DocumentTemplateType, NumberingConfig>>(DEFAULT_NUMBERING);
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState(false);
+  const [success,   setSuccess]   = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!companyId) return;
+    fetchDocumentSettings(companyId)
+      .then(data => {
+        if (data?.numbering_config) setNumbering({ ...DEFAULT_NUMBERING, ...data.numbering_config });
+      })
+      .catch(() => { /* use defaults silently */ })
+      .finally(() => setLoading(false));
+  }, [companyId]);
+
+  const updateField = (
+    type: DocumentTemplateType,
+    field: keyof NumberingConfig,
+    value: string | number,
+  ) => {
+    setNumbering(prev => ({
+      ...prev,
+      [type]: { ...prev[type], [field]: value },
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true); setSettingsError(null);
+    try {
+      await updateDocumentSettings(companyId, numbering as unknown as NumberingConfig);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e: any) {
+      setSettingsError(e.message ?? 'Wystąpił błąd podczas zapisu ustawień. Spróbuj ponownie.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-800">Numeracja dokumentów</h2>
+        <p className="text-sm text-slate-500 mt-0.5">Skonfiguruj format numerów dla każdego typu dokumentu.</p>
+      </div>
+
+      {success && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+          <Check className="w-4 h-4 flex-shrink-0" />
+          Ustawienia zapisane
+        </div>
+      )}
+      {settingsError && (
+        <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          <span>{settingsError}</span>
+          <button onClick={() => setSettingsError(null)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {(Object.keys(DOC_TYPE_LABELS) as DocumentTemplateType[]).map(type => {
+          const cfg = numbering[type];
+          return (
+            <div key={type} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white">
+              {/* Row header */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-700">{DOC_TYPE_LABELS[type]}</span>
+                <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-mono">
+                  {buildPreview(cfg)}
+                </span>
+              </div>
+
+              {/* Fields — grid on desktop, stack on mobile */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Prefiks */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Prefiks</label>
+                  <input
+                    type="text"
+                    minLength={2} maxLength={5}
+                    value={cfg.prefix}
+                    onChange={e => updateField(type, 'prefix', e.target.value.toUpperCase())}
+                    placeholder="np. CON"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+
+                {/* Separator */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Separator</label>
+                  <select
+                    value={cfg.separator}
+                    onChange={e => updateField(type, 'separator', e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="/">/</option>
+                    <option value="-">-</option>
+                  </select>
+                </div>
+
+                {/* Ilość cyfr */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Ilość cyfr</label>
+                  <input
+                    type="number"
+                    min={1} max={5}
+                    value={cfg.digits}
+                    onChange={e => updateField(type, 'digits', Math.min(5, Math.max(1, Number(e.target.value))))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+
+                {/* Reset */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Reset</label>
+                  <select
+                    value={cfg.reset}
+                    onChange={e => updateField(type, 'reset', e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="yearly">co roku</option>
+                    <option value="monthly">co miesiąc</option>
+                    <option value="never">nigdy</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Preview */}
+              <p className="text-xs text-slate-400">
+                Podgląd: <span className="font-mono text-slate-600">{buildPreview(cfg)}</span>
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="pt-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-5 py-2.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Zapisz ustawienia
+        </button>
       </div>
     </div>
   );
@@ -470,7 +736,7 @@ export const DMSPage: React.FC = () => {
   const companyId = state.currentUser?.company_id ?? '';
   const userId = state.currentUser?.id ?? '';
 
-  const [tab, setTab] = useState<'templates' | 'documents'>('templates');
+  const [tab, setTab] = useState<'templates' | 'documents' | 'settings'>('documents');
   const [error, setError] = useState<string | null>(null);
 
   // Templates state
@@ -565,8 +831,8 @@ export const DMSPage: React.FC = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-lg w-fit">
-        {([['templates', 'Szablony'], ['documents', 'Dokumenty']] as const).map(([key, label]) => (
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-lg w-full sm:w-fit overflow-x-auto">
+        {([['documents', 'Dokumenty'], ['templates', 'Szablony'], ['settings', 'Ustawienia']] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === key ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'
@@ -596,7 +862,7 @@ export const DMSPage: React.FC = () => {
             </button>
           </div>
 
-          {tplLoading ? <Spinner /> : filteredTemplates.length === 0 ? <Empty label="Brak szablonów" /> : (
+          {tplLoading ? <Spinner /> : filteredTemplates.length === 0 ? <Empty label="Brak szablonów" action={{ text: 'Utwórz pierwszy szablon', onClick: () => setShowTplModal(true) }} /> : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
@@ -624,10 +890,12 @@ export const DMSPage: React.FC = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-end">
                           <button onClick={() => { setEditingTpl(t); setShowTplModal(true); }}
+                            aria-label="Edytuj szablon" title="Edytuj szablon"
                             className="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button onClick={() => deleteTpl(t.id)}
+                            aria-label="Usuń szablon" title="Usuń szablon"
                             className="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -691,6 +959,7 @@ export const DMSPage: React.FC = () => {
                       <td className="px-4 py-3 hidden lg:table-cell text-slate-400">{fmt(d.created_at)}</td>
                       <td className="px-4 py-3">
                         <button onClick={() => setViewDocId(d.id)}
+                          aria-label="Podgląd dokumentu" title="Podgląd dokumentu"
                           className="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
                           <Eye className="w-4 h-4" />
                         </button>
@@ -702,6 +971,11 @@ export const DMSPage: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── SETTINGS TAB ── */}
+      {tab === 'settings' && (
+        <SettingsTab companyId={companyId} />
       )}
 
       {/* Modals */}

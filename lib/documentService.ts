@@ -17,6 +17,8 @@ import type {
   UpdateTemplateInput,
   CreateDocumentInput,
   UpdateDocumentInput,
+  NumberingConfig,
+  DocumentSettings,
 } from '../types';
 
 // =====================================================
@@ -440,4 +442,83 @@ export async function generateDocumentNumber(companyId: string, templateType: st
     return `DRAFT-${ts}`;
   }
   return data.number;
+}
+
+// =====================================================
+// DOCUMENT SETTINGS (NUMBERING CONFIG)
+// =====================================================
+
+/**
+ * Fetch numbering settings for a company.
+ */
+export async function fetchDocumentSettings(
+  companyId: string,
+): Promise<DocumentSettings | null> {
+  const { data, error } = await supabase
+    .from('document_settings')
+    .select('*')
+    .eq('company_id', companyId)
+    .single();
+
+  if (error) {
+    // PGRST116 = no rows — not an error, just no settings yet
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  return data as DocumentSettings;
+}
+
+/**
+ * Create or update numbering configuration for a company.
+ */
+export async function updateDocumentSettings(
+  companyId: string,
+  config: NumberingConfig,
+): Promise<void> {
+  const existing = await fetchDocumentSettings(companyId);
+
+  if (existing) {
+    const { error } = await supabase
+      .from('document_settings')
+      .update({
+        numbering_config: config,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('company_id', companyId);
+
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('document_settings')
+      .insert({
+        company_id: companyId,
+        numbering_config: config,
+      });
+
+    if (error) throw error;
+  }
+}
+
+// =====================================================
+// PDF GENERATION
+// =====================================================
+
+/**
+ * Generate a PDF for a document by calling the Edge Function.
+ * Returns a signed URL valid for 30 minutes.
+ */
+export async function generatePDF(documentId: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('generate-document-pdf', {
+    body: { document_id: documentId },
+  });
+
+  if (error) {
+    throw new Error(error.message ?? 'PDF generation failed');
+  }
+
+  if (!data?.url) {
+    throw new Error('No URL returned from PDF generation');
+  }
+
+  return data.url;
 }

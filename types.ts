@@ -3674,3 +3674,22 @@ export interface StockBalance {
   total_value?: number;
   last_operation_at?: string;
 }
+
+// =====================================================
+// DOCUMENT SETTINGS & NUMBERING CONFIG
+// =====================================================
+
+export interface NumberingConfig {
+  prefix: string;
+  separator: string;
+  digits: number;
+  reset: 'yearly' | 'monthly' | 'never';
+}
+
+export interface DocumentSettings {
+  id: string;
+  company_id: string;
+  numbering_config: Record<string, NumberingConfig>;
+  created_at: string;
+  updated_at: string;
+}

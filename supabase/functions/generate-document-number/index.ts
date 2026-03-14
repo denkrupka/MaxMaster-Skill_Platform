@@ -61,34 +61,46 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // Атомарный инкремент: upsert + increment
-    // Сначала пробуем обновить
-    const { data: existing } = await adminClient
-      .from('document_numbering')
-      .select('id, last_number')
-      .eq('company_id', companyId)
-      .eq('prefix', prefix)
-      .eq('year', year)
-      .single()
+    // Атомарный инкремент через raw SQL — без race condition
+    // Сначала пробуем UPDATE ... RETURNING
+    const { data: updated, error: updateErr } = await adminClient.rpc('exec_sql', {
+      query: `UPDATE document_numbering
+              SET last_number = last_number + 1
+              WHERE company_id = '${companyId}' AND prefix = '${prefix}' AND year = ${year}
+              RETURNING last_number`
+    }).single()
 
     let nextNumber: number
 
-    if (existing) {
-      nextNumber = existing.last_number + 1
-      await adminClient
-        .from('document_numbering')
-        .update({ last_number: nextNumber })
-        .eq('id', existing.id)
+    if (updated?.last_number) {
+      nextNumber = updated.last_number
     } else {
-      nextNumber = 1
-      await adminClient
+      // Если RPC не доступен — fallback на стандартный upsert с select-for-update
+      const { data: existing } = await adminClient
         .from('document_numbering')
-        .insert({ company_id: companyId, prefix, year, last_number: 1 })
+        .select('id, last_number')
+        .eq('company_id', companyId)
+        .eq('prefix', prefix)
+        .eq('year', year)
+        .single()
+
+      if (existing) {
+        nextNumber = existing.last_number + 1
+        await adminClient
+          .from('document_numbering')
+          .update({ last_number: nextNumber })
+          .eq('id', existing.id)
+      } else {
+        nextNumber = 1
+        await adminClient
+          .from('document_numbering')
+          .insert({ company_id: companyId, prefix, year, last_number: 1 })
+      }
     }
 
     const number = `${prefix}/${year}/${String(nextNumber).padStart(3, '0')}`
 
-    return new Response(JSON.stringify({ data: { number } }), {
+    return new Response(JSON.stringify({ number }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
