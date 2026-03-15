@@ -4,6 +4,7 @@ import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { sendTemplatedSMS } from '../lib/smsService';
 import { createShortLink } from '../lib/shortLinks';
 import { APP_URL } from '../config/app.config';
+import { Language } from '../lib/i18n';
 import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
@@ -49,8 +50,10 @@ interface AppState {
   // SuperAdmin role simulation
   simulatedRole: Role | null;
 
+  // Language
+  language: Language;
+
   // Misc
-  language: string;
   allUsers: User[];
 }
 
@@ -129,6 +132,9 @@ interface AppContextType {
   // SuperAdmin role simulation
   setSimulatedRole: (role: Role | null) => void;
   getEffectiveRole: () => Role | null;
+
+  // Language methods
+  setLanguage: (lang: Language) => void;
 
   // CRM Deal methods
   addCrmDeal: (deal: Omit<CRMDeal, 'id' | 'created_at' | 'updated_at'>) => Promise<CRMDeal>;
@@ -215,8 +221,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // SuperAdmin role simulation
     simulatedRole: null,
 
+    // Language - load from localStorage or default to Polish
+    language: (typeof window !== 'undefined' && localStorage.getItem('app_language') as Language) || 'pl',
+
     // Global
-    language: 'pl',
     allUsers: []
   });
 
@@ -1762,6 +1770,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, simulatedRole: role }));
   };
 
+  // Language methods
+  const setLanguage = (lang: Language) => {
+    localStorage.setItem('app_language', lang);
+    setState(prev => ({ ...prev, language: lang }));
+  };
+
   const getEffectiveRole = (): Role | null => {
     // If superadmin or company_admin is simulating a role, return that role
     if ((state.currentUser?.role === Role.SUPERADMIN || state.currentUser?.role === Role.COMPANY_ADMIN) && state.simulatedRole) {
@@ -1882,6 +1896,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // SuperAdmin role simulation
     setSimulatedRole,
     getEffectiveRole,
+
+    // Language methods
+    setLanguage,
 
     // CRM Deal methods
     addCrmDeal,

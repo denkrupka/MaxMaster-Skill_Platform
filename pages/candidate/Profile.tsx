@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { User as UserIcon, Lock, Mail, Phone, Briefcase, Save, Check, Send, ChevronLeft, ChevronRight, X, MapPin } from 'lucide-react';
+import { User as UserIcon, Lock, Mail, Phone, Briefcase, Save, Check, Send, ChevronLeft, ChevronRight, X, MapPin, Globe } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus, User, Role } from '../../types';
+import { LanguageSelector } from '../../components/LanguageSelector';
+import { t } from '../../lib/i18n';
 
 // --- PESEL Validation ---
 const validatePesel = (pesel: string): { valid: boolean; error?: string } => {
@@ -32,8 +34,8 @@ const formatBankAccount = (digits: string): string => {
 };
 
 export const CandidateProfilePage = () => {
-    const { state, updateUser, logCandidateAction, triggerNotification } = useAppContext();
-    const { currentUser } = state;
+    const { state, updateUser, logCandidateAction, triggerNotification, setLanguage } = useAppContext();
+    const { currentUser, language } = state;
     const [successMsg, setSuccessMsg] = useState('');
 
     // File Viewer
@@ -551,6 +553,22 @@ export const CandidateProfilePage = () => {
                                 </div>
                              </div>
                          </div>
+                     </div>
+
+                     {/* Language Settings */}
+                     <div className="pt-6 border-t border-slate-100">
+                        <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2 text-lg">
+                            <Globe size={20} className="text-blue-600"/>
+                            {t(language, 'profile.language')}
+                        </h3>
+                        <div className="flex items-center gap-4">
+                            <LanguageSelector
+                                currentLanguage={language}
+                                onLanguageChange={setLanguage}
+                                variant="buttons"
+                                showFlags={true}
+                            />
+                        </div>
                      </div>
                  </div>
 

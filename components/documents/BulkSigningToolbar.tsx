@@ -1,5 +1,7 @@
 import React from 'react';
 import { CheckSquare, Square, Loader2 } from 'lucide-react';
+import { useAppContext } from '../../context/AppContext';
+import { t } from '../../lib/i18n';
 
 interface BulkSigningToolbarProps {
   selectedCount: number;
@@ -20,6 +22,8 @@ export const BulkSigningToolbar: React.FC<BulkSigningToolbarProps> = ({
   isSigning,
   progress
 }) => {
+  const { state } = useAppContext();
+  const { language } = state;
   const allSelected = selectedCount === totalCount && totalCount > 0;
 
   return (
@@ -36,16 +40,16 @@ export const BulkSigningToolbar: React.FC<BulkSigningToolbarProps> = ({
             <Square className="w-5 h-5 text-slate-400" />
           )}
           <span className="hidden sm:inline">
-            {allSelected ? 'Odznacz wszystkie' : 'Zaznacz wszystkie'}
+            {allSelected ? t(language, 'documents.deselectAll') : t(language, 'documents.selectAll')}
           </span>
           <span className="sm:hidden">
-            {allSelected ? 'Odznacz' : 'Zaznacz'}
+            {allSelected ? t(language, 'common.cancel') : t(language, 'common.select')}
           </span>
         </button>
         
         {selectedCount > 0 && (
           <span className="text-sm text-slate-500">
-            Wybrano: <strong className="text-slate-900">{selectedCount}</strong>
+            {language === 'pl' ? 'Wybrano:' : language === 'uk' ? 'Вибрано:' : 'Selected:'} <strong className="text-slate-900">{selectedCount}</strong>
           </span>
         )}
       </div>
@@ -79,12 +83,12 @@ export const BulkSigningToolbar: React.FC<BulkSigningToolbarProps> = ({
           {isSigning ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Podpisywanie...</span>
+              <span>{t(language, 'documents.signing')}</span>
             </>
           ) : (
             <>
               <CheckSquare className="w-4 h-4" />
-              <span>Podpisz wybrane</span>
+              <span>{t(language, 'documents.signSelected')}</span>
             </>
           )}
         </button>

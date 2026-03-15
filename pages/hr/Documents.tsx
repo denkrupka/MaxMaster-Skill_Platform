@@ -7,10 +7,12 @@ import { SKILL_STATUS_LABELS, BONUS_DOCUMENT_TYPES } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
 import { BulkSigningToolbar, DocumentCheckbox } from '../../components/documents';
+import { t, Language, detectLanguageFromContent } from '../../lib/i18n';
+import { LanguageSelector } from '../../components/LanguageSelector';
 
 export const HRDocumentsPage = () => {
-    const { state, updateUserSkillStatus, updateCandidateDocumentDetails, archiveCandidateDocument } = useAppContext();
-    const { currentCompany } = state;
+    const { state, updateUserSkillStatus, updateCandidateDocumentDetails, archiveCandidateDocument, setLanguage } = useAppContext();
+    const { currentCompany, language } = state;
 
     // Filter users by company_id for multi-tenant isolation
     const companyUserIds = useMemo(() => {
@@ -261,9 +263,22 @@ export const HRDocumentsPage = () => {
         );
     }
 
+    // Detect language from document content
+    const detectDocLanguage = (doc: UserSkill): Language => {
+        const content = doc.custom_name || '';
+        return detectLanguageFromContent(content);
+    };
+
     return (
         <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto" onClick={() => setStatusPopoverDocId(null)}>
-             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 sm:mb-6">Dokumenty do sprawdzenia</h1>
+             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+                 <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{t(language, 'documents.title')}</h1>
+                 <LanguageSelector
+                     currentLanguage={language}
+                     onLanguageChange={setLanguage}
+                     variant="minimal"
+                 />
+             </div>
              
              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {/* Bulk Signing Toolbar */}
@@ -282,11 +297,11 @@ export const HRDocumentsPage = () => {
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
                             <th className="px-2 sm:px-4 md:px-6 py-3 md:py-4 w-12"></th>
-                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Pracownik</th>
-                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Dokument</th>
-                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Bonus</th>
-                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Status</th>
-                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">Akcje</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">{t(language, 'documents.employee')}</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">{t(language, 'documents.document')}</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">{t(language, 'documents.bonus')}</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">{t(language, 'documents.status')}</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">{t(language, 'documents.actions')}</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -377,7 +392,7 @@ export const HRDocumentsPage = () => {
                         {pendingDocs.length === 0 && (
                             <tr>
                                 <td colSpan={6} className="px-3 sm:px-6 py-8 sm:py-12 text-center text-slate-400">
-                                    Brak dokumentów oczekujących na sprawdzenie.
+                                    {t(language, 'documents.noDocuments')}
                                 </td>
                             </tr>
                         )}
