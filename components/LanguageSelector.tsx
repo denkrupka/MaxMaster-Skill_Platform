@@ -1,5 +1,5 @@
 import React from 'react';
-import { Language, getLanguageName, getLanguageFlag } from '../../lib/i18n';
+import { Language, getLanguageName, getLanguageFlag } from '@/lib/i18n';
 import { ChevronDown } from 'lucide-react';
 
 interface LanguageSelectorProps {
