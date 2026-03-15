@@ -31,3 +31,5 @@ export { DocumentReminders } from './DocumentReminders';
 export { DocumentQRCode } from './DocumentQRCode';
 export { BulkSigningToolbar } from './BulkSigningToolbar';
 export { DocumentCheckbox } from './DocumentCheckbox';
+export { HRTemplatesManager } from './HRTemplatesManager';
+export type { HRTemplate, TemplateField } from './HRTemplatesManager';

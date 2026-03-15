@@ -1,12 +1,12 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, X, Archive, Search, Eye, CheckCircle, XCircle, AlertTriangle, FileText } from 'lucide-react';
+import { Upload, X, Archive, Search, Eye, CheckCircle, XCircle, AlertTriangle, FileText, FileSignature, LayoutTemplate } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { VerificationType, SkillStatus, UserSkill } from '../../types';
 import { SKILL_STATUS_LABELS, BONUS_DOCUMENT_TYPES } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
-import { BulkSigningToolbar, DocumentCheckbox } from '../../components/documents';
+import { BulkSigningToolbar, DocumentCheckbox, HRTemplatesManager, HRTemplate } from '../../components/documents';
 import { t, Language, detectLanguageFromContent } from '../../lib/i18n';
 import { LanguageSelector } from '../../components/LanguageSelector';
 
@@ -269,6 +269,24 @@ export const HRDocumentsPage = () => {
         return detectLanguageFromContent(content);
     };
 
+    // Tabs state
+    const [activeTab, setActiveTab] = useState<'documents' | 'templates'>('documents');
+
+    // Handle template send for signing
+    const handleTemplateSend = (template: HRTemplate, filledData: Record<string, any>) => {
+        // Create a document from template
+        const documentContent = template.content;
+        // Replace all fields with filled data
+        let finalContent = documentContent;
+        template.fields.forEach(field => {
+            const value = filledData[field.name] || field.defaultValue || '';
+            finalContent = finalContent.replace(new RegExp(`{{${field.name}}}`, 'g'), value);
+        });
+        
+        // Here you would typically save the document and send it for signing
+        alert(`Dokument "${template.name}" został przygotowany do wysłania!\n\nPodgląd:\n${finalContent.substring(0, 200)}...`);
+    };
+
     return (
         <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto" onClick={() => setStatusPopoverDocId(null)}>
              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
@@ -279,7 +297,36 @@ export const HRDocumentsPage = () => {
                      variant="minimal"
                  />
              </div>
-             
+
+             {/* Tabs */}
+             <div className="flex gap-2 mb-6 border-b border-slate-200">
+                 <button
+                     onClick={() => setActiveTab('documents')}
+                     className={`flex items-center gap-2 px-4 py-3 font-medium text-sm transition-colors border-b-2 ${
+                         activeTab === 'documents'
+                             ? 'border-blue-600 text-blue-600'
+                             : 'border-transparent text-slate-600 hover:text-slate-900'
+                     }`}
+                 >
+                     <FileSignature size={18} />
+                     Dokumenty do podpisania
+                 </button>
+                 <button
+                     onClick={() => setActiveTab('templates')}
+                     className={`flex items-center gap-2 px-4 py-3 font-medium text-sm transition-colors border-b-2 ${
+                         activeTab === 'templates'
+                             ? 'border-blue-600 text-blue-600'
+                             : 'border-transparent text-slate-600 hover:text-slate-900'
+                     }`}
+                 >
+                     <LayoutTemplate size={18} />
+                     Szablony HR
+                 </button>
+             </div>
+
+             {activeTab === 'templates' ? (
+                 <HRTemplatesManager onSendForSigning={handleTemplateSend} />
+             ) : (
              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {/* Bulk Signing Toolbar */}
                 <BulkSigningToolbar
@@ -409,6 +456,8 @@ export const HRDocumentsPage = () => {
                 initialIndex={fileViewer.index}
                 title={fileViewer.title}
             />
+             </div>
+             )}
         </div>
     );
 };
