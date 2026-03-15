@@ -83,9 +83,11 @@ const TemplateModal = ({
     name: existing?.name ?? '', type: existing?.type ?? 'contract', description: existing?.description ?? '',
   });
   const [sections, setSections] = useState<TemplateSection[]>(
-    existing?.content ?? [{ title: '', body: '' }]
+    Array.isArray(existing?.content) ? existing.content : [{ title: '', body: '' }]
   );
-  const [variables, setVariables] = useState<TemplateVariable[]>(existing?.variables ?? []);
+  const [variables, setVariables] = useState<TemplateVariable[]>(
+    Array.isArray(existing?.variables) ? existing.variables : []
+  );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -355,7 +357,7 @@ const DocumentWizard = ({
                 <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={templateId} onChange={e => setTemplateId(e.target.value)}>
                   <option value="">-- wybierz szablon --</option>
-                  {templates.filter(t => t.is_active).map(t => (
+                  {Array.isArray(templates) && templates.filter(t => t.is_active).map(t => (
                     <option key={t.id} value={t.id}>{t.name} ({TYPE_LABELS[t.type]})</option>
                   ))}
                 </select>
@@ -365,7 +367,7 @@ const DocumentWizard = ({
                 <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={contractorId} onChange={e => setContractorId(e.target.value)}>
                   <option value="">-- brak --</option>
-                  {contractors.map(c => <option key={c.id} value={c.id}>{c.name ?? c.company_name ?? c.id}</option>)}
+                  {Array.isArray(contractors) && contractors.map(c => <option key={c.id} value={c.id}>{c.name ?? c.company_name ?? c.id}</option>)}
                 </select>
                 {contractorId && (() => {
                   const c = contractors.find(x => x.id === contractorId);
@@ -384,7 +386,7 @@ const DocumentWizard = ({
                 <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={projectId} onChange={e => setProjectId(e.target.value)}>
                   <option value="">-- brak --</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}
+                  {Array.isArray(projects) && projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}
                 </select>
               </div>
             </div>
@@ -393,25 +395,28 @@ const DocumentWizard = ({
           {step === 2 && tpl && (
             <div className="space-y-3">
               <p className="text-sm font-medium text-slate-700">Uzupełnij zmienne</p>
-              {tpl.variables.length === 0 && <p className="text-sm text-slate-400">Brak zmiennych w szablonie.</p>}
-              {tpl.variables.map(v => {
-                const value = formData[v.key] ?? '';
-                return (
-                  <div key={v.key}>
-                    <label className="block text-xs text-slate-500 mb-1">
-                      {v.label || v.key}
-                      {v.source !== 'manual' && <span className="ml-1 text-blue-500">(autouzupełnione)</span>}
-                      {v.required && <span className="ml-1 text-red-500">*</span>}
-                    </label>
-                    <input className={`w-full border rounded-lg px-3 py-2 text-sm ${!value && v.required ? 'border-red-500' : 'border-slate-200'}`}
-                      type={v.type === 'date' ? 'date' : v.type === 'number' ? 'number' : 'text'}
-                      value={value}
-                      onChange={e => setFormData(d => ({ ...d, [v.key]: e.target.value }))}
-                      placeholder={v.defaultValue ?? v.label} />
-                    {!value && v.required && <p className="text-xs text-red-500 mt-1">Pole wymagane</p>}
-                  </div>
-                );
-              })}
+              {!Array.isArray(tpl.variables) || tpl.variables.length === 0 ? (
+                <p className="text-sm text-slate-400">Brak zmiennych w szablonie.</p>
+              ) : (
+                tpl.variables.map(v => {
+                  const value = formData[v.key] ?? '';
+                  return (
+                    <div key={v.key}>
+                      <label className="block text-xs text-slate-500 mb-1">
+                        {v.label || v.key}
+                        {v.source !== 'manual' && <span className="ml-1 text-blue-500">(autouzupełnione)</span>}
+                        {v.required && <span className="ml-1 text-red-500">*</span>}
+                      </label>
+                      <input className={`w-full border rounded-lg px-3 py-2 text-sm ${!value && v.required ? 'border-red-500' : 'border-slate-200'}`}
+                        type={v.type === 'date' ? 'date' : v.type === 'number' ? 'number' : 'text'}
+                        value={value}
+                        onChange={e => setFormData(d => ({ ...d, [v.key]: e.target.value }))}
+                        placeholder={v.defaultValue ?? v.label} />
+                      {!value && v.required && <p className="text-xs text-red-500 mt-1">Pole wymagane</p>}
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
           {/* Step 3: preview */}
@@ -978,7 +983,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                   </div>
                 </div>
               )}
-              {versions.length === 0 ? (
+              {!Array.isArray(versions) || versions.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">Brak wersji</p>
               ) : versions.map(v => (
                 <div key={v.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
@@ -1019,7 +1024,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                   </button>
                 </div>
               </div>
-              {signatures.length === 0 ? (
+              {!Array.isArray(signatures) || signatures.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">Brak zapytań o podpis</p>
               ) : signatures.map(s => (
                 <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
@@ -1038,7 +1043,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
             </div>
           ) : detailTab === 'audit' ? (
             <div className="space-y-2">
-              {auditLog.length === 0 ? (
+              {!Array.isArray(auditLog) || auditLog.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">Brak historii</p>
               ) : auditLog.slice((auditPage - 1) * AUDIT_PAGE_SIZE, auditPage * AUDIT_PAGE_SIZE).map(a => (
                 <div key={a.id} className="flex items-start gap-3 p-2 text-xs">
@@ -1047,7 +1052,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                   <span className="text-slate-800 font-medium">{a.action.replace(/_/g, ' ')}</span>
                 </div>
               ))}
-              {Math.ceil(auditLog.length / AUDIT_PAGE_SIZE) > 1 && (
+              {Array.isArray(auditLog) && Math.ceil(auditLog.length / AUDIT_PAGE_SIZE) > 1 && (
                 <div className="flex items-center justify-between pt-3 border-t">
                   <p className="text-xs text-slate-500">{auditLog.length} wpisów · Strona {auditPage} z {Math.ceil(auditLog.length / AUDIT_PAGE_SIZE)}</p>
                   <div className="flex items-center gap-1">
@@ -1082,7 +1087,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                   setNewComment(''); loadData();
                 }} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">Wyślij</button>
               </div>
-              {comments.length === 0 ? (
+              {!Array.isArray(comments) || comments.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">Brak komentarzy</p>
               ) : comments.map(c => (
                 <div key={c.id} className={`p-3 rounded-lg ${c.resolved ? 'bg-green-50 opacity-60' : 'bg-slate-50'}`}>
@@ -1137,7 +1142,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                   <div className="text-sm text-slate-700 whitespace-pre-wrap">{aiResult}</div>
                 </div>
               )}
-              {analyses.length > 0 && (
+              {Array.isArray(analyses) && analyses.length > 0 && (
                 <div className="mt-4">
                   <p className="text-xs font-medium text-slate-500 mb-2">Historia analiz</p>
                   {analyses.map(a => (
@@ -1157,7 +1162,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                 navigator.clipboard.writeText(link.url);
                 onToast({ message: 'Link skopiowany do schowka', type: 'success' });
               }} className="text-sm text-blue-600 hover:underline mb-3">+ Utwórz nowy link (7 dni)</button>
-              {publicLinks.length === 0 ? (
+              {!Array.isArray(publicLinks) || publicLinks.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">Brak linków publicznych</p>
               ) : publicLinks.map(l => (
                 <div key={l.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
@@ -1212,7 +1217,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                 <h4 className="font-medium text-sm">Reguły automatyzacji</h4>
                 <button onClick={() => setShowAddAutomation(true)} className="text-xs text-blue-600 hover:underline">+ Dodaj</button>
               </div>
-              {automations.map(a => (
+              {Array.isArray(automations) && automations.map(a => (
                 <div key={a.id} className="p-3 bg-slate-50 rounded-lg flex justify-between items-center">
                   <div>
                     <p className="text-sm font-medium">{a.name}</p>
@@ -1224,7 +1229,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
                   </button>
                 </div>
               ))}
-              {automations.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Brak automatyzacji</p>}
+              {!Array.isArray(automations) || automations.length === 0 ? <p className="text-sm text-slate-400 text-center py-4">Brak automatyzacji</p> : null}
             </div>
           )}
         </div>
@@ -1341,10 +1346,11 @@ export const DMSPage: React.FC = () => {
     }
   };
 
-  const filteredTemplates = templates.filter(t =>
+  const filteredTemplates = Array.isArray(templates) ? templates.filter(t =>
     t.name.toLowerCase().includes(tplSearch.toLowerCase())
-  );
+  ) : [];
   const filteredDocuments = useMemo(() => {
+    if (!Array.isArray(documents)) return [];
     let result = documents;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
