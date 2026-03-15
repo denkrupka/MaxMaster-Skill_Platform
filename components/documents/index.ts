@@ -34,3 +34,5 @@ export { DocumentCheckbox } from './DocumentCheckbox';
 export { HRTemplatesManager } from './HRTemplatesManager';
 export type { HRTemplate, TemplateField } from './HRTemplatesManager';
 export { ApiSettingsManager } from './ApiSettingsManager';
+export { IdentityVerification, VerificationHistory } from './IdentityVerification';
+export type { VerificationData, VerificationStatus, VerificationMethod } from './IdentityVerification';

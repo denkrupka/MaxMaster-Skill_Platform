@@ -1,12 +1,12 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, X, Archive, Search, Eye, CheckCircle, XCircle, AlertTriangle, FileText, FileSignature, LayoutTemplate, Code } from 'lucide-react';
+import { Upload, X, Archive, Search, Eye, CheckCircle, XCircle, AlertTriangle, FileText, FileSignature, LayoutTemplate, Code, Shield } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { VerificationType, SkillStatus, UserSkill } from '../../types';
 import { SKILL_STATUS_LABELS, BONUS_DOCUMENT_TYPES } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
-import { BulkSigningToolbar, DocumentCheckbox, HRTemplatesManager, HRTemplate, ApiSettingsManager } from '../../components/documents';
+import { BulkSigningToolbar, DocumentCheckbox, HRTemplatesManager, HRTemplate, ApiSettingsManager, IdentityVerification, VerificationHistory } from '../../components/documents';
 import { t, Language, detectLanguageFromContent } from '../../lib/i18n';
 import { LanguageSelector } from '../../components/LanguageSelector';
 
@@ -270,7 +270,7 @@ export const HRDocumentsPage = () => {
     };
 
     // Tabs state
-    const [activeTab, setActiveTab] = useState<'documents' | 'templates' | 'api'>('documents');
+    const [activeTab, setActiveTab] = useState<'documents' | 'templates' | 'api' | 'verification'>('documents');
 
     // Handle template send for signing
     const handleTemplateSend = (template: HRTemplate, filledData: Record<string, any>) => {
@@ -323,6 +323,17 @@ export const HRDocumentsPage = () => {
                      Szablony HR
                  </button>
                  <button
+                     onClick={() => setActiveTab('verification')}
+                     className={`flex items-center gap-2 px-4 py-3 font-medium text-sm transition-colors border-b-2 ${
+                         activeTab === 'verification'
+                             ? 'border-blue-600 text-blue-600'
+                             : 'border-transparent text-slate-600 hover:text-slate-900'
+                     }`}
+                 >
+                     <Shield size={18} />
+                     Weryfikacja
+                 </button>
+                 <button
                      onClick={() => setActiveTab('api')}
                      className={`flex items-center gap-2 px-4 py-3 font-medium text-sm transition-colors border-b-2 ${
                          activeTab === 'api'
@@ -339,6 +350,8 @@ export const HRDocumentsPage = () => {
                  <HRTemplatesManager onSendForSigning={handleTemplateSend} />
              ) : activeTab === 'api' ? (
                  <ApiSettingsManager />
+             ) : activeTab === 'verification' ? (
+                 <VerificationHistory />
              ) : (
              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {/* Bulk Signing Toolbar */}
@@ -361,6 +374,7 @@ export const HRDocumentsPage = () => {
                             <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">{t(language, 'documents.document')}</th>
                             <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">{t(language, 'documents.bonus')}</th>
                             <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">{t(language, 'documents.status')}</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Weryfikacja</th>
                             <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">{t(language, 'documents.actions')}</th>
                         </tr>
                     </thead>
@@ -421,6 +435,9 @@ export const HRDocumentsPage = () => {
                                             </div>
                                         )}
                                     </td>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4" onClick={(e) => e.stopPropagation()}>
+                                        <IdentityVerification userId={doc.user_id} />
+                                    </td>
                                     <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                             <button 
@@ -451,7 +468,7 @@ export const HRDocumentsPage = () => {
                         })}
                         {pendingDocs.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="px-3 sm:px-6 py-8 sm:py-12 text-center text-slate-400">
+                                <td colSpan={7} className="px-3 sm:px-6 py-8 sm:py-12 text-center text-slate-400">
                                     {t(language, 'documents.noDocuments')}
                                 </td>
                             </tr>
