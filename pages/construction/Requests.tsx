@@ -2897,6 +2897,22 @@ export const RequestsPage: React.FC = () => {
                   <div className="text-sm text-slate-500">Utwórz ofertę handlową bezpośrednio</div>
                 </div>
               </button>
+
+              <button
+                onClick={() => {
+                  setShowPrepareOfferModal(false);
+                  window.location.hash = `#/construction/contractor-request/${selectedRequest.id}`;
+                }}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-green-300 transition text-left group"
+              >
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
+                  <Send className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-slate-900">Zapytanie do podwykonawców</div>
+                  <div className="text-sm text-slate-500">Wyślij zapytanie ofertowe do podwykonawców</div>
+                </div>
+              </button>
             </div>
 
             <div className="p-6 border-t border-slate-200 flex justify-end">

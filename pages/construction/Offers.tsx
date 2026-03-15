@@ -18,6 +18,7 @@ import { TIMIntegrator } from './TIMIntegrator';
 import { OninenIntegrator } from './OninenIntegrator';
 import { AtutIntegrator } from './AtutIntegrator';
 import { RamirentIntegrator } from './RamirentIntegrator';
+import { EstimateToOfferImportModal } from '../../components/construction/EstimateToOfferImportModal';
 import { supabase } from '../../lib/supabase';
 import { fetchCompanyByNip, validateNip, normalizeNip } from '../../lib/gusApi';
 import { searchAddress, OSMAddress, createDebouncedSearch } from '../../lib/osmAutocomplete';
@@ -291,6 +292,10 @@ export const OffersPage: React.FC = () => {
   const [paymentTermOptions, setPaymentTermOptions] = useState<number[]>([1, 3, 7, 14, 21, 30, 45, 60]);
   const [invoiceFreqOptions, setInvoiceFreqOptions] = useState<number[]>([7, 14, 21, 30]);
   const [warrantyOptions, setWarrantyOptions] = useState<number[]>([12, 24, 36, 48, 60]);
+
+  // Import from estimate modal
+  const [showImportFromEstimateModal, setShowImportFromEstimateModal] = useState(false);
+  const [linkedEstimateId, setLinkedEstimateId] = useState<string | null>(null);
 
   // Surcharge/discount rules based on payment term, warranty, invoice frequency
   interface SurchargeRule { value: number; surcharge: number; } // surcharge > 0 = narzut, < 0 = rabat
@@ -1215,6 +1220,7 @@ export const OffersPage: React.FC = () => {
           internal_notes: offer.internal_notes || ''
         });
         setSelectedOffer(offer);
+        setLinkedEstimateId(offer.estimate_id || null);
         setIssueDate(offer.created_at ? offer.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
         setObjectName(offer.object_name || '');
         setObjectAddress(offer.object_address || '');
@@ -7279,6 +7285,15 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                       <Plus className="w-4 h-4" />
                       Dodaj sekcję
                     </button>
+                    {linkedEstimateId && (
+                      <button
+                        onClick={() => setShowImportFromEstimateModal(true)}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-green-50 text-green-600 border border-green-200 rounded-full text-sm hover:bg-green-100 transition"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" />
+                        Import z kosztorysu
+                      </button>
+                    )}
                     <div className="flex-1 border-t border-dashed border-slate-300" />
                   </div>
                 )}
@@ -10968,6 +10983,20 @@ tr{page-break-inside:avoid;page-break-after:auto;}
         </div>
         );
       })()}
+
+      {/* Import from Estimate Modal - nakłady */}
+      <EstimateToOfferImportModal
+        isOpen={showImportFromEstimateModal}
+        onClose={() => setShowImportFromEstimateModal(false)}
+        estimateId={linkedEstimateId || ''}
+        offerId={selectedOffer?.id || ''}
+        onImportComplete={() => {
+          if (selectedOffer) {
+            loadOfferDetails(selectedOffer.id);
+          }
+          showToast('Import nakładów zakończony pomyślnie', 'success');
+        }}
+      />
     </>
   );
 };

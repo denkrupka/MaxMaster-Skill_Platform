@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
+import { PriceImportModal } from '../../components/construction/PriceImportModal';
 import type {
   KosztorysPriceList,
   KosztorysPriceListItem,
@@ -82,6 +83,9 @@ export const PriceListsPage: React.FC = () => {
 
   // Expanded price lists
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+
+  // Import modal
+  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -621,16 +625,25 @@ export const PriceListsPage: React.FC = () => {
                     <h2 className="font-semibold text-slate-900">{selectedPriceList.name}</h2>
                     <p className="text-xs text-slate-500">{filteredItems.length} pozycji</p>
                   </div>
-                  <button
-                    onClick={() => {
-                      setEditingItem({ item_type: 'material', price: 0 });
-                      setItemDialog(true);
-                    }}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Dodaj pozycję
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowImportModal(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Importuj
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingItem({ item_type: 'material', price: 0 });
+                        setItemDialog(true);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Dodaj pozycję
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -967,6 +980,19 @@ export const PriceListsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Import Modal */}
+      <PriceImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        priceListId={selectedPriceList?.id || ''}
+        onImportComplete={() => {
+          if (selectedPriceList) {
+            loadPriceListItems(selectedPriceList.id);
+          }
+          showNotification('Import zakończony pomyślnie', 'success');
+        }}
+      />
     </div>
   );
 };
