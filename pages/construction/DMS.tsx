@@ -834,7 +834,7 @@ const SettingsTab = ({ companyId }: { companyId: string }) => {
 
       {/* ── Automatyzacje ── */}
       <div className="border border-slate-200 rounded-xl p-6 bg-white">
-        <h3 className="text-lg font-semibold text-slate-800 mb-1">⚡ Automatyzacje dokumentów</h3>
+        <h3 className="text-lg font-semibold text-slate-800 mb-1">Automatyzacje dokumentów</h3>
         <p className="text-sm text-slate-500 mb-4">Włącz automatyczne akcje dla dokumentów w systemie.</p>
         <div className="space-y-3">
           <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
@@ -986,6 +986,14 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
   // Document content editor
   const [editNotes, setEditNotes] = useState(doc.notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
+  // Document content (main body) editor
+  const [editContent, setEditContent] = useState(() => {
+    const raw = doc.content;
+    if (typeof raw === 'string') return raw;
+    if (raw) return JSON.stringify(raw, null, 2);
+    return '';
+  });
+  const [savingContent, setSavingContent] = useState(false);
   const [pdfPreviewError, setPdfPreviewError] = useState<string|null>(null);
   const [uploadingPdf, setUploadingPdf] = useState(false);
 
@@ -1008,6 +1016,19 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
       onToast({ type: 'error', message: 'Błąd zapisu: ' + err.message });
     } finally {
       setSavingNotes(false);
+    }
+  };
+
+  const handleSaveContent = async () => {
+    setSavingContent(true);
+    try {
+      await updateDocument(doc.id, { content: editContent });
+      await logDocumentEvent(doc.id, 'content_updated');
+      onToast({ type: 'success', message: 'Treść dokumentu zapisana' });
+    } catch (err: any) {
+      onToast({ type: 'error', message: 'Błąd zapisu treści: ' + err.message });
+    } finally {
+      setSavingContent(false);
     }
   };
 
@@ -1129,12 +1150,12 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
   };
 
   const tabs = [
-    { key: 'versions' as const, label: 'Wersje', icon: '📋' },
-    { key: 'signatures' as const, label: 'Podpisy', icon: '✍️' },
-    { key: 'comments' as const, label: 'Komentarze', icon: '💬' },
-    { key: 'ai' as const, label: 'AI', icon: '🤖' },
-    { key: 'audit' as const, label: 'Historia', icon: '📜' },
-    { key: 'email' as const, label: 'Email', icon: '✉️' },
+    { key: 'versions' as const, label: 'Wersje', icon: '' },
+    { key: 'signatures' as const, label: 'Podpisy', icon: '' },
+    { key: 'comments' as const, label: 'Komentarze', icon: '' },
+    { key: 'ai' as const, label: 'AI', icon: '' },
+    { key: 'audit' as const, label: 'Historia', icon: '' },
+    { key: 'email' as const, label: 'Email', icon: '' },
   ];
 
   return (
@@ -1248,6 +1269,27 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
                     dangerouslySetInnerHTML={{ __html: renderedPreviewHtml }} />
                 </div>
               )}
+
+              {/* Document content editor */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-500">Treść dokumentu</label>
+                <textarea
+                  value={editContent}
+                  onChange={e => setEditContent(e.target.value)}
+                  rows={12}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Wpisz treść dokumentu..."
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveContent}
+                    disabled={savingContent}
+                    className="inline-flex items-center gap-1 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                    {savingContent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    Zapisz treść
+                  </button>
+                </div>
+              </div>
 
               <div className="space-y-2">
                 <label className="block text-xs font-medium text-slate-500">Notatki / treść dodatkowa</label>
@@ -1438,10 +1480,10 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { type: 'review', label: 'Przegląd dokumentu', icon: '🔍' },
-                  { type: 'risk', label: 'Analiza ryzyk', icon: '⚠️' },
-                  { type: 'summary', label: 'Podsumowanie', icon: '📝' },
-                  { type: 'clause_check', label: 'Sprawdzenie klauzul', icon: '⚖️' },
+                  { type: 'review', label: 'Przegląd dokumentu', icon: '' },
+                  { type: 'risk', label: 'Analiza ryzyk', icon: '' },
+                  { type: 'summary', label: 'Podsumowanie', icon: '' },
+                  { type: 'clause_check', label: 'Sprawdzenie klauzul', icon: '' },
                 ].map(a => (
                   <button key={a.type} onClick={async () => {
                     setAiLoading(true); setAiResult(null);
@@ -1850,7 +1892,7 @@ export const DMSPage: React.FC = () => {
               const csv = exportDocumentsCSV(filteredDocuments);
               downloadCSV(csv, `dokumenty-${new Date().toISOString().slice(0,10)}.csv`);
             }} className="px-3 py-2 text-sm border rounded-lg hover:bg-slate-50" aria-label="Eksport CSV">
-              📥 CSV
+              CSV
             </button>
           </div>
 
