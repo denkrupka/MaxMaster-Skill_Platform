@@ -1678,6 +1678,7 @@ export const DMSPage: React.FC = () => {
   // Shared
   const [contractors, setContractors] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const loadTemplates = useCallback(async () => {
     if (!companyId) return;
@@ -1731,6 +1732,9 @@ export const DMSPage: React.FC = () => {
   const filteredDocuments = useMemo(() => {
     if (!Array.isArray(documents)) return [];
     let result = documents;
+    if (selectedProjectId) {
+      result = result.filter(d => d.project_id === selectedProjectId);
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(d => d.name.toLowerCase().includes(q) || (d.number || '').toLowerCase().includes(q));
@@ -1746,7 +1750,7 @@ export const DMSPage: React.FC = () => {
       const bVal = b[sortField] || '';
       return sortDir === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
     });
-  }, [documents, searchQuery, filterType, filterStatus, sortField, sortDir]);
+  }, [documents, searchQuery, filterType, filterStatus, sortField, sortDir, selectedProjectId]);
 
   const totalPages = Math.ceil(filteredDocuments.length / PAGE_SIZE);
   const paginatedDocuments = filteredDocuments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -1853,32 +1857,8 @@ export const DMSPage: React.FC = () => {
       {/* ── DOCUMENTS TAB ── */}
       {tab === 'documents' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button onClick={() => setShowDocWizard(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap">
-              <Plus className="w-4 h-4" /> Nowy dokument
-            </button>
-          </div>
-
-          {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-              {[
-                { label: 'Wszystkie', value: stats.total, color: 'bg-blue-50 text-blue-700' },
-                { label: 'Szkice', value: stats.drafts, color: 'bg-yellow-50 text-yellow-700' },
-                { label: 'Gotowe', value: stats.completed, color: 'bg-green-50 text-green-700' },
-                { label: 'Archiwum', value: stats.archived, color: 'bg-slate-50 text-slate-500' },
-                { label: 'Do podpisu', value: stats.pendingSignatures, color: 'bg-orange-50 text-orange-700' },
-                { label: 'Ten miesiąc', value: stats.thisMonth, color: 'bg-purple-50 text-purple-700' },
-              ].map(s => (
-                <div key={s.label} className={`p-3 rounded-lg ${s.color}`}>
-                  <p className="text-2xl font-bold">{s.value}</p>
-                  <p className="text-xs">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2 mb-4">
+          {/* Top bar: search, filters, new doc button */}
+          <div className="flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
@@ -1905,151 +1885,191 @@ export const DMSPage: React.FC = () => {
             }} className="px-3 py-2 text-sm border rounded-lg hover:bg-slate-50" aria-label="Eksport CSV">
               CSV
             </button>
+            <button onClick={() => setShowDocWizard(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap">
+              <Plus className="w-4 h-4" /> Nowy dokument
+            </button>
           </div>
 
-          {quickActionResult && (
-            <div className="mb-4">
-              <ActionResultCard
-                title={quickActionResult.title}
-                subtitle={quickActionResult.subtitle}
-                url={quickActionResult.url}
-                onDismiss={() => setQuickActionResult(null)}
-              />
-            </div>
-          )}
-          {docLoading ? (
-            <div className="space-y-3">
-              {[1,2,3,4,5].map(i => (
-                <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
+          {/* Stats cards */}
+          {stats && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { label: 'Wszystkie', value: stats.total, color: 'bg-blue-50 text-blue-700' },
+                { label: 'Szkice', value: stats.drafts, color: 'bg-yellow-50 text-yellow-700' },
+                { label: 'Gotowe', value: stats.completed, color: 'bg-green-50 text-green-700' },
+                { label: 'Archiwum', value: stats.archived, color: 'bg-slate-50 text-slate-500' },
+                { label: 'Do podpisu', value: stats.pendingSignatures, color: 'bg-orange-50 text-orange-700' },
+                { label: 'Ten miesiąc', value: stats.thisMonth, color: 'bg-purple-50 text-purple-700' },
+              ].map(s => (
+                <div key={s.label} className={`p-3 rounded-lg ${s.color}`}>
+                  <p className="text-2xl font-bold">{s.value}</p>
+                  <p className="text-xs">{s.label}</p>
+                </div>
               ))}
             </div>
-          ) : filteredDocuments.length === 0 ? <Empty label="Brak dokumentów" /> : (
-            <>
-            {selectedIds.size > 0 && (
-              <div className="flex items-center gap-3 mb-3 p-3 bg-blue-50 rounded-lg">
-                <span className="text-sm font-medium text-blue-700">Zaznaczono: {selectedIds.size}</span>
-                <button onClick={async () => {
-                  const count = selectedIds.size;
-                  for (const id of selectedIds) {
-                    await supabase.from('documents').update({ status: 'archived' }).eq('id', id);
-                    await logDocumentEvent(id, 'archived', { bulk: true });
-                  }
-                  setSelectedIds(new Set()); loadDocuments();
-                  setToast({ message: `Zarchiwizowano ${count} dokumentów`, type: 'success' });
-                }} className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700">
-                  📦 Archiwizuj
-                </button>
-                <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:underline">Anuluj</button>
-              </div>
-            )}
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-                  <tr>
-                    <th className="px-4 py-3 w-10">
-                      <input type="checkbox" className="rounded border-slate-300"
-                        checked={selectedIds.size === filteredDocuments.length && filteredDocuments.length > 0}
-                        onChange={e => setSelectedIds(e.target.checked ? new Set(filteredDocuments.map(d => d.id)) : new Set())} />
-                    </th>
-                    <th className="px-4 py-3 hidden sm:table-cell cursor-pointer hover:text-blue-600 select-none" onClick={() => { setSortField('number'); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}>
-                      Nr {sortField === 'number' && (sortDir === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="px-4 py-3 cursor-pointer hover:text-blue-600 select-none" onClick={() => { setSortField('name'); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}>
-                      Nazwa {sortField === 'name' && (sortDir === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="text-left px-4 py-3 hidden md:table-cell">Szablon</th>
-                    <th className="text-left px-4 py-3">Status</th>
-                    <th className="px-4 py-3 hidden lg:table-cell cursor-pointer hover:text-blue-600 select-none" onClick={() => { setSortField('created_at'); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}>
-                      Data {sortField === 'created_at' && (sortDir === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {paginatedDocuments.map(d => (
-                    <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => { setSelectedDocInitialTab(undefined); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}>
-                      <td className="px-4 py-3">
-                        <input type="checkbox" className="rounded border-slate-300"
-                          checked={selectedIds.has(d.id)}
-                          onClick={e => e.stopPropagation()}
-                          onChange={e => {
-                            const next = new Set(selectedIds);
-                            e.target.checked ? next.add(d.id) : next.delete(d.id);
-                            setSelectedIds(next);
-                          }} />
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell text-slate-400 font-mono text-xs">{d.number ?? '—'}</td>
-                      <td className="px-4 py-3 font-medium text-slate-800 max-w-xs truncate">{d.name}</td>
-                      <td className="px-4 py-3 hidden md:table-cell text-slate-500">
-                        {d.document_templates ? `${d.document_templates.name} (${TYPE_LABELS[d.document_templates.type]})` : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status]}`}>
-                          {STATUS_LABELS[d.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell text-slate-400">{fmt(d.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 flex-wrap justify-end">
-                          <button onClick={(e) => { e.stopPropagation(); navigate(`/construction/dms/${d.id}`); }}
-                            aria-label="Edytuj dokument" title="Edytuj dokument"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 hover:text-blue-800 rounded hover:bg-blue-50 transition-colors font-medium">
-                            <Pencil className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Edytuj</span>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('versions'); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}
-                            aria-label="Podgląd dokumentu" title="Podgląd dokumentu"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <Eye className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Podgląd</span>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('email'); setSelectedDocAutoOpenEmail(true); setSelectedDoc(d); }}
-                            aria-label="Wyślij email" title="Wyślij email"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Wyślij</span>
-                          </button>
-                          <button onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const link = await createPublicLink(d.id, companyId, userId, { expiresInDays: 7 });
-                              setQuickActionResult({ title: `Link do ${d.name}`, subtitle: 'Utworzony z poziomu wiersza dokumentu.', url: link.url });
-                            } catch (err: any) {
-                              setToast({ type: 'error', message: 'Błąd tworzenia linku: ' + err.message });
-                            }
-                          }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <LinkIcon className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Link</span>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('signatures'); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}
-                            aria-label="Podpis" title="Podpis"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <PenSquare className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Podpis</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <p className="text-xs text-slate-500">{filteredDocuments.length} dokumentów · Strona {page} z {totalPages}</p>
-                <div className="flex gap-1">
-                  <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
-                    className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
-                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    const p = totalPages <= 5 ? i + 1 : Math.min(Math.max(page - 2, 1), totalPages - 4) + i;
-                    return (
-                      <button key={p} onClick={() => setPage(p)}
-                        className={`w-8 h-8 text-xs rounded ${p === page ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'}`}>{p}</button>
-                    );
-                  })}
-                  <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
-                    className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
-                </div>
-              </div>
-            )}
-            </>
           )}
+
+          {quickActionResult && (
+            <ActionResultCard
+              title={quickActionResult.title}
+              subtitle={quickActionResult.subtitle}
+              url={quickActionResult.url}
+              onDismiss={() => setQuickActionResult(null)}
+            />
+          )}
+
+          {/* Main content: sidebar + table */}
+          <div className="flex gap-0 rounded-xl border border-slate-200 overflow-hidden bg-white" style={{ minHeight: '480px' }}>
+            {/* Left sidebar — projects */}
+            <div className="w-56 flex-shrink-0 border-r border-slate-200 bg-slate-50/50 overflow-y-auto hidden md:block">
+              <div className="px-3 py-3 border-b border-slate-200">
+                <h3 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Projekty</h3>
+              </div>
+              <div className="py-1">
+                <button
+                  onClick={() => { setSelectedProjectId(null); setPage(1); }}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${!selectedProjectId ? 'bg-blue-50 text-blue-700 font-medium border-r-2 border-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                  Wszystkie ({documents.length})
+                </button>
+                {projects.map((proj: any) => {
+                  const count = Array.isArray(documents) ? documents.filter(d => d.project_id === proj.id).length : 0;
+                  return (
+                    <button
+                      key={proj.id}
+                      onClick={() => { setSelectedProjectId(proj.id); setPage(1); }}
+                      className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${selectedProjectId === proj.id ? 'bg-blue-50 text-blue-700 font-medium border-r-2 border-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      {proj.name || proj.id}
+                      {count > 0 && <span className="ml-1 text-xs text-slate-400">({count})</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right side — document table */}
+            <div className="flex-1 min-w-0 flex flex-col">
+              {/* Mobile project filter */}
+              <div className="md:hidden px-3 py-2 border-b border-slate-200">
+                <select
+                  value={selectedProjectId || ''}
+                  onChange={e => { setSelectedProjectId(e.target.value || null); setPage(1); }}
+                  className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
+                >
+                  <option value="">Wszystkie projekty</option>
+                  {projects.map((proj: any) => (
+                    <option key={proj.id} value={proj.id}>{proj.name || proj.id}</option>
+                  ))}
+                </select>
+              </div>
+
+              {docLoading ? (
+                <div className="p-4 space-y-3">
+                  {[1,2,3,4,5].map(i => (
+                    <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : filteredDocuments.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <Empty label={selectedProjectId ? "Brak dokumentów w tym projekcie" : "Brak dokumentów"} />
+                </div>
+              ) : (
+                <>
+                {selectedIds.size > 0 && (
+                  <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border-b border-blue-100">
+                    <span className="text-sm font-medium text-blue-700">Zaznaczono: {selectedIds.size}</span>
+                    <button onClick={async () => {
+                      const count = selectedIds.size;
+                      for (const id of selectedIds) {
+                        await supabase.from('documents').update({ status: 'archived' }).eq('id', id);
+                        await logDocumentEvent(id, 'archived', { bulk: true });
+                      }
+                      setSelectedIds(new Set()); loadDocuments();
+                      setToast({ message: `Zarchiwizowano ${count} dokumentów`, type: 'success' });
+                    }} className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700">
+                      📦 Archiwizuj
+                    </button>
+                    <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:underline">Anuluj</button>
+                  </div>
+                )}
+                <div className="overflow-x-auto flex-1">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wide sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 w-10">
+                          <input type="checkbox" className="rounded border-slate-300"
+                            checked={selectedIds.size === filteredDocuments.length && filteredDocuments.length > 0}
+                            onChange={e => setSelectedIds(e.target.checked ? new Set(filteredDocuments.map(d => d.id)) : new Set())} />
+                        </th>
+                        <th className="text-left px-4 py-3 cursor-pointer hover:text-blue-600 select-none" onClick={() => { setSortField('name'); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}>
+                          Nazwa dokumentu {sortField === 'name' && (sortDir === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th className="text-left px-4 py-3 hidden sm:table-cell cursor-pointer hover:text-blue-600 select-none" onClick={() => { setSortField('created_at'); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}>
+                          Data utworzenia {sortField === 'created_at' && (sortDir === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th className="text-left px-4 py-3 hidden sm:table-cell">Ostatnia aktualizacja</th>
+                        <th className="text-left px-4 py-3 hidden md:table-cell">Autor</th>
+                        <th className="text-left px-4 py-3 hidden md:table-cell">Kontrahent</th>
+                        <th className="text-center px-4 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paginatedDocuments.map(d => (
+                        <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => { setSelectedDocInitialTab(undefined); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}>
+                          <td className="px-4 py-3">
+                            <input type="checkbox" className="rounded border-slate-300"
+                              checked={selectedIds.has(d.id)}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => {
+                                const next = new Set(selectedIds);
+                                e.target.checked ? next.add(d.id) : next.delete(d.id);
+                                setSelectedIds(next);
+                              }} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-slate-800 truncate max-w-xs">{d.name}</div>
+                            {d.number && <div className="text-xs text-slate-400 font-mono">{d.number}</div>}
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{fmt(d.created_at)}</td>
+                          <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{d.updated_at ? fmt(d.updated_at) : '—'}</td>
+                          <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[120px]">{d.created_by_name || '—'}</td>
+                          <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[140px]">
+                            {d.contractors_clients?.name || d.contractors_clients?.company_name || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status]}`}>
+                              {STATUS_LABELS[d.status]}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/50">
+                    <p className="text-xs text-slate-500">{filteredDocuments.length} dokumentów · Strona {page} z {totalPages}</p>
+                    <div className="flex gap-1">
+                      <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                        className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                        const p = totalPages <= 5 ? i + 1 : Math.min(Math.max(page - 2, 1), totalPages - 4) + i;
+                        return (
+                          <button key={p} onClick={() => setPage(p)}
+                            className={`w-8 h-8 text-xs rounded ${p === page ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'}`}>{p}</button>
+                        );
+                      })}
+                      <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                        className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
