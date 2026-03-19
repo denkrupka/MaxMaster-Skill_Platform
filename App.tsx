@@ -131,6 +131,7 @@ const DrawingsPage = React.lazy(() => import('./pages/construction/Drawings').th
 const DMSPage = React.lazy(() => import('./pages/construction/DMS').then(m => ({ default: m.DMSPage })));
 const DocumentEditorPage = React.lazy(() => import('./pages/construction/DocumentEditorPage'));
 const DocumentViewPage = React.lazy(() => import('./pages/construction/DocumentViewPage'));
+const DocumentSignPage = React.lazy(() => import('./pages/construction/DocumentSignPage'));
 const GanttPage = React.lazy(() => import('./pages/construction/Gantt').then(m => ({ default: m.GanttPage })));
 const FinancePage = React.lazy(() => import('./pages/construction/Finance').then(m => ({ default: m.FinancePage })));
 const ProcurementPage = React.lazy(() => import('./pages/construction/Procurement').then(m => ({ default: m.ProcurementPage })));
@@ -482,6 +483,7 @@ export default function App() {
           <Route path="/construction/drawings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="drawings"><DrawingsPage /></ProtectedRoute>} />
           <Route path="/construction/dms" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><DMSPage /></ProtectedRoute>} />
           <Route path="/construction/dms/:id" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<div />}><DocumentViewPage /></React.Suspense></ProtectedRoute>} />
+          <Route path="/construction/dms/:id/sign" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<div />}><DocumentSignPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/construction/gantt" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="gantt"><GanttPage /></ProtectedRoute>} />
           <Route path="/construction/finance" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="finance"><FinancePage /></ProtectedRoute>} />
           <Route path="/construction/procurement" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="procurement"><ProcurementPage /></ProtectedRoute>} />
