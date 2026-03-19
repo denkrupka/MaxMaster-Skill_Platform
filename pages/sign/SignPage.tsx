@@ -13,6 +13,13 @@ const SignPage: React.FC = () => {
   const [signerName, setSignerName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [suggestMode, setSuggestMode] = useState(false)
+  const [suggestions, setSuggestions] = useState<Array<{original:string;suggested:string;comment:string}>>([])
+  const [selectedForSuggest, setSelectedForSuggest] = useState('')
+  const [suggestText, setSuggestText] = useState('')
+  const [suggestComment, setSuggestComment] = useState('')
+  const [showSuggestBox, setShowSuggestBox] = useState(false)
+  const [suggestionsSent, setSuggestionsSent] = useState(false)
 
   useEffect(() => { if (token) validateToken() }, [token])
 
@@ -136,8 +143,59 @@ const SignPage: React.FC = () => {
           </>}
 
           {step === 'document' && <>
-            <div className="mb-3"><h2 className="font-semibold text-gray-900">{docTitle}</h2><p className="text-xs text-gray-500">Przeczytaj dokument przed podpisaniem</p></div>
-            <div className="border rounded-xl max-h-96 overflow-y-auto mb-4 prose prose-sm max-w-none p-4" dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400 text-center py-8">Tresc dokumentu niedostepna</p>' }} />
+            <div className="mb-3 flex items-center justify-between">
+              <div><h2 className="font-semibold text-gray-900">{docTitle}</h2><p className="text-xs text-gray-500">Przeczytaj dokument przed podpisaniem</p></div>
+              <button onClick={() => setSuggestMode(v => !v)} className={`text-xs px-2 py-1 rounded-lg border ${suggestMode ? 'bg-blue-50 border-blue-300 text-blue-700' : 'text-gray-500 border-gray-200'}`}>
+                {suggestMode ? 'Tryb sugestii ON' : 'Tryb sugestii'}
+              </button>
+            </div>
+            <div className="border rounded-xl max-h-96 overflow-y-auto mb-3"
+              onMouseUp={() => {
+                if (!suggestMode) return
+                const sel = window.getSelection()?.toString().trim()
+                if (sel && sel.length > 0) { setSelectedForSuggest(sel); setShowSuggestBox(true) }
+              }}
+            >
+              <div className="prose prose-sm max-w-none p-4" dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400 text-center py-8">Tresc dokumentu niedostepna</p>' }} />
+            </div>
+            {showSuggestBox && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-3">
+                <p className="text-xs text-gray-500 mb-1">Wybrany tekst: <em>"{selectedForSuggest.slice(0,60)}"</em></p>
+                <input value={suggestText} onChange={e => setSuggestText(e.target.value)} placeholder="Proponowana zmiana..." className="w-full border rounded px-2 py-1.5 text-xs mb-1" />
+                <input value={suggestComment} onChange={e => setSuggestComment(e.target.value)} placeholder="Komentarz (opcjonalnie)..." className="w-full border rounded px-2 py-1.5 text-xs mb-2" />
+                <div className="flex gap-2">
+                  <button onClick={() => {
+                    if (!suggestText.trim()) return
+                    setSuggestions(p => [...p, {original: selectedForSuggest, suggested: suggestText, comment: suggestComment}])
+                    setSuggestText(''); setSuggestComment(''); setSelectedForSuggest(''); setShowSuggestBox(false)
+                  }} className="bg-yellow-500 text-white px-3 py-1 rounded text-xs">Dodaj sugestię</button>
+                  <button onClick={() => setShowSuggestBox(false)} className="px-3 py-1 rounded text-xs border">Anuluj</button>
+                </div>
+              </div>
+            )}
+            {suggestions.length > 0 && (
+              <div className="bg-gray-50 rounded-xl p-3 mb-3">
+                <p className="text-xs font-medium text-gray-700 mb-2">Twoje sugestie ({suggestions.length}):</p>
+                {suggestions.map((s,i) => (
+                  <div key={i} className="text-xs bg-white border rounded p-2 mb-1">
+                    <span className="text-red-500 line-through">{s.original.slice(0,40)}</span>
+                    <span className="mx-1 text-gray-400">→</span>
+                    <span className="text-green-600">{s.suggested.slice(0,40)}</span>
+                    {s.comment && <span className="text-gray-400 ml-1">({s.comment})</span>}
+                  </div>
+                ))}
+                {!suggestionsSent ? (
+                  <button onClick={async () => {
+                    await supabase.from('document_comments').insert(
+                      suggestions.map(s => ({ document_id: doc?.id || null, author_name: signerName || phone, content: `SUGESTIA: zmień "${s.original.slice(0,50)}" na "${s.suggested}"${s.comment ? '. Komentarz: '+s.comment : ''}`, field_key: 'suggestion', created_at: new Date().toISOString() }))
+                    )
+                    setSuggestionsSent(true)
+                  }} className="mt-2 w-full text-xs bg-blue-600 text-white py-1.5 rounded-lg hover:bg-blue-700">
+                    Wyślij sugestie do weryfikacji
+                  </button>
+                ) : <p className="text-xs text-green-600 mt-1">✓ Sugestie wysłane do weryfikacji</p>}
+              </div>
+            )}
             {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
             <p className="text-xs text-gray-500 mb-3">Klikajac "Podpisz" potwierdzasz zapoznanie sie z trescia i wyrazasz zgode na podpisanie elektroniczne.</p>
             <button onClick={handleSign} disabled={loading} className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50">
