@@ -28,6 +28,7 @@ serve(async (req) => {
 
     const results = []
     const postmarkKey = Deno.env.get('POSTMARK_API_KEY') || Deno.env.get('POSTMARK_SERVER_TOKEN')
+    const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'MaxMaster <noreply@maxmaster.info>'
 
     for (const signer of signers) {
       // Create token
@@ -62,25 +63,31 @@ serve(async (req) => {
         const emailResp = await fetch('https://api.postmarkapp.com/email', {
           method: 'POST',
           headers: {
-            'X-Postmark-Server-Token': postmarkKey,
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Postmark-Server-Token': postmarkKey,
           },
           body: JSON.stringify({
-            From: 'noreply@maxmaster.info',
+            From: EMAIL_FROM,
             To: signer.email,
             Subject: `Prośba o podpis: ${doc?.title || 'Dokument'}`,
             HtmlBody: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #1d4ed8;">Prośba o podpis dokumentu</h2>
-                <p>Cześć <strong>${signer.name}</strong>,</p>
-                <p>Proszę o podpisanie dokumentu: <strong>${doc?.title || 'Dokument'}</strong></p>
-                <p style="margin: 24px 0;">
-                  <a href="${signUrl}" 
-                     style="background:#1d4ed8;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">
-                    Podpisz dokument →
-                  </a>
-                </p>
-                <p style="color: #6b7280; font-size: 12px;">Link ważny 7 dni. Nie odpowiadaj na ten email.</p>
+                <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">MaxMaster</h1>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                  <h2 style="color: #1e293b;">Prośba o podpis dokumentu</h2>
+                  <p style="color: #475569;">Cześć <strong>${signer.name}</strong>,</p>
+                  <p style="color: #475569;">Proszę o podpisanie dokumentu: <strong>${doc?.title || 'Dokument'}</strong></p>
+                  <p style="margin: 24px 0;">
+                    <a href="${signUrl}"
+                       style="background:#1d4ed8;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">
+                      Podpisz dokument →
+                    </a>
+                  </p>
+                  <p style="color: #6b7280; font-size: 12px;">Link ważny 7 dni. Nie odpowiadaj na ten email.</p>
+                </div>
               </div>
             `,
             TextBody: `Proszę o podpis dokumentu "${doc?.title}". Link: ${signUrl}`,
@@ -88,7 +95,12 @@ serve(async (req) => {
           }),
         })
         const emailResult = await emailResp.json()
-        results.push({ email: signer.email, sent: emailResp.ok, messageId: emailResult.MessageID, error: emailResult.Message })
+        if (!emailResp.ok || emailResult.ErrorCode) {
+          console.error('Postmark error:', emailResult)
+          results.push({ email: signer.email, sent: false, error: emailResult.Message || 'Failed to send email via Postmark' })
+        } else {
+          results.push({ email: signer.email, sent: true, messageId: emailResult.MessageID })
+        }
       } else {
         results.push({ email: signer.email, sent: false, error: 'POSTMARK_API_KEY not configured' })
       }
@@ -98,7 +110,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }

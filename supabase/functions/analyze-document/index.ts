@@ -8,66 +8,54 @@ const corsHeaders = {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  
   try {
     const { document_id, analysis_type } = await req.json()
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-    
+    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
     const { data: doc } = await supabase.from('documents')
-      .select('title, content, document_type, status')
-      .eq('id', document_id).single()
-    
-    if (!doc) return new Response(JSON.stringify({ error: 'Document not found' }), {
-      status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-    
+      .select('title, content, document_type, status').eq('id', document_id).single()
+    if (!doc) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
     const prompts: Record<string, string> = {
-      overview: `Przeanalizuj dokument "${doc.title}" typu ${doc.document_type}. Podaj krótki przegląd (3-5 zdań).`,
-      risk: `Przeanalizuj ryzyka prawne i biznesowe dokumentu "${doc.title}". Wymień max 5 głównych ryzyk.`,
-      summary: `Napisz streszczenie dokumentu "${doc.title}" w 2-3 zdaniach.`,
-      clauses: `Sprawdź kluczowe klauzule w dokumencie "${doc.title}". Wymień ważne postanowienia.`,
+      overview: `Przeanalizuj dokument "${doc.title}" (typ: ${doc.document_type}). Podaj zwięzły przegląd w 3-5 zdaniach po polsku.`,
+      risk: `Przeanalizuj ryzyka dokumentu "${doc.title}". Wymień max 5 głównych ryzyk prawnych i biznesowych po polsku.`,
+      summary: `Napisz krótkie streszczenie dokumentu "${doc.title}" w 2-3 zdaniach po polsku.`,
+      clauses: `Sprawdź kluczowe klauzule w dokumencie "${doc.title}". Wymień najważniejsze postanowienia po polsku.`,
     }
-    
-    const prompt = prompts[analysis_type] || prompts.overview
-    const docContext = doc.content ? `\n\nTreść dokumentu:\n${String(doc.content).slice(0, 2000)}` : ''
-    
-    // Try OpenAI
-    const openaiKey = Deno.env.get('OPENAI_API_KEY')
+    const prompt = (prompts[analysis_type] || prompts.overview) + (doc.content ? `\n\nTreść:\n${String(doc.content).slice(0, 3000)}` : '')
+
     let result = ''
-    
-    if (openaiKey) {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+
+    // Try Gemini first
+    const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_AI_API_KEY')
+    // CLAUDE_API_KEY is the name used in Supabase Secrets (not ANTHROPIC_API_KEY)
+    const claudeKey = Deno.env.get('CLAUDE_API_KEY') || Deno.env.get('ANTHROPIC_API_KEY')
+
+    if (geminiKey) {
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt + docContext }],
-          max_tokens: 500,
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 600 } })
       })
       const data = await resp.json()
-      result = data.choices?.[0]?.message?.content || 'Brak odpowiedzi'
-    } else {
-      result = `Analiza dokumentu "${doc.title}":\n\nTyp: ${doc.document_type}\nStatus: ${doc.status}\n\nAby korzystać z analizy AI, skonfiguruj klucz OPENAI_API_KEY w Supabase Secrets.`
+      result = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
     }
-    
-    // Save to document_ai_analyses
-    await supabase.from('document_ai_analyses').upsert({
-      document_id,
-      analysis_type,
-      result,
-      created_at: new Date().toISOString(),
-    }).catch(() => {})
-    
-    return new Response(JSON.stringify({ ok: true, result, analysis_type }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+
+    // Fallback to Claude
+    if (!result && claudeKey) {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-haiku-20240307', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+      })
+      const data = await resp.json()
+      result = data.content?.[0]?.text || ''
+    }
+
+    if (!result) result = `Brak klucza API (GEMINI_API_KEY lub CLAUDE_API_KEY) w Supabase Secrets.`
+
+    return new Response(JSON.stringify({ ok: true, result, analysis_type }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
