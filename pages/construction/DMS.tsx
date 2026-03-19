@@ -941,6 +941,45 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
   // Quick edit
   const [quickEditMode, setQuickEditMode] = useState(false);
   const [editData, setEditData] = useState<any>({});
+  // Document content editor
+  const [editNotes, setEditNotes] = useState(doc.notes || '');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [pdfPreviewError, setPdfPreviewError] = useState<string|null>(null);
+
+  // Rendered template HTML for preview
+  const renderedPreviewHtml = useMemo(() => {
+    try {
+      return doc.document_templates
+        ? renderTemplate(doc.document_templates as any, doc.data)
+        : '';
+    } catch { return ''; }
+  }, [doc.document_templates, doc.data]);
+
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
+    try {
+      await updateDocument(doc.id, { notes: editNotes });
+      onToast({ type: 'success', message: 'Notatki zapisane' });
+    } catch (err: any) {
+      onToast({ type: 'error', message: 'Błąd zapisu: ' + err.message });
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handlePdfPreview = async () => {
+    setPdfPreviewError(null);
+    try {
+      const url = await generatePDF(doc.id, doc.company_id);
+      if (url) {
+        setPdfPreviewUrl(url);
+      } else {
+        setPdfPreviewError('Nie udało się wygenerować PDF — brak URL.');
+      }
+    } catch (err: any) {
+      setPdfPreviewError('Błąd generowania PDF: ' + (err.message || 'nieznany błąd'));
+    }
+  };
 
   useEffect(() => { loadData(); }, [detailTab, doc.id]);
   useEffect(() => { if (initialTab) setDetailTab(initialTab); }, [initialTab, doc.id]);
@@ -1071,12 +1110,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
             }} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg" aria-label="Pobierz PDF">
               <Download className="w-3.5 h-3.5" /> PDF
             </button>
-            <button onClick={async () => {
-              try {
-                const url = await generatePDF(doc.id, doc.company_id);
-                setPdfPreviewUrl(url);
-              } catch { onToast({ type: 'error', message: 'Błąd generowania PDF' }); }
-            }} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 rounded-lg hover:bg-slate-200">
+            <button onClick={handlePdfPreview} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 rounded-lg hover:bg-slate-200">
               <Eye className="w-3.5 h-3.5" /> Podgląd
             </button>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg" aria-label="Zamknij">✕</button>
@@ -1144,6 +1178,46 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
                   </div>
                 </div>
               )}
+              {/* Document preview & content editor */}
+              {renderedPreviewHtml && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-slate-500">Podgląd dokumentu</p>
+                  <div className="border border-slate-200 rounded-lg p-3 prose prose-sm max-h-48 overflow-y-auto text-slate-700 bg-white"
+                    dangerouslySetInnerHTML={{ __html: renderedPreviewHtml }} />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-500">Notatki / treść dodatkowa</label>
+                <textarea
+                  value={editNotes}
+                  onChange={e => setEditNotes(e.target.value)}
+                  rows={6}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Dodaj notatki do dokumentu..."
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveNotes}
+                    disabled={savingNotes}
+                    className="inline-flex items-center gap-1 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                    {savingNotes ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    Zapisz notatki
+                  </button>
+                  <button
+                    onClick={handlePdfPreview}
+                    className="inline-flex items-center gap-1 px-4 py-1.5 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
+                    <Eye className="w-3.5 h-3.5" /> Otwórz PDF
+                  </button>
+                </div>
+                {pdfPreviewError && (
+                  <p className="text-xs text-red-500 mt-1">{pdfPreviewError}</p>
+                )}
+              </div>
+
+              <hr className="border-slate-200" />
+
+              <p className="text-xs font-medium text-slate-500">Historia wersji</p>
               {!Array.isArray(versions) || versions.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">Brak wersji</p>
               ) : versions.map(v => (
@@ -1417,9 +1491,20 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
           <div className="bg-white rounded-xl w-[90vw] h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b">
               <h3 className="font-medium">Podgląd PDF</h3>
-              <button onClick={() => setPdfPreviewUrl(null)}><X className="w-5 h-5" /></button>
+              <div className="flex items-center gap-2">
+                <a href={pdfPreviewUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <ExternalLink className="w-3.5 h-3.5" /> Otwórz w nowej karcie
+                </a>
+                <button onClick={() => setPdfPreviewUrl(null)}><X className="w-5 h-5" /></button>
+              </div>
             </div>
-            <iframe src={pdfPreviewUrl} className="flex-1 w-full" />
+            <iframe
+              src={pdfPreviewUrl}
+              className="flex-1 w-full"
+              onError={() => setPdfPreviewError('Nie udało się załadować PDF w podglądzie.')}
+              title="Podgląd PDF"
+            />
           </div>
         </div>
       )}
