@@ -761,27 +761,27 @@ export async function createSignatureRequest(
   userId: string,
   signers: Array<{ name: string; email: string; message?: string }>,
 ): Promise<any[]> {
-  const requests = buildCreateSignatureRequestRows({
-    documentId,
-    companyId,
-    userId,
-    signers,
+  const { data: responseData, error: invokeError } = await supabase.functions.invoke('send-signature-request', {
+    body: {
+      document_id: documentId,
+      company_id: companyId,
+      user_id: userId,
+      signers: signers.map((s, i) => ({
+        email: s.email,
+        name: s.name,
+        message: s.message,
+        role: 'signer',
+        order: i + 1,
+      })),
+    },
   });
 
-  const { data, error } = await supabase
-    .from('signature_requests')
-    .insert(requests)
-    .select();
+  if (invokeError) throw invokeError;
 
-  if (error) throw error;
+  const data = responseData?.data || responseData || [];
+  const results = Array.isArray(data) ? data : [data];
 
-  await syncDocumentStatusForSigning(documentId);
-  await logDocumentEvent(documentId, 'signature_requested', {
-    signer_count: signers.length,
-    signers: signers.map((signer) => ({ name: signer.name, email: signer.email })),
-  });
-
-  return (data || []).map((request) => {
+  return results.map((request: any) => {
     const normalized = normalizeSignatureRequestForSigning(request);
     return {
       ...normalized,
