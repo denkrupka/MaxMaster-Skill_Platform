@@ -945,6 +945,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
   const [editNotes, setEditNotes] = useState(doc.notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [pdfPreviewError, setPdfPreviewError] = useState<string|null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
 
   // Rendered template HTML for preview
   const renderedPreviewHtml = useMemo(() => {
@@ -970,14 +971,14 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
   const handlePdfPreview = async () => {
     setPdfPreviewError(null);
     try {
-      const url = await generatePDF(doc.id, doc.company_id);
+      const url = await generatePDF(doc.id);
       if (url) {
         setPdfPreviewUrl(url);
       } else {
-        setPdfPreviewError('Nie udało się wygenerować PDF — brak URL.');
+        setPdfPreviewError('Nie udało się wygenerować PDF — brak URL. Możesz wgrać plik ręcznie.');
       }
     } catch (err: any) {
-      setPdfPreviewError('Błąd generowania PDF: ' + (err.message || 'nieznany błąd'));
+      setPdfPreviewError('Błąd generowania PDF: ' + (err.message || 'nieznany błąd') + '. Możesz wgrać plik ręcznie.');
     }
   };
 
@@ -1101,7 +1102,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
             </button>
             <button onClick={async () => {
               try {
-                const url = await generatePDF(doc.id, doc.company_id);
+                const url = await generatePDF(doc.id);
                 window.open(url, '_blank');
                 await logDocumentEvent(doc.id, 'pdf_downloaded');
               } catch (err: any) {
