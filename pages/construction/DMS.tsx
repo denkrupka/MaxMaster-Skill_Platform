@@ -870,6 +870,13 @@ const SettingsTab = ({ companyId }: { companyId: string }) => {
           </label>
         </div>
       </div>
+
+      {/* Wymagane klauzule umowne */}
+      <div className="bg-white rounded-xl border p-5 mt-4">
+        <h3 className="font-semibold text-gray-900 mb-1">Wymagane klauzule umowne</h3>
+        <p className="text-xs text-gray-500 mb-4">AI sprawdzi czy te klauzule są obecne w analizowanym dokumencie.</p>
+        <RequiredClausesEditor />
+      </div>
     </div>
   );
 };
@@ -2122,5 +2129,53 @@ export const DMSPage: React.FC = () => {
     </DocumentsErrorBoundary>
   );
 };
+
+const RequiredClausesEditor: React.FC = () => {
+  const [clauses, setClauses] = React.useState<string[]>([])
+  const [newClause, setNewClause] = React.useState('')
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    supabase.from('document_settings').select('required_clauses').eq('key', 'global').single()
+      .then(({ data }) => { if (data?.required_clauses) setClauses(data.required_clauses); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const save = async (updated: string[]) => {
+    await supabase.from('document_settings').upsert({ key: 'global', required_clauses: updated }, { onConflict: 'key' })
+  }
+
+  const add = () => {
+    if (!newClause.trim()) return
+    const updated = [...clauses, newClause.trim()]
+    setClauses(updated); save(updated); setNewClause('')
+  }
+
+  const remove = (i: number) => {
+    const updated = clauses.filter((_, idx) => idx !== i)
+    setClauses(updated); save(updated)
+  }
+
+  if (loading) return <div className="text-xs text-gray-400">Ładowanie...</div>
+
+  return (
+    <div>
+      <div className="space-y-2 mb-3">
+        {clauses.length === 0 && <p className="text-sm text-gray-400">Brak wymaganych klauzul. Dodaj poniżej.</p>}
+        {clauses.map((cl, i) => (
+          <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+            <span className="text-xs text-gray-500 w-5">{i+1}.</span>
+            <span className="text-sm text-gray-800 flex-1">{cl}</span>
+            <button onClick={() => remove(i)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input value={newClause} onChange={e => setNewClause(e.target.value)} placeholder="np. Kara umowna za opóźnienie..." onKeyDown={e => e.key === 'Enter' && add()} className="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+        <button onClick={add} className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700">Dodaj</button>
+      </div>
+    </div>
+  )
+}
 
 export default DMSPage;

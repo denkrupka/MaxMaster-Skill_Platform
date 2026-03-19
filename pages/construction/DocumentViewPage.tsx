@@ -162,6 +162,7 @@ const DocumentViewPage: React.FC = () => {
             )}
           </div>
 
+          <button onClick={() => navigate(`/construction/dms/${id}/certificate`)} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 text-gray-700">Certyfikat</button>
           <button onClick={() => navigate(`/construction/dms/${id}/sign`)} className="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
             Wyślij do podpisu
           </button>
