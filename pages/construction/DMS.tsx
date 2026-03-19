@@ -268,6 +268,11 @@ const TemplateModal = ({
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Ważny do</label>
         <input type="date" value={(formData as any).expires_at?String((formData as any).expires_at).split("T")[0]:""} onChange={e=>(setFormData as any)(p=>({...p,expires_at:e.target.value||null}))} className="border rounded-lg px-3 py-2 w-full text-sm"/></div>
       </div>
+      {/* Faktura */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Powiązana faktura</label>
+        <input type="text" value={(formData as any).invoice_id || ''} onChange={e => (setFormData as any)(p => ({...p, invoice_id: e.target.value || null}))} placeholder="ID faktury (opcjonalnie)" className="border rounded-lg px-3 py-2 w-full text-sm" />
+      </div>
             Zapisz
           </button>
         </div>
@@ -347,6 +352,13 @@ const DocumentWizard = ({
 
   const save = async (status: 'draft' | 'completed') => {
     if (!tpl) return;
+
+    const docTitle = formData['contract_name'] || formData['document_name'] || '';
+    if (!docTitle.trim()) {
+      setErr('Tytuł dokumentu jest wymagany');
+      setStep(2);
+      return;
+    }
 
     const stepErrors = getDocumentWizardStep2Errors(tpl.variables || [], formData);
     if (stepErrors.length > 0) {
@@ -1028,18 +1040,26 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
 
     setCreatingSignature(true);
     try {
-      const [request] = await createSignatureRequest(doc.id, companyId, userId, [
-        { name: signatureForm.name.trim(), email: signatureForm.email.trim(), message: signatureForm.message.trim() || undefined },
-      ]);
+      const emails = signatureForm.email.split(',').map(e => e.trim()).filter(Boolean);
+      const signers = emails.map(email => ({
+        name: signatureForm.name.trim(),
+        email,
+        message: signatureForm.message.trim() || undefined,
+      }));
+      const [request] = await createSignatureRequest(doc.id, companyId, userId, signers);
       const url = request?.signing_route?.absoluteUrl || `${window.location.origin}/maxmaster-preview/#/sign/${request.signing_token}`;
       setLinkResult({
         title: 'Prośba o podpis gotowa',
-        subtitle: `${signatureForm.name} otrzyma link do podpisu.`,
+        subtitle: emails.length > 1
+          ? `${emails.length} osób otrzyma link do podpisu.`
+          : `${signatureForm.name} otrzyma link do podpisu.`,
         url,
       });
       setSignatureForm({ name: '', email: '', message: '' });
       setSignatureErrors({});
-      await logDocumentEvent(doc.id, 'signature_requested', { signer_name: signatureForm.name.trim(), signer_email: signatureForm.email.trim() });
+      for (const email of emails) {
+        await logDocumentEvent(doc.id, 'signature_requested', { signer_name: signatureForm.name.trim(), signer_email: email });
+      }
       await loadData();
       onToast({ message: 'Utworzono prośbę o podpis', type: 'success' });
     } catch (err: any) {
@@ -1271,7 +1291,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
                     onChange={e => setSignatureForm(prev => ({ ...prev, email: e.target.value }))}
                     error={signatureErrors.email}
                     required
-                    placeholder="jan@firma.pl"
+                    placeholder="jan@firma.pl, anna@firma.pl (wiele adresów po przecinku)"
                   />
                 </div>
                 <FormTextarea
