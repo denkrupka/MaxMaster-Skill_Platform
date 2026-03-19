@@ -963,7 +963,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [linkResult, setLinkResult] = useState<{ title: string; url: string; subtitle?: string } | null>(null);
-  const [signatureForm, setSignatureForm] = useState({ name: '', email: '', message: '' });
+  const [signatureForm, setSignatureForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [signatureErrors, setSignatureErrors] = useState<Record<string, string>>({});
   const [creatingSignature, setCreatingSignature] = useState(false);
   const [showAddAutomation, setShowAddAutomation] = useState(false);
@@ -1073,6 +1073,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
       const signers = emails.map(email => ({
         name: signatureForm.name.trim(),
         email,
+        phone: signatureForm.phone.trim() || undefined,
         message: signatureForm.message.trim() || undefined,
       }));
       const [request] = await createSignatureRequest(doc.id, companyId, userId, signers);
@@ -1084,7 +1085,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
           : `${signatureForm.name} otrzyma link do podpisu.`,
         url,
       });
-      setSignatureForm({ name: '', email: '', message: '' });
+      setSignatureForm({ name: '', email: '', phone: '', message: '' });
       setSignatureErrors({});
       for (const email of emails) {
         await logDocumentEvent(doc.id, 'signature_requested', { signer_name: signatureForm.name.trim(), signer_email: email });
@@ -1304,7 +1305,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
                   <p className="text-sm font-medium text-blue-700">Wyślij zapytanie o podpis</p>
                   <p className="text-xs text-blue-600 mt-1">P0 flow: uzupełnij dane, kliknij „Podpis”, a na ekranie pokaże się gotowy link do podpisu.</p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <FormInput
                     label="Imię i nazwisko"
                     value={signatureForm.name}
@@ -1321,6 +1322,13 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
                     error={signatureErrors.email}
                     required
                     placeholder="jan@firma.pl, anna@firma.pl (wiele adresów po przecinku)"
+                  />
+                  <FormInput
+                    label="Telefon (opcjonalnie, do SMS)"
+                    type="tel"
+                    value={signatureForm.phone}
+                    onChange={e => setSignatureForm(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="+48 600 000 000"
                   />
                 </div>
                 <FormTextarea
@@ -1933,11 +1941,12 @@ export const DMSPage: React.FC = () => {
                           <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('versions'); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}
                             aria-label="Podgląd dokumentu" title="Podgląd dokumentu"
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <Eye className="w-3.5 h-3.5" /> Podgląd
+                            <Eye className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Podgląd</span>
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('email'); setSelectedDocAutoOpenEmail(true); setSelectedDoc(d); }}
+                            aria-label="Wyślij email" title="Wyślij email"
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <Mail className="w-3.5 h-3.5" /> Wyślij
+                            <Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Wyślij</span>
                           </button>
                           <button onClick={async (e) => {
                             e.stopPropagation();
@@ -1949,11 +1958,12 @@ export const DMSPage: React.FC = () => {
                             }
                           }}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <LinkIcon className="w-3.5 h-3.5" /> Link
+                            <LinkIcon className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Link</span>
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('signatures'); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}
+                            aria-label="Podpis" title="Podpis"
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                            <PenSquare className="w-3.5 h-3.5" /> Podpis
+                            <PenSquare className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Podpis</span>
                           </button>
                         </div>
                       </td>

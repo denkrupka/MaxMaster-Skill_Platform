@@ -100,6 +100,21 @@ serve(async (req) => {
           results.push({ email: signer.email, sent: false, error: emailResult.Message || 'Failed to send email via Postmark' })
         } else {
           results.push({ email: signer.email, sent: true, messageId: emailResult.MessageID })
+
+          // SMS notification if phone provided
+          if (signer.phone) {
+            try {
+              await supabase.functions.invoke('send-sms', {
+                body: {
+                  phoneNumber: signer.phone,
+                  message: `MaxMaster: Masz dokument do podpisania. Kliknij: ${signUrl}`
+                }
+              })
+              console.log('SMS sent to', signer.phone)
+            } catch (smsErr) {
+              console.warn('SMS failed (non-critical):', smsErr)
+            }
+          }
         }
       } else {
         results.push({ email: signer.email, sent: false, error: 'POSTMARK_API_KEY not configured' })
