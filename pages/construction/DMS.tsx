@@ -2024,7 +2024,7 @@ export const DMSPage: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {paginatedDocuments.map(d => (
-                        <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => { setSelectedDocInitialTab(undefined); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}>
+                        <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => navigate(`/construction/dms/${d.id}`)}>
                           <td className="px-4 py-3">
                             <input type="checkbox" className="rounded border-slate-300"
                               checked={selectedIds.has(d.id)}
