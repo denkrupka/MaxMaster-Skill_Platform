@@ -831,6 +831,35 @@ const SettingsTab = ({ companyId }: { companyId: string }) => {
           Zapisz ustawienia
         </button>
       </div>
+
+      {/* ── Automatyzacje ── */}
+      <div className="border border-slate-200 rounded-xl p-6 bg-white">
+        <h3 className="text-lg font-semibold text-slate-800 mb-1">⚡ Automatyzacje dokumentów</h3>
+        <p className="text-sm text-slate-500 mb-4">Włącz automatyczne akcje dla dokumentów w systemie.</p>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+            <input type="checkbox" className="rounded border-slate-300 text-blue-600 w-4 h-4" defaultChecked />
+            <div>
+              <p className="text-sm font-medium text-slate-700">Automatyczne przypomnienia o podpisie</p>
+              <p className="text-xs text-slate-500">Wyślij przypomnienie po 3 dniach braku podpisu</p>
+            </div>
+          </label>
+          <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+            <input type="checkbox" className="rounded border-slate-300 text-blue-600 w-4 h-4" />
+            <div>
+              <p className="text-sm font-medium text-slate-700">Automatyczne archiwizowanie</p>
+              <p className="text-xs text-slate-500">Archiwizuj dokumenty po upływie terminu ważności</p>
+            </div>
+          </label>
+          <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+            <input type="checkbox" className="rounded border-slate-300 text-blue-600 w-4 h-4" />
+            <div>
+              <p className="text-sm font-medium text-slate-700">Powiadomienia email o zmianach statusu</p>
+              <p className="text-xs text-slate-500">Informuj właściciela dokumentu o każdej zmianie</p>
+            </div>
+          </label>
+        </div>
+      </div>
     </div>
   );
 };
