@@ -132,6 +132,7 @@ const DMSPage = React.lazy(() => import('./pages/construction/DMS').then(m => ({
 const DocumentEditorPage = React.lazy(() => import('./pages/construction/DocumentEditorPage'));
 const DocumentViewPage = React.lazy(() => import('./pages/construction/DocumentViewPage'));
 const DocumentSignPage = React.lazy(() => import('./pages/construction/DocumentSignPage'));
+const DocumentCertificatePage = React.lazy(() => import('./pages/sign/DocumentCertificatePage'));
 const GanttPage = React.lazy(() => import('./pages/construction/Gantt').then(m => ({ default: m.GanttPage })));
 const FinancePage = React.lazy(() => import('./pages/construction/Finance').then(m => ({ default: m.FinancePage })));
 const ProcurementPage = React.lazy(() => import('./pages/construction/Procurement').then(m => ({ default: m.ProcurementPage })));
