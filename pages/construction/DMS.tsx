@@ -908,7 +908,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
   initialTab?: 'versions'|'signatures'|'comments'|'ai'|'audit'|'links'|'email'|'automations';
   autoOpenEmail?: boolean;
 }) {
-  const [detailTab, setDetailTab] = useState<'versions'|'signatures'|'comments'|'ai'|'audit'|'links'|'email'|'automations'>(initialTab ?? 'versions');
+  const [detailTab, setDetailTab] = useState<'versions'|'signatures'|'comments'|'ai'|'audit'|'email'>(initialTab ?? 'versions');
   const [versions, setVersions] = useState<any[]>([]);
   const [signatures, setSignatures] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
@@ -952,10 +952,10 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
       if (detailTab === 'versions') setVersions(await getDocumentVersions(doc.id));
       else if (detailTab === 'signatures') setSignatures(await getSignatureRequests(doc.id));
       else if (detailTab === 'audit') { setAuditPage(1); setAuditLog(await getDocumentAuditLog(doc.id)); }
-      else if (detailTab === 'links') setPublicLinks(await getPublicLinks(doc.id));
+      // links tab removed
       else if (detailTab === 'comments') setComments(await getDocumentComments(doc.id));
       else if (detailTab === 'ai') setAnalyses(await getDocumentAnalyses(doc.id));
-      else if (detailTab === 'automations') setAutomations(await getDocumentAutomations(companyId));
+      // automations tab removed from modal
     } finally { setLoading(false); }
   }
 
@@ -988,7 +988,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
       const [request] = await createSignatureRequest(doc.id, companyId, userId, [
         { name: signatureForm.name.trim(), email: signatureForm.email.trim(), message: signatureForm.message.trim() || undefined },
       ]);
-      const url = request?.signing_route?.absoluteUrl || `${window.location.origin}/sign/${request.signing_token}`;
+      const url = request?.signing_route?.absoluteUrl || `${window.location.origin}/maxmaster-preview/#/sign/${request.signing_token}`;
       setLinkResult({
         title: 'Prośba o podpis gotowa',
         subtitle: `${signatureForm.name} otrzyma link do podpisu.`,
@@ -1039,9 +1039,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
     { key: 'comments' as const, label: 'Komentarze', icon: '💬' },
     { key: 'ai' as const, label: 'AI', icon: '🤖' },
     { key: 'audit' as const, label: 'Historia', icon: '📜' },
-    { key: 'links' as const, label: 'Linki', icon: '🔗' },
     { key: 'email' as const, label: 'Email', icon: '✉️' },
-    { key: 'automations' as const, label: 'Automatyzacje', icon: '⚙️' },
   ];
 
   return (
@@ -1087,7 +1085,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
 
         <div className="flex border-b px-4 gap-1">
           {tabs.map(t => (
-            <button key={t.key} onClick={() => setDetailTab(t.key)}
+            <button key={t.key} onClick={() => { setDetailTab(t.key); if (t.key !== 'signatures') setLinkResult(null); }}
               className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
                 detailTab === t.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}>
@@ -1097,7 +1095,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {linkResult && (
+          {linkResult && detailTab === 'signatures' && (
             <ActionResultCard
               title={linkResult.title}
               subtitle={linkResult.subtitle}
