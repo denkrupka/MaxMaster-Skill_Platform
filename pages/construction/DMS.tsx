@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FileText, Plus, Search, Eye, Download, Pencil, Trash2, Archive,
   ChevronLeft, ChevronRight, Check, X, Loader2, Mail, Link as LinkIcon, PenSquare, Copy, ExternalLink,
@@ -608,13 +609,22 @@ const DocumentView = ({ docId, onClose, onRefresh }: { docId: string; onClose: (
           )}
         </div>
         <div className="flex justify-between px-6 py-4 border-t">
-          <button
-            onClick={() => doc && handleDownloadPDF(doc.id)}
-            disabled={pdfLoading || !doc}
-            aria-label="Pobierz PDF" title="Pobierz PDF"
-            className="flex items-center gap-2 px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">
-            {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Pobierz PDF
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => doc && handleDownloadPDF(doc.id)}
+              disabled={pdfLoading || !doc}
+              aria-label="Pobierz PDF" title="Pobierz PDF"
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">
+              {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Pobierz PDF
+            </button>
+            <button
+              onClick={() => doc && navigate(`/construction/dms/${doc.id}`)}
+              disabled={!doc}
+              aria-label="Edytuj dokument" title="Edytuj dokument"
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium">
+              <Pencil className="w-4 h-4" /> Edytuj
+            </button>
+          </div>
           {doc?.status !== 'archived' && (
             <button onClick={archive}
               className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
@@ -1626,6 +1636,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export const DMSPage: React.FC = () => {
+  const navigate = useNavigate();
   const { state } = useAppContext();
   const companyId = state.currentUser?.company_id ?? '';
   const userId = state.currentUser?.id ?? '';
@@ -1980,6 +1991,11 @@ export const DMSPage: React.FC = () => {
                       <td className="px-4 py-3 hidden lg:table-cell text-slate-400">{fmt(d.created_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 flex-wrap justify-end">
+                          <button onClick={(e) => { e.stopPropagation(); navigate(`/construction/dms/${d.id}`); }}
+                            aria-label="Edytuj dokument" title="Edytuj dokument"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 hover:text-blue-800 rounded hover:bg-blue-50 transition-colors font-medium">
+                            <Pencil className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Edytuj</span>
+                          </button>
                           <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('versions'); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}
                             aria-label="Podgląd dokumentu" title="Podgląd dokumentu"
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
