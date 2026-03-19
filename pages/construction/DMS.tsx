@@ -548,6 +548,7 @@ const DocumentView = ({ docId, onClose, onRefresh }: { docId: string; onClose: (
     if (!doc) return;
     try {
       await updateDocument(doc.id, { status: 'archived' });
+      await logDocumentEvent(doc.id, 'archived', { previous_status: doc.status });
       onRefresh(); onClose();
     } catch {
       setViewError('Nie udało się zarchiwizować dokumentu');
@@ -960,6 +961,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
     setSavingNotes(true);
     try {
       await updateDocument(doc.id, { notes: editNotes });
+      await logDocumentEvent(doc.id, 'notes_updated');
       onToast({ type: 'success', message: 'Notatki zapisane' });
     } catch (err: any) {
       onToast({ type: 'error', message: 'Błąd zapisu: ' + err.message });
@@ -1007,6 +1009,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
         subtitle: 'Możesz go skopiować albo od razu otworzyć w nowej karcie.',
         url: link.url,
       });
+      await logDocumentEvent(doc.id, 'public_link_created');
       await loadData();
       onToast({ message: 'Utworzono link publiczny', type: 'success' });
     } catch (err: any) {
@@ -1036,6 +1039,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
       });
       setSignatureForm({ name: '', email: '', message: '' });
       setSignatureErrors({});
+      await logDocumentEvent(doc.id, 'signature_requested', { signer_name: signatureForm.name.trim(), signer_email: signatureForm.email.trim() });
       await loadData();
       onToast({ message: 'Utworzono prośbę o podpis', type: 'success' });
     } catch (err: any) {
@@ -1066,6 +1070,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
         action_config: { template: 'signature_followup' },
       });
       setShowAddAutomation(false);
+      await logDocumentEvent(doc.id, 'automation_created', { automation_name: automationForm.name.trim() });
       await loadData();
       onToast({ message: 'Automatyzacja zapisana', type: 'success' });
     } catch (err: any) {
@@ -1169,6 +1174,12 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
                   <div className="flex gap-2">
                     <button onClick={async () => {
                       await updateDocument(doc.id, editData);
+                      if (editData.status && editData.status !== doc.status) {
+                        await logDocumentEvent(doc.id, 'status_changed', { from: doc.status, to: editData.status });
+                      }
+                      if (editData.name && editData.name !== doc.name) {
+                        await logDocumentEvent(doc.id, 'renamed', { from: doc.name, to: editData.name });
+                      }
                       onToast({ type: 'success', message: 'Dokument zaktualizowany' });
                       setQuickEditMode(false);
                       setEditData({});
@@ -1811,6 +1822,7 @@ export const DMSPage: React.FC = () => {
                   const count = selectedIds.size;
                   for (const id of selectedIds) {
                     await supabase.from('documents').update({ status: 'archived' }).eq('id', id);
+                    await logDocumentEvent(id, 'archived', { bulk: true });
                   }
                   setSelectedIds(new Set()); loadDocuments();
                   setToast({ message: `Zarchiwizowano ${count} dokumentów`, type: 'success' });
