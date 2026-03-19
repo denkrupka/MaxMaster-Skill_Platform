@@ -8,14 +8,12 @@
 - **Tailwind CSS**
 - **Lucide React** (иконки)
 - **Recharts** (графики)
-- **Google Gemini API** (AI функции)
 - **Supabase** (база данных и аутентификация)
 
 ## Как запустить локально
 Так как проект использует [ES Modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) и `importmap`, его **нельзя** просто открыть как файл `index.html`. Вам нужен локальный сервер.
 
 1. Установите расширение **Live Server** в VS Code или используйте любой другой статический сервер.
-2. Создайте файл `.env` на основе `.env.example` и добавьте свой Google Gemini API ключ.
 3. Запустите сервер из корневой директории проекта.
 4. Откройте `http://127.0.0.1:5500` .
 
@@ -25,17 +23,13 @@
 
 ### Быстрая настройка:
 
-1. **Получите Google Gemini API ключ:**
    - Перейдите на https://ai.google.dev/
    - Нажмите "Get API key" и создайте ключ
 
 2. **Добавьте ключ в Supabase:**
    ```bash
    # Через Supabase CLI
-   supabase secrets set GEMINI_API_KEY=your_api_key_here
    ```
-
-   Или через Dashboard: **Settings** → **Secrets** → добавьте `GEMINI_API_KEY`
 
 3. **Задеплойте Edge Function:**
    ```bash

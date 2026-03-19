@@ -51,7 +51,6 @@
 
 4. **Установите секреты (API ключи):**
    ```bash
-   supabase secrets set GEMINI_API_KEY=your_actual_api_key_here
    ```
 
 5. **Задеплойте функцию:**
@@ -76,9 +75,6 @@
    - Либо загрузите папку `supabase/functions/parse-cv`
    - Либо скопируйте код из `index.ts`
 5. В **Settings** → **Secrets** добавьте:
-   - `GEMINI_API_KEY` = ваш API ключ от Google Gemini
-
-## Получение Google Gemini API ключа
 
 1. Перейдите на https://ai.google.dev/
 2. Нажмите "Get API key"

@@ -19,6 +19,7 @@ import { ModuleAccessDeniedPage } from './pages/ModuleAccessDenied';
 import { OfferLandingPage } from './pages/public/OfferLanding';
 import { OfferRequestLandingPage } from './pages/public/OfferRequestLanding';
 import { AdminUsersPage } from './pages/admin/Users';
+import { SigningPage } from './components/documents';
 
 // SuperAdmin Pages
 import { SuperAdminUsersPage } from './pages/superadmin/Users';
@@ -119,6 +120,9 @@ import { CandidateRegisterPage } from './pages/candidate/Register';
 import { CandidateSimulationPage } from './pages/candidate/Simulation';
 import { CandidateThankYouPage } from './pages/candidate/ThankYou';
 import { CompanyRegisterPage } from './pages/CompanyRegister';
+
+import SignPage from './pages/sign/SignPage'
+import ContractorRequestDetailPage from './pages/construction/ContractorRequestDetailPage'
 
 // Construction Module Pages — lazy loaded for code splitting
 const EstimatesPage = React.lazy(() => import('./pages/construction/Estimates').then(m => ({ default: m.EstimatesPage })));
@@ -274,6 +278,11 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
 };
 
 // Component to handle email confirmation redirects
+const SigningRoute = () => {
+  const token = window.location.hash.match(/^#\/sign\/([^?]+)/)?.[1] || '';
+  return <SigningPage token={decodeURIComponent(token)} />;
+};
+
 const EmailConfirmationHandler = () => {
   const [redirecting, setRedirecting] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -425,6 +434,7 @@ export default function App() {
           <Route path="/register" element={<CompanyRegisterPage />} />
           <Route path="/offer/:token" element={<OfferLandingPage />} />
           <Route path="/offer-request/:token" element={<OfferRequestLandingPage />} />
+          <Route path="/sign/:token" element={<SigningRoute />} />
 
           {/* SuperAdmin Routes */}
           <Route path="/superadmin/dashboard" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminDashboard /></ProtectedRoute>} />

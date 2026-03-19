@@ -6,6 +6,13 @@
  */
 
 import { supabase } from './supabase';
+import {
+  buildCreateSignatureRequestRows,
+  buildPublicSigningRoute,
+  getCanonicalSigningToken,
+  normalizeSignatureRequestForSigning,
+  normalizeSignatureStatus,
+} from './documentSigning';
 import type {
   DocumentTemplate,
   DocumentRecord,
@@ -144,6 +151,23 @@ export async function fetchDocuments(
   companyId: string,
   filters?: DocumentFilters,
 ): Promise<DocumentRecord[]> {
+  let allowedTemplateIds: string[] | null = null;
+
+  if (filters?.templateType) {
+    const { data: templates, error: templatesError } = await supabase
+      .from('document_templates')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('type', filters.templateType);
+
+    if (templatesError) throw templatesError;
+    allowedTemplateIds = (templates ?? []).map((template) => template.id);
+
+    if (allowedTemplateIds.length === 0) {
+      return [];
+    }
+  }
+
   let query = supabase
     .from('documents')
     .select('*, document_templates(name, type)')
@@ -153,8 +177,8 @@ export async function fetchDocuments(
   if (filters?.status) {
     query = query.eq('status', filters.status);
   }
-  if (filters?.templateType) {
-    query = query.eq('document_templates.type', filters.templateType);
+  if (allowedTemplateIds) {
+    query = query.in('template_id', allowedTemplateIds);
   }
   if (filters?.projectId) {
     query = query.eq('project_id', filters.projectId);
@@ -222,7 +246,7 @@ export async function deleteDocument(id: string): Promise<void> {
 
 /**
  * Fetch data sources for autofill:
- *  - contractor (from contractor_clients table)
+ *  - contractor (from contractors_clients table)
  *  - project (from projects table)
  *  - company (from companies table)
  */
@@ -236,13 +260,13 @@ export async function getAutofillData(
   // Fetch contractor data
   if (contractorId) {
     const { data: contractor } = await supabase
-      .from('contractor_clients')
+      .from('contractors_clients')
       .select('*')
       .eq('id', contractorId)
       .single();
     result.contractor = contractor ?? undefined;
 
-    // Fallback: try the contractors table if contractor_clients returned nothing
+    // Fallback: try the contractors table if contractors_clients returned nothing
     if (!result.contractor) {
       const { data: contractorAlt } = await supabase
         .from('contractors')
@@ -657,6 +681,16 @@ export async function logDocumentEvent(
   });
 }
 
+async function syncDocumentStatusForSigning(documentId: string): Promise<void> {
+  const { error } = await supabase
+    .from('documents')
+    .update({ status: 'completed' })
+    .eq('id', documentId)
+    .neq('status', 'archived');
+
+  if (error) throw error;
+}
+
 // =====================================================
 // PUBLIC LINKS
 // =====================================================
@@ -727,14 +761,12 @@ export async function createSignatureRequest(
   userId: string,
   signers: Array<{ name: string; email: string; message?: string }>,
 ): Promise<any[]> {
-  const requests = signers.map((s) => ({
-    company_id: companyId,
-    document_id: documentId,
-    signer_name: s.name,
-    signer_email: s.email,
-    message: s.message || null,
-    created_by: userId,
-  }));
+  const requests = buildCreateSignatureRequestRows({
+    documentId,
+    companyId,
+    userId,
+    signers,
+  });
 
   const { data, error } = await supabase
     .from('signature_requests')
@@ -742,7 +774,20 @@ export async function createSignatureRequest(
     .select();
 
   if (error) throw error;
-  return data;
+
+  await syncDocumentStatusForSigning(documentId);
+  await logDocumentEvent(documentId, 'signature_requested', {
+    signer_count: signers.length,
+    signers: signers.map((signer) => ({ name: signer.name, email: signer.email })),
+  });
+
+  return (data || []).map((request) => {
+    const normalized = normalizeSignatureRequestForSigning(request);
+    return {
+      ...normalized,
+      signing_route: buildPublicSigningRoute(getCanonicalSigningToken(normalized), window.location.origin),
+    };
+  });
 }
 
 /**
@@ -754,7 +799,14 @@ export async function getSignatureRequests(documentId: string): Promise<any[]> {
     .select('*')
     .eq('document_id', documentId)
     .order('created_at', { ascending: false });
-  return data || [];
+
+  return (data || []).map((request) => {
+    const normalized = normalizeSignatureRequestForSigning(request);
+    return {
+      ...normalized,
+      signing_route: buildPublicSigningRoute(getCanonicalSigningToken(normalized), window.location.origin),
+    };
+  });
 }
 
 // ===== ЭТАП 3: Track Changes + Комментарии =====
@@ -870,11 +922,28 @@ export async function getDocumentAutomations(companyId: string): Promise<any[]> 
 
 export async function saveDocumentAutomation(
   companyId: string, userId: string,
-  automation: { name: string; trigger_type: string; trigger_config: any; action_type: string; action_config: any }
+  automation: {
+    name: string;
+    trigger_type?: string;
+    trigger_event?: string;
+    trigger_config?: any;
+    action_type: string;
+    action_config?: any;
+  }
 ): Promise<any> {
+  const payload = {
+    company_id: companyId,
+    created_by: userId,
+    name: automation.name,
+    trigger_event: automation.trigger_event || automation.trigger_type,
+    trigger_config: automation.trigger_config || {},
+    action_type: automation.action_type,
+    action_config: automation.action_config || {},
+  };
+
   const { data, error } = await supabase
     .from('document_automations')
-    .insert({ ...automation, company_id: companyId, created_by: userId })
+    .insert(payload)
     .select()
     .single();
   if (error) throw error;
@@ -976,14 +1045,65 @@ export function downloadCSV(csv: string, filename: string): void {
 // Публичная верификация подписи
 // ============================================================
 
-export async function verifySignatureRequest(requestId: string): Promise<any> {
-  const { data, error } = await supabase
+export async function verifySignatureRequest(signingTokenOrId: string): Promise<any> {
+  const candidates = [
+    supabase.from('signature_requests').select('*, documents(*)').eq('signing_token', signingTokenOrId).single(),
+    supabase.from('signature_requests').select('*, documents(*)').eq('token', signingTokenOrId).single(),
+    supabase.from('signature_requests').select('*, documents(*)').eq('id', signingTokenOrId).single(),
+  ];
+
+  for (const candidate of candidates) {
+    const { data } = await candidate;
+    if (data) return normalizeSignatureRequestForSigning(data);
+  }
+
+  throw new Error('Signature request not found');
+}
+
+export async function markSignatureRequestViewed(requestId: string): Promise<void> {
+  const openedAt = new Date().toISOString();
+  const { error } = await supabase
     .from('signature_requests')
-    .select('*, documents(*)')
+    .update({
+      status: 'opened',
+      last_opened_at: openedAt,
+    })
+    .eq('id', requestId)
+    .in('status', ['pending', 'opened']);
+
+  if (error) throw error;
+}
+
+export async function declineSignatureRequest(requestId: string, declineReason: string): Promise<void> {
+  const { data: rawRequest, error: requestError } = await supabase
+    .from('signature_requests')
+    .select('*')
     .eq('id', requestId)
     .single();
+
+  if (requestError) throw requestError;
+  if (!rawRequest) throw new Error('Signature request not found');
+
+  const request = normalizeSignatureRequestForSigning(rawRequest);
+
+  const { error } = await supabase
+    .from('signature_requests')
+    .update({
+      status: 'declined',
+      decline_reason: declineReason.trim(),
+      declined_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', requestId)
+    .in('status', ['pending', 'opened']);
+
   if (error) throw error;
-  return data;
+
+  await logDocumentEvent(request.document_id, 'signature_declined', {
+    signer: request.signer_email,
+    reason: declineReason.trim(),
+    request_id: requestId,
+  });
 }
 
 export async function signDocument(requestId: string, signatureData: {
@@ -991,49 +1111,46 @@ export async function signDocument(requestId: string, signatureData: {
   ip_address?: string;
   user_agent?: string;
 }): Promise<void> {
-  // Verify PIN
-  const { data: request } = await supabase
+  const { data: rawRequest } = await supabase
     .from('signature_requests')
-    .select('pin_hash')
+    .select('*')
     .eq('id', requestId)
     .single();
 
-  if (!request) throw new Error('Signature request not found');
+  if (!rawRequest) throw new Error('Signature request not found');
 
-  // Update signature request
+  const request = normalizeSignatureRequestForSigning(rawRequest);
+
   const { error } = await supabase
     .from('signature_requests')
     .update({
       status: 'signed',
       signed_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
       ip_address: signatureData.ip_address || null,
-      user_agent: signatureData.user_agent || null
+      user_agent: signatureData.user_agent || null,
     })
     .eq('id', requestId)
-    .eq('status', 'pending');
+    .in('status', ['pending', 'opened']);
 
   if (error) throw error;
 
-  // Create digital signature record
-  const { data: req } = await supabase
-    .from('signature_requests')
-    .select('document_id, signer_email, signer_name')
-    .eq('id', requestId)
-    .single();
+  await syncDocumentStatusForSigning(request.document_id);
 
-  if (req) {
-    await supabase.from('digital_signatures').insert({
-      document_id: req.document_id,
-      signer_email: req.signer_email,
-      signer_name: req.signer_name,
-      signature_type: 'electronic',
-      signed_at: new Date().toISOString(),
-      ip_address: signatureData.ip_address,
-      verification_code: requestId.slice(0, 8).toUpperCase()
-    });
+  await supabase.from('digital_signatures').insert({
+    document_id: request.document_id,
+    signer_email: request.signer_email,
+    signer_name: request.signer_name,
+    signature_type: 'electronic',
+    signer_type: 'external',
+    status: 'signed',
+    signed_at: new Date().toISOString(),
+    ip_address: signatureData.ip_address,
+    request_id: requestId,
+    verification_code: requestId.slice(0, 8).toUpperCase(),
+  });
 
-    await logDocumentEvent(req.document_id, 'signed', { signer: req.signer_email });
-  }
+  await logDocumentEvent(request.document_id, 'signed', { signer: request.signer_email, request_id: requestId });
 }
 
 // ============================================================
@@ -1080,15 +1197,16 @@ export async function sendSignatureReminder(requestId: string): Promise<void> {
     .single();
 
   if (request) {
+    const normalized = normalizeSignatureRequestForSigning(request);
     await supabase.from('document_emails').insert({
-      document_id: request.document_id,
-      to_email: request.signer_email,
+      document_id: normalized.document_id,
+      to_email: normalized.signer_email,
       subject: `Przypomnienie: Podpis dokumentu "${request.documents?.name}"`,
-      body: `Szanowny/a ${request.signer_name},\n\nPrzypominamy o oczekującym podpisie dokumentu "${request.documents?.name}".\n\nLink do podpisu: ${window.location.origin}/sign/${requestId}`,
+      body: `Szanowny/a ${normalized.signer_name},\n\nPrzypominamy o oczekującym podpisie dokumentu "${request.documents?.name}".\n\nLink do podpisu: ${buildPublicSigningRoute(getCanonicalSigningToken(normalized), window.location.origin).absoluteUrl}`,
       status: 'pending'
     });
 
-    await logDocumentEvent(request.document_id, 'reminder_sent', { to: request.signer_email });
+    await logDocumentEvent(normalized.document_id, 'reminder_sent', { to: normalized.signer_email });
   }
 }
 

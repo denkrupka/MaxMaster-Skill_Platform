@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, AlertCircle, FileText, User, Calendar, Shield } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { declineSignatureRequest, markSignatureRequestViewed, signDocument, verifySignatureRequest } from '../../lib/documentService';
 
 interface SigningPageProps {
   token: string;
@@ -9,10 +9,13 @@ interface SigningPageProps {
 interface SignatureRequest {
   id: string;
   document_id: string;
+  signer_email: string;
+  signer_name: string;
   recipient_email: string;
   recipient_name: string;
   status: string;
   expires_at: string;
+  signing_route?: { path: string; absoluteUrl: string };
   documents: {
     name: string;
     number?: string;
@@ -36,20 +39,14 @@ export const SigningPage: React.FC<SigningPageProps> = ({ token }) => {
 
   const loadRequest = async () => {
     try {
-      const { data, error } = await supabase
-        .from('signature_requests')
-        .select('*, documents(*)')
-        .eq('token', token)
-        .single();
-
-      if (error) throw error;
+      const data = await verifySignatureRequest(token);
 
       if (!data) {
         setError('Nieprawidłowy lub wygasły link do podpisu');
         return;
       }
 
-      if (data.status !== 'pending' && data.status !== 'viewed') {
+      if (data.status !== 'pending' && data.status !== 'opened') {
         setError(
           data.status === 'signed'
             ? 'Ten dokument został już podpisany'
@@ -60,19 +57,16 @@ export const SigningPage: React.FC<SigningPageProps> = ({ token }) => {
         return;
       }
 
-      if (new Date(data.expires_at) < new Date()) {
+      if (data.expires_at && new Date(data.expires_at) < new Date()) {
         setError('Link do podpisu wygasł');
         return;
       }
 
       setRequest(data);
 
-      // Update status to viewed if pending
       if (data.status === 'pending') {
-        await supabase
-          .from('signature_requests')
-          .update({ status: 'viewed', viewed_at: new Date().toISOString() })
-          .eq('id', data.id);
+        await markSignatureRequestViewed(data.id);
+        setRequest({ ...data, status: 'opened' });
       }
     } catch (err: any) {
       setError('Nie udało się załadować dokumentu do podpisu');
@@ -86,38 +80,10 @@ export const SigningPage: React.FC<SigningPageProps> = ({ token }) => {
 
     setSigning(true);
     try {
-      // Update signature request
-      const { error: updateError } = await supabase
-        .from('signature_requests')
-        .update({
-          status: 'signed',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', request.id);
-
-      if (updateError) throw updateError;
-
-      // Create digital signature record
-      await supabase.from('digital_signatures').insert({
-        document_id: request.document_id,
-        signer_email: request.recipient_email,
-        signer_name: request.recipient_name,
-        signer_type: 'external',
-        status: 'signed',
-        signed_at: new Date().toISOString(),
-        request_id: request.id,
+      await signDocument(request.id, {
+        pin: '',
+        user_agent: navigator.userAgent,
       });
-
-      // Log event
-      await supabase.rpc('log_document_event', {
-        p_document_id: request.document_id,
-        p_action: 'signed',
-        p_actor_type: 'external',
-        p_actor_name: request.recipient_name,
-        p_actor_email: request.recipient_email,
-        p_metadata: { signature_request_id: request.id },
-      });
-
       setSigned(true);
     } catch (err: any) {
       setError('Wystąpił błąd podczas podpisywania. Spróbuj ponownie.');
@@ -131,25 +97,7 @@ export const SigningPage: React.FC<SigningPageProps> = ({ token }) => {
 
     setDeclining(true);
     try {
-      await supabase
-        .from('signature_requests')
-        .update({
-          status: 'declined',
-          completed_at: new Date().toISOString(),
-          decline_reason: declineReason.trim(),
-        })
-        .eq('id', request.id);
-
-      // Log event
-      await supabase.rpc('log_document_event', {
-        p_document_id: request.document_id,
-        p_action: 'signature_declined',
-        p_actor_type: 'external',
-        p_actor_name: request.recipient_name,
-        p_actor_email: request.recipient_email,
-        p_metadata: { reason: declineReason.trim() },
-      });
-
+      await declineSignatureRequest(request.id, declineReason.trim());
       setError('Dokument został odrzucony');
       setShowDeclineForm(false);
     } catch (err: any) {

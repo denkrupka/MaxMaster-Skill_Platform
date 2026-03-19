@@ -1,5 +1,5 @@
 // Edge Function: generate-document-pdf
-// Generates PDF from document template and data
+// Preview/dev contract only: renders HTML, returns data URL, stores future pdf_path placeholder.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -9,12 +9,20 @@ const corsHeaders = {
 };
 
 interface RequestBody {
-  document_id: string;
+  document_id?: string;
+  documentId?: string;
 }
 
-function sanitizeData(data: Record<string, string>): Record<string, string> {
+function json(status: number, payload: unknown) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function sanitizeData(data: Record<string, unknown>): Record<string, string> {
   const clean: Record<string, string> = {};
-  for (const [key, value] of Object.entries(data)) {
+  for (const [key, value] of Object.entries(data ?? {})) {
     clean[key] = String(value ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -25,89 +33,62 @@ function sanitizeData(data: Record<string, string>): Record<string, string> {
   return clean;
 }
 
-function renderTemplate(template: any, data: Record<string, string>): string {
+function renderTemplate(template: { content?: Array<{ title?: string; body?: string }> } | null, data: Record<string, unknown>): string {
   const safe = sanitizeData(data);
-  const sections: Array<{ title?: string; body?: string }> = template.content ?? [];
+  const sections = Array.isArray(template?.content) ? template!.content! : [];
 
-  return sections
-    .map((section) => {
-      let body = section.body ?? '';
-      for (const [key, value] of Object.entries(safe)) {
-        body = body.replaceAll(`{{${key}}}`, value);
-      }
-      const title = section.title ? `<h2 style="color: #1e40af; margin-top: 24px; margin-bottom: 12px; font-size: 18px;">${section.title}</h2>` : '';
-      return `${title}\n<p style="line-height: 1.6; margin-bottom: 12px;">${body}</p>`;
-    })
-    .join('\n\n');
+  if (sections.length === 0) {
+    return `<pre style="white-space: pre-wrap; line-height: 1.6;">${safe['content'] ?? JSON.stringify(data ?? {}, null, 2)}</pre>`;
+  }
+
+  return sections.map((section) => {
+    let body = section.body ?? '';
+    for (const [key, value] of Object.entries(safe)) body = body.replaceAll(`{{${key}}}`, value);
+    const title = section.title ? `<h2 style="color:#1e40af;margin-top:24px;margin-bottom:12px;font-size:18px;">${section.title}</h2>` : '';
+    return `${title}\n<p style="line-height:1.6;margin-bottom:12px;">${body}</p>`;
+  }).join('\n\n');
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { global: { headers: { Authorization: req.headers.get('authorization') ?? '' } } }
     );
 
-    const { document_id } = await req.json() as RequestBody;
+    const body = await req.json() as RequestBody;
+    const document_id = body.document_id ?? body.documentId;
+    if (!document_id) return json(400, { error: 'document_id is required' });
 
-    // Get user from auth
-    const { data: { user } } = await supabase.auth.getUser(
-      req.headers.get('authorization')?.replace('Bearer ', '') ?? ''
-    );
+    const { data: { user } } = await supabase.auth.getUser(req.headers.get('authorization')?.replace('Bearer ', '') ?? '');
+    if (!user) return json(401, { error: 'Unauthorized' });
 
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const { data: employee } = await supabase.from('employees').select('company_id, first_name, last_name').eq('user_id', user.id).single();
+    if (!employee?.company_id) return json(400, { error: 'Company not found' });
 
-    // Get document with template
     const { data: document, error: docError } = await supabase
       .from('documents')
-      .select('*, document_templates(*)')
+      .select('id, company_id, name, number, data, template_id, document_templates(*)')
       .eq('id', document_id)
       .single();
 
-    if (docError || !document) {
-      return new Response(JSON.stringify({ error: 'Document not found' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (docError || !document) return json(404, { error: 'Document not found' });
+    if (document.company_id !== employee.company_id) return json(403, { error: 'Forbidden' });
 
-    // Verify user has access to this company
-    const { data: employee } = await supabase
-      .from('employees')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (employee?.company_id !== document.company_id) {
-      return new Response(JSON.stringify({ error: 'Forbidden' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Render HTML content
-    const htmlContent = renderTemplate(document.document_templates, document.data || {});
-    
-    const fullHtml = `
-<!DOCTYPE html>
+    const htmlContent = renderTemplate(document.document_templates as { content?: Array<{ title?: string; body?: string }> } | null, (document.data as Record<string, unknown>) ?? {});
+    const generatedAt = new Date().toLocaleString('pl-PL');
+    const fullHtml = `<!DOCTYPE html>
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
   <title>${document.name}</title>
   <style>
     @page { margin: 2cm; }
-    body { font-family: 'DejaVu Sans', Arial, sans-serif; font-size: 12pt; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.6; color: #333; }
     h1 { color: #1e40af; font-size: 24px; margin-bottom: 20px; }
-    h2 { color: #1e40af; margin-top: 24px; margin-bottom: 12px; font-size: 18px; }
     p { margin-bottom: 12px; text-align: justify; }
     .header { border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 30px; }
     .footer { margin-top: 40px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 10pt; color: #666; }
@@ -120,44 +101,40 @@ Deno.serve(async (req) => {
     <h1>${document.name}</h1>
   </div>
   ${htmlContent}
-  <div class="footer">
-    Wygenerowano: ${new Date().toLocaleString('pl-PL')} | System MaxMaster
-  </div>
+  <div class="footer">Wygenerowano: ${generatedAt} | System MaxMaster</div>
 </body>
 </html>`;
 
-    // For now, return the HTML as a data URL (in production, use a PDF generation library)
-    // In a real implementation, you'd use Puppeteer, Playwright, or a PDF service
-    const htmlBlob = new Blob([fullHtml], { type: 'text/html' });
-    const htmlBase64 = btoa(await htmlBlob.text());
-    
-    // Store PDF path in document
+    const url = `data:text/html;base64,${btoa(fullHtml)}`;
     const pdfPath = `${document.company_id}/${new Date().getFullYear()}/${document.id}.pdf`;
-    await supabase
+
+    const { error: updateError } = await supabase
       .from('documents')
       .update({ pdf_path: pdfPath })
       .eq('id', document_id);
+    if (updateError) throw updateError;
 
-    // Log event
     await supabase.rpc('log_document_event', {
       p_document_id: document_id,
       p_action: 'pdf_generated',
       p_actor_type: 'user',
       p_actor_id: user.id,
-      p_metadata: { path: pdfPath },
+      p_actor_name: [employee.first_name, employee.last_name].filter(Boolean).join(' ').trim() || null,
+      p_metadata: { pdf_path: pdfPath, mode: 'preview-html-data-url' },
+      p_user_agent: req.headers.get('user-agent'),
     });
 
-    // Return data URL for preview (in production, return signed URL to stored PDF)
-    const url = `data:text/html;base64,${htmlBase64}`;
-
-    return new Response(JSON.stringify({ url, path: pdfPath }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return json(200, {
+      success: true,
+      mode: 'preview-html-data-url',
+      url,
+      pdf_url: url,
+      path: pdfPath,
+      pdf_path: pdfPath,
+      document_id,
     });
   } catch (error) {
     console.error('Error generating PDF:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json(500, { error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });

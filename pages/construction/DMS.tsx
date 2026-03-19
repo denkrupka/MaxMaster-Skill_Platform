@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FileText, Plus, Search, Eye, Download, Pencil, Trash2, Archive,
-  ChevronLeft, ChevronRight, Check, X, Loader2,
+  ChevronLeft, ChevronRight, Check, X, Loader2, Mail, Link as LinkIcon, PenSquare, Copy, ExternalLink,
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -15,8 +15,23 @@ import {
   createSignatureRequest, getSignatureRequests,
   getVersionDiff, getDocumentComments, addDocumentComment, resolveComment, analyzeDocument, getDocumentAnalyses,
   getDocumentStats, exportDocumentsCSV, downloadCSV, duplicateDocument,
-  getDocumentAutomations, toggleAutomation,
+  getDocumentAutomations, saveDocumentAutomation, toggleAutomation,
 } from '../../lib/documentService';
+import {
+  EmailSendModal,
+  AutomationsTab,
+  FormInput,
+  FormTextarea,
+  validateForm,
+} from '../../components/documents';
+import {
+  getTemplateValidationErrors,
+  getDocumentWizardStep1Errors,
+  getDocumentWizardStep2Errors,
+  getSignerValidationErrors,
+} from '../../lib/documentValidation';
+import { getSignatureDisplayStatus } from '../../lib/documentSigning';
+import DocumentAnalytics from '../../components/documents/DocumentAnalytics'
 import type {
   DocumentTemplate, DocumentRecord, TemplateVariable,
   DocumentTemplateType, DocumentStatus, TemplateSection,
@@ -108,7 +123,12 @@ const TemplateModal = ({
     setVariables(v => v.map((vr, idx) => idx === i ? { ...vr, [field]: val } : vr));
 
   const save = async () => {
-    if (!meta.name.trim()) { setErr('Nazwa jest wymagana'); return; }
+    const validationErrors = getTemplateValidationErrors({ name: meta.name, sections, variables });
+    if (validationErrors.length > 0) {
+      setErr(validationErrors[0]);
+      return;
+    }
+
     setSaving(true); setErr('');
     try {
       const payload = { ...meta, content: sections, variables, is_active: true };
@@ -279,7 +299,12 @@ const DocumentWizard = ({
 
   // Step 1 → 2 or 3 (auto-skip if all vars are autofill)
   const handleStep1Next = async () => {
-    if (!tpl) return;
+    const stepErrors = getDocumentWizardStep1Errors({ templateId });
+    if (stepErrors.length > 0 || !tpl) {
+      setErr(stepErrors[0] || 'Wybierz szablon');
+      return;
+    }
+
     setStepLoading(true);
     try {
       const autofill = await getAutofillData(companyId, contractorId || undefined, projectId || undefined);
@@ -300,6 +325,13 @@ const DocumentWizard = ({
   // Step 2 → 3
   const handleStep2Next = () => {
     if (!tpl) return;
+
+    const stepErrors = getDocumentWizardStep2Errors(tpl.variables || [], formData);
+    if (stepErrors.length > 0) {
+      setErr(stepErrors[0]);
+      return;
+    }
+
     setStepLoading(true);
     setPreview(renderTemplate(tpl, formData));
     setStep(3);
@@ -308,6 +340,14 @@ const DocumentWizard = ({
 
   const save = async (status: 'draft' | 'completed') => {
     if (!tpl) return;
+
+    const stepErrors = getDocumentWizardStep2Errors(tpl.variables || [], formData);
+    if (stepErrors.length > 0) {
+      setErr(stepErrors[0]);
+      setStep(2);
+      return;
+    }
+
     setSaving(true); setErr('');
     try {
       const docName = formData['contract_name'] || formData['document_name'] || `${TYPE_LABELS[tpl.type]} — ${tpl.name}`;
@@ -465,7 +505,7 @@ const DocumentWizard = ({
                   if (step === 1) { handleStep1Next(); return; }
                   if (step === 2) { handleStep2Next(); return; }
                 }}
-                disabled={stepLoading || (step === 1 && !templateId) || (step === 2 && !!tpl && tpl.variables.some(v => v.required && !formData[v.key]))}
+                disabled={stepLoading || (step === 1 && !templateId) || (step === 2 && !!tpl && getDocumentWizardStep2Errors(tpl.variables || [], formData).length > 0)}
                 className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60">
                 {stepLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Dalej <ChevronRight className="w-4 h-4" />
@@ -807,13 +847,61 @@ function Toast({ message, type = 'success', onClose }: { message: string; type?:
   );
 }
 
+function ActionResultCard({
+  title,
+  url,
+  subtitle,
+  onDismiss,
+}: {
+  title: string;
+  url: string;
+  subtitle?: string;
+  onDismiss?: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-blue-900">{title}</p>
+          {subtitle && <p className="text-xs text-blue-700 mt-0.5">{subtitle}</p>}
+        </div>
+        {onDismiss && (
+          <button onClick={onDismiss} className="text-blue-500 hover:text-blue-700" aria-label="Zamknij wynik">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+        <p className="text-xs text-slate-500 mb-1">Pełny URL</p>
+        <p className="text-xs font-mono text-slate-700 break-all">{url}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => navigator.clipboard.writeText(url)}
+          className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50"
+        >
+          <Copy className="w-3.5 h-3.5" /> Kopiuj
+        </button>
+        <button
+          onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+          className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+        >
+          <ExternalLink className="w-3.5 h-3.5" /> Otwórz
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Document Details Panel ────────────────────────────────────────────────────
 
-function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
-  doc: DocumentRecord; companyId: string; userId: string; onClose: () => void;
+function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToast, initialTab, autoOpenEmail }: {
+  doc: DocumentRecord; companyId: string; userId: string; userName: string; onClose: () => void;
   onToast: (t: { message: string; type: 'success'|'error'|'info' }) => void;
+  initialTab?: 'versions'|'signatures'|'comments'|'ai'|'audit'|'links'|'email'|'automations';
+  autoOpenEmail?: boolean;
 }) {
-  const [detailTab, setDetailTab] = useState<'versions'|'signatures'|'comments'|'ai'|'audit'|'links'|'email'|'automations'>('versions');
+  const [detailTab, setDetailTab] = useState<'versions'|'signatures'|'comments'|'ai'|'audit'|'links'|'email'|'automations'>(initialTab ?? 'versions');
   const [versions, setVersions] = useState<any[]>([]);
   const [signatures, setSignatures] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
@@ -824,15 +912,20 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
   const [newComment, setNewComment] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<string | null>(null);
-  // Email state
-  const [emailTo, setEmailTo] = useState('');
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailBody, setEmailBody] = useState('');
-  const [attachPdf, setAttachPdf] = useState(true);
-  const [sendingEmail, setSendingEmail] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [linkResult, setLinkResult] = useState<{ title: string; url: string; subtitle?: string } | null>(null);
+  const [signatureForm, setSignatureForm] = useState({ name: '', email: '', message: '' });
+  const [signatureErrors, setSignatureErrors] = useState<Record<string, string>>({});
+  const [creatingSignature, setCreatingSignature] = useState(false);
+  const [showAddAutomation, setShowAddAutomation] = useState(false);
+  const [automationForm, setAutomationForm] = useState({
+    name: '',
+    trigger_event: 'signature_requested',
+    action_type: 'send_email',
+    action_config: { template: 'signature_followup' } as Record<string, any>,
+  });
   // Automations state
   const [automations, setAutomations] = useState<any[]>([]);
-  const [showAddAutomation, setShowAddAutomation] = useState(false);
   // Audit pagination
   const [auditPage, setAuditPage] = useState(1);
   const AUDIT_PAGE_SIZE = 20;
@@ -843,6 +936,8 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
   const [editData, setEditData] = useState<any>({});
 
   useEffect(() => { loadData(); }, [detailTab, doc.id]);
+  useEffect(() => { if (initialTab) setDetailTab(initialTab); }, [initialTab, doc.id]);
+  useEffect(() => { if (autoOpenEmail) setShowEmailModal(true); }, [autoOpenEmail, doc.id]);
 
   async function loadData() {
     setLoading(true);
@@ -857,26 +952,77 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
     } finally { setLoading(false); }
   }
 
-  const handleSendEmail = async () => {
-    if (!emailTo || sendingEmail) return;
-    setSendingEmail(true);
+  const handleCreatePublicLink = async () => {
     try {
-      await supabase.from('document_emails').insert({
-        document_id: doc.id,
-        company_id: companyId,
-        sent_by: userId,
-        recipient_email: emailTo,
-        subject: emailSubject,
-        body: emailBody,
-        attach_pdf: attachPdf,
+      const link = await createPublicLink(doc.id, companyId, userId, { expiresInDays: 7 });
+      setLinkResult({
+        title: 'Link publiczny gotowy',
+        subtitle: 'Możesz go skopiować albo od razu otworzyć w nowej karcie.',
+        url: link.url,
       });
-      await logDocumentEvent(doc.id, 'email_sent', { to: emailTo, subject: emailSubject });
-      onToast({ type: 'success', message: 'Email wysłany!' });
-      setEmailTo(''); setEmailSubject(''); setEmailBody('');
+      await loadData();
+      onToast({ message: 'Utworzono link publiczny', type: 'success' });
     } catch (err: any) {
-      onToast({ type: 'error', message: 'Błąd wysyłki: ' + err.message });
+      onToast({ message: 'Błąd tworzenia linku: ' + err.message, type: 'error' });
+    }
+  };
+
+  const handleCreateSignatureRequest = async () => {
+    const signerErrors = getSignerValidationErrors(signatureForm);
+    const nextErrors: Record<string, string> = {};
+    if (signerErrors.some((error) => error.includes('Imię i nazwisko'))) nextErrors.name = 'Imię i nazwisko jest wymagane';
+    if (signerErrors.some((error) => error.includes('adres email'))) nextErrors.email = 'Podaj poprawny adres email';
+    if ((signatureForm.message || '').trim().length > 500) nextErrors.message = 'Wiadomość może mieć maksymalnie 500 znaków';
+    setSignatureErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setCreatingSignature(true);
+    try {
+      const [request] = await createSignatureRequest(doc.id, companyId, userId, [
+        { name: signatureForm.name.trim(), email: signatureForm.email.trim(), message: signatureForm.message.trim() || undefined },
+      ]);
+      const url = request?.signing_route?.absoluteUrl || `${window.location.origin}/sign/${request.signing_token}`;
+      setLinkResult({
+        title: 'Prośba o podpis gotowa',
+        subtitle: `${signatureForm.name} otrzyma link do podpisu.`,
+        url,
+      });
+      setSignatureForm({ name: '', email: '', message: '' });
+      setSignatureErrors({});
+      await loadData();
+      onToast({ message: 'Utworzono prośbę o podpis', type: 'success' });
+    } catch (err: any) {
+      onToast({ message: 'Błąd tworzenia podpisu: ' + err.message, type: 'error' });
     } finally {
-      setSendingEmail(false);
+      setCreatingSignature(false);
+    }
+  };
+
+  const handleSaveAutomation = async () => {
+    if (!automationForm.name.trim()) {
+      onToast({ message: 'Podaj nazwę automatyzacji', type: 'error' });
+      return;
+    }
+
+    try {
+      await saveDocumentAutomation(companyId, userId, {
+        name: automationForm.name.trim(),
+        trigger_type: automationForm.trigger_event,
+        trigger_config: { document_id: doc.id },
+        action_type: automationForm.action_type,
+        action_config: { ...automationForm.action_config, document_id: doc.id },
+      } as any);
+      setAutomationForm({
+        name: '',
+        trigger_event: 'signature_requested',
+        action_type: 'send_email',
+        action_config: { template: 'signature_followup' },
+      });
+      setShowAddAutomation(false);
+      await loadData();
+      onToast({ message: 'Automatyzacja zapisana', type: 'success' });
+    } catch (err: any) {
+      onToast({ message: 'Błąd zapisu automatyzacji: ' + err.message, type: 'error' });
     }
   };
 
@@ -899,7 +1045,16 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
             <h3 className="font-semibold text-lg">{doc.name}</h3>
             <p className="text-xs text-slate-500">{doc.number} · v{doc.current_version || 1}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button onClick={() => setShowEmailModal(true)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg">
+              <Mail className="w-3.5 h-3.5" /> Wyślij
+            </button>
+            <button onClick={handleCreatePublicLink} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg">
+              <LinkIcon className="w-3.5 h-3.5" /> Link publiczny
+            </button>
+            <button onClick={() => setDetailTab('signatures')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg">
+              <PenSquare className="w-3.5 h-3.5" /> Podpis
+            </button>
             <button onClick={async () => {
               try {
                 const url = await generatePDF(doc.id, doc.company_id);
@@ -908,23 +1063,16 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
               } catch (err: any) {
                 onToast({ message: 'Błąd generowania PDF: ' + err.message, type: 'error' });
               }
-            }} className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg" aria-label="Pobierz PDF">
-              📄 PDF
+            }} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg" aria-label="Pobierz PDF">
+              <Download className="w-3.5 h-3.5" /> PDF
             </button>
             <button onClick={async () => {
               try {
                 const url = await generatePDF(doc.id, doc.company_id);
                 setPdfPreviewUrl(url);
               } catch { onToast({ type: 'error', message: 'Błąd generowania PDF' }); }
-            }} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 rounded-lg hover:bg-slate-200">
+            }} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 rounded-lg hover:bg-slate-200">
               <Eye className="w-3.5 h-3.5" /> Podgląd
-            </button>
-            <button onClick={async () => {
-              const link = await createPublicLink(doc.id, companyId, userId, { expiresInDays: 7 });
-              navigator.clipboard.writeText(link.url);
-              onToast({ message: 'Link skopiowany do schowka', type: 'success' });
-            }} className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg" aria-label="Udostępnij">
-              🔗 Udostępnij
             </button>
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg" aria-label="Zamknij">✕</button>
           </div>
@@ -941,7 +1089,15 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {linkResult && (
+            <ActionResultCard
+              title={linkResult.title}
+              subtitle={linkResult.subtitle}
+              url={linkResult.url}
+              onDismiss={() => setLinkResult(null)}
+            />
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="animate-spin h-6 w-6 text-blue-500" />
@@ -1002,44 +1158,68 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
               ))}
             </div>
           ) : detailTab === 'signatures' ? (
-            <div className="space-y-3">
-              <div className="mb-4 p-3 bg-blue-50 rounded-lg space-y-2">
-                <p className="text-sm font-medium text-blue-700">Wyślij zapytanie o podpis</p>
-                <div className="flex gap-2">
-                  <input type="text" placeholder="Imię i nazwisko" id="signer-name"
-                    className="flex-1 px-3 py-1.5 text-sm border rounded-lg" />
-                  <input type="email" placeholder="Email" id="signer-email"
-                    className="flex-1 px-3 py-1.5 text-sm border rounded-lg" />
-                  <button onClick={async () => {
-                    const nameEl = document.getElementById('signer-name') as HTMLInputElement;
-                    const emailEl = document.getElementById('signer-email') as HTMLInputElement;
-                    if (!nameEl.value || !emailEl.value) return;
-                    await createSignatureRequest(doc.id, companyId, userId, [
-                      { name: nameEl.value, email: emailEl.value }
-                    ]);
-                    nameEl.value = ''; emailEl.value = '';
-                    loadData();
-                  }} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
-                    Wyślij
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 rounded-xl space-y-3 border border-blue-100">
+                <div>
+                  <p className="text-sm font-medium text-blue-700">Wyślij zapytanie o podpis</p>
+                  <p className="text-xs text-blue-600 mt-1">P0 flow: uzupełnij dane, kliknij „Podpis”, a na ekranie pokaże się gotowy link do podpisu.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <FormInput
+                    label="Imię i nazwisko"
+                    value={signatureForm.name}
+                    onChange={e => setSignatureForm(prev => ({ ...prev, name: e.target.value }))}
+                    error={signatureErrors.name}
+                    required
+                    placeholder="Jan Kowalski"
+                  />
+                  <FormInput
+                    label="Email"
+                    type="email"
+                    value={signatureForm.email}
+                    onChange={e => setSignatureForm(prev => ({ ...prev, email: e.target.value }))}
+                    error={signatureErrors.email}
+                    required
+                    placeholder="jan@firma.pl"
+                  />
+                </div>
+                <FormTextarea
+                  label="Wiadomość dla podpisującego"
+                  rows={3}
+                  value={signatureForm.message}
+                  onChange={e => setSignatureForm(prev => ({ ...prev, message: e.target.value }))}
+                  error={signatureErrors.message}
+                  placeholder="Opcjonalna wiadomość do podpisującego"
+                />
+                <div className="flex justify-end">
+                  <button onClick={handleCreateSignatureRequest} disabled={creatingSignature}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-60">
+                    {creatingSignature ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenSquare className="w-4 h-4" />}
+                    Podpis
                   </button>
                 </div>
               </div>
               {!Array.isArray(signatures) || signatures.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">Brak zapytań o podpis</p>
-              ) : signatures.map(s => (
-                <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium">{s.signer_name}</p>
-                    <p className="text-xs text-slate-500">{s.signer_email}</p>
+              ) : signatures.map(s => {
+                const displayStatus = getSignatureDisplayStatus(s.status);
+                return (
+                  <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg gap-3">
+                    <div>
+                      <p className="text-sm font-medium">{s.signer_name}</p>
+                      <p className="text-xs text-slate-500">{s.signer_email}</p>
+                      {s.signing_route?.path && <p className="text-[11px] text-slate-400 mt-1 font-mono">{s.signing_route.path}</p>}
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      displayStatus.key === 'signed' ? 'bg-green-100 text-green-700' :
+                      displayStatus.key === 'declined' ? 'bg-red-100 text-red-700' :
+                      displayStatus.key === 'expired' ? 'bg-slate-100 text-slate-500' :
+                      displayStatus.key === 'opened' ? 'bg-blue-100 text-blue-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}>{displayStatus.label}</span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    s.status === 'signed' ? 'bg-green-100 text-green-700' :
-                    s.status === 'declined' ? 'bg-red-100 text-red-700' :
-                    s.status === 'expired' ? 'bg-slate-100 text-slate-500' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>{s.status === 'signed' ? 'Podpisano' : s.status === 'declined' ? 'Odrzucono' : s.status === 'expired' ? 'Wygasło' : 'Oczekuje'}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : detailTab === 'audit' ? (
             <div className="space-y-2">
@@ -1187,49 +1367,20 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
             </div>
           ) : detailTab === 'email' ? (
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Adresat</label>
-                <input type="email" placeholder="email@example.com" className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={emailTo} onChange={e => setEmailTo(e.target.value)} />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <p className="text-sm font-medium text-slate-800">Wyślij dokument mailem</p>
+                <p className="text-xs text-slate-500">Otwiera realny modal wysyłki z walidacją adresów, tematu i opcjami PDF / link online.</p>
+                <button
+                  onClick={() => setShowEmailModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Mail className="w-4 h-4" /> Otwórz EmailSendModal
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Temat</label>
-                <input type="text" placeholder="Temat wiadomości" className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={emailSubject} onChange={e => setEmailSubject(e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Wiadomość</label>
-                <textarea rows={4} placeholder="Treść wiadomości..." className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={emailBody} onChange={e => setEmailBody(e.target.value)} />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="attachPdf" checked={attachPdf} onChange={e => setAttachPdf(e.target.checked)} />
-                <label htmlFor="attachPdf" className="text-sm">Dołącz PDF dokumentu</label>
-              </div>
-              <button onClick={handleSendEmail} disabled={!emailTo || sendingEmail}
-                className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-                {sendingEmail ? 'Wysyłanie...' : 'Wyślij email'}
-              </button>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h4 className="font-medium text-sm">Reguły automatyzacji</h4>
-                <button onClick={() => setShowAddAutomation(true)} className="text-xs text-blue-600 hover:underline">+ Dodaj</button>
-              </div>
-              {Array.isArray(automations) && automations.map(a => (
-                <div key={a.id} className="p-3 bg-slate-50 rounded-lg flex justify-between items-center">
-                  <div>
-                    <p className="text-sm font-medium">{a.name}</p>
-                    <p className="text-xs text-slate-500">Trigger: {a.trigger_event} → {a.action_type}</p>
-                  </div>
-                  <button onClick={() => toggleAutomation(a.id, !a.is_active).then(() => getDocumentAutomations(companyId).then(setAutomations))}
-                    className={`px-3 py-1 rounded-full text-xs ${a.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}`}>
-                    {a.is_active ? 'Aktywna' : 'Wyłączona'}
-                  </button>
-                </div>
-              ))}
-              {!Array.isArray(automations) || automations.length === 0 ? <p className="text-sm text-slate-400 text-center py-4">Brak automatyzacji</p> : null}
+              <AutomationsTab companyId={companyId} userId={userId} />
             </div>
           )}
         </div>
@@ -1244,6 +1395,18 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
           </button>
         </div>
       </div>
+      <EmailSendModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        document={{ id: doc.id, name: doc.name, number: doc.number, company_id: companyId }}
+        userId={userId}
+        userName={userName}
+        onSent={() => {
+          setShowEmailModal(false);
+          onToast({ type: 'success', message: 'Email queued do wysyłki' });
+          if (detailTab === 'audit' || detailTab === 'email') loadData();
+        }}
+      />
       {pdfPreviewUrl && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setPdfPreviewUrl(null)}>
           <div className="bg-white rounded-xl w-[90vw] h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -1265,6 +1428,7 @@ export const DMSPage: React.FC = () => {
   const { state } = useAppContext();
   const companyId = state.currentUser?.company_id ?? '';
   const userId = state.currentUser?.id ?? '';
+  const userName = (state.currentUser as any)?.full_name || (state.currentUser as any)?.name || 'Użytkownik';
 
   const [tab, setTab] = useState<'templates' | 'documents' | 'settings'>('documents');
   const [error, setError] = useState<string | null>(null);
@@ -1286,6 +1450,9 @@ export const DMSPage: React.FC = () => {
   const [showDocWizard, setShowDocWizard] = useState(false);
   const [viewDocId, setViewDocId] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
+  const [selectedDocInitialTab, setSelectedDocInitialTab] = useState<'versions'|'signatures'|'comments'|'ai'|'audit'|'links'|'email'|'automations' | undefined>(undefined);
+  const [selectedDocAutoOpenEmail, setSelectedDocAutoOpenEmail] = useState(false);
+  const [quickActionResult, setQuickActionResult] = useState<{ title: string; url: string; subtitle?: string } | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -1328,7 +1495,7 @@ export const DMSPage: React.FC = () => {
 
   useEffect(() => {
     if (!companyId) return;
-    supabase.from('contractor_clients').select('id,name,company_name').eq('company_id', companyId)
+    supabase.from('contractors_clients').select('id,name,company_name').eq('company_id', companyId)
       .then(({ data }) => { if (data) setContractors(data); })
       .catch(() => setError('Nie udało się załadować kontrahentów'));
     supabase.from('projects').select('id,name').eq('company_id', companyId)
@@ -1528,6 +1695,16 @@ export const DMSPage: React.FC = () => {
             </button>
           </div>
 
+          {quickActionResult && (
+            <div className="mb-4">
+              <ActionResultCard
+                title={quickActionResult.title}
+                subtitle={quickActionResult.subtitle}
+                url={quickActionResult.url}
+                onDismiss={() => setQuickActionResult(null)}
+              />
+            </div>
+          )}
           {docLoading ? (
             <div className="space-y-3">
               {[1,2,3,4,5].map(i => (
@@ -1577,7 +1754,7 @@ export const DMSPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedDocuments.map(d => (
-                    <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedDoc(d)}>
+                    <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => { setSelectedDocInitialTab(undefined); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}>
                       <td className="px-4 py-3">
                         <input type="checkbox" className="rounded border-slate-300"
                           checked={selectedIds.has(d.id)}
@@ -1600,16 +1777,33 @@ export const DMSPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell text-slate-400">{fmt(d.created_at)}</td>
                       <td className="px-4 py-3">
-                        <button onClick={() => setViewDocId(d.id)}
-                          aria-label="Podgląd dokumentu" title="Podgląd dokumentu"
-                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); duplicateDocument(d.id, companyId, userId).then(() => loadDocuments()); }}
-                          aria-label="Duplikuj dokument" title="Duplikuj"
-                          className="p-1.5 text-slate-400 hover:text-green-600 rounded hover:bg-green-50 transition-colors">
-                          <FileText className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1 flex-wrap justify-end">
+                          <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('versions'); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}
+                            aria-label="Podgląd dokumentu" title="Podgląd dokumentu"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
+                            <Eye className="w-3.5 h-3.5" /> Podgląd
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('email'); setSelectedDocAutoOpenEmail(true); setSelectedDoc(d); }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
+                            <Mail className="w-3.5 h-3.5" /> Wyślij
+                          </button>
+                          <button onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const link = await createPublicLink(d.id, companyId, userId, { expiresInDays: 7 });
+                              setQuickActionResult({ title: `Link do ${d.name}`, subtitle: 'Utworzony z poziomu wiersza dokumentu.', url: link.url });
+                            } catch (err: any) {
+                              setToast({ type: 'error', message: 'Błąd tworzenia linku: ' + err.message });
+                            }
+                          }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
+                            <LinkIcon className="w-3.5 h-3.5" /> Link
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setSelectedDocInitialTab('signatures'); setSelectedDocAutoOpenEmail(false); setSelectedDoc(d); }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-600 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
+                            <PenSquare className="w-3.5 h-3.5" /> Podpis
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1672,7 +1866,14 @@ export const DMSPage: React.FC = () => {
           doc={selectedDoc}
           companyId={companyId}
           userId={userId}
-          onClose={() => setSelectedDoc(null)}
+          userName={userName}
+          initialTab={selectedDocInitialTab}
+          autoOpenEmail={selectedDocAutoOpenEmail}
+          onClose={() => {
+            setSelectedDoc(null);
+            setSelectedDocInitialTab(undefined);
+            setSelectedDocAutoOpenEmail(false);
+          }}
           onToast={setToast}
         />
       )}
