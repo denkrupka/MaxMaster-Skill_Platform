@@ -29,6 +29,7 @@ const DocumentViewPage: React.FC = () => {
   const [replyText, setReplyText] = useState('')
   const [user, setUser] = useState<any>(null)
   const [showAI, setShowAI] = useState(false)
+  const [showParties, setShowParties] = useState(false)
   const [aiResult, setAiResult] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const commentBoxRef = useRef<HTMLTextAreaElement>(null)
@@ -143,6 +144,10 @@ const DocumentViewPage: React.FC = () => {
           {/* Action buttons */}
           <button onClick={() => setShowComments(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showComments ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'hover:bg-gray-50'}`}>
             Komentarze {activeComments.length > 0 && <span className="bg-yellow-400 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">{activeComments.length}</span>}
+          </button>
+
+          <button onClick={() => setShowParties(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showParties ? 'bg-blue-50 border-blue-300 text-blue-700' : 'hover:bg-gray-50'}`}>
+            Dane stron
           </button>
 
           {/* AI dropdown */}
@@ -300,6 +305,103 @@ const DocumentViewPage: React.FC = () => {
             </div>
           </div>
         )}
+        {/* Dane stron sidebar */}
+        {showParties && (
+          <div className="w-80 flex-shrink-0">
+            <div className="bg-white rounded-xl border shadow-sm sticky top-32">
+              <div className="px-4 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm">Dane stron</h3>
+                <button onClick={() => setShowParties(false)} className="text-xs text-gray-400">✕</button>
+              </div>
+              <div className="p-4 max-h-[70vh] overflow-y-auto space-y-4">
+                <DocumentParty label="Strona 1 (Zamawiający)" data={doc?.contractors} />
+                <DocumentParty label="Strona 2 (Wykonawca)" data={null} isOwner />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface PartyData {
+  name?: string
+  address?: string
+  nip?: string
+  phone?: string
+  email?: string
+  contact_person?: string
+  contact_position?: string
+}
+
+const DocumentParty: React.FC<{ label: string; data?: PartyData | null; isOwner?: boolean }> = ({ label, data, isOwner }) => {
+  const [form, setForm] = React.useState<PartyData>(data || {})
+  const [nipLoading, setNipLoading] = React.useState(false)
+  const [reps, setReps] = React.useState<Array<{name:string;position:string;email:string;phone:string}>>([{ name: form.contact_person||'', position: form.contact_position||'', email: form.email||'', phone: form.phone||'' }])
+
+  const lookupGUS = async (nip: string) => {
+    if (nip.replace(/[\s-]/g,'').length !== 10) return
+    setNipLoading(true)
+    try {
+      const clean = nip.replace(/[\s-]/g,'')
+      const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/${clean}`)
+      const d = await r.json()
+      const co = d?.company || d?.result?.[0] || d
+      if (co?.name || co?.companyName) {
+        setForm(prev => ({
+          ...prev,
+          name: co.name || co.companyName || prev.name,
+          address: co.address?.street ? `${co.address.street} ${co.address.buildingNumber||''}, ${co.address.postalCode||''} ${co.address.city||''}`.trim() : prev.address,
+          nip: clean,
+        }))
+      }
+    } catch { /* GUS API może być niedostępne */ }
+    setNipLoading(false)
+  }
+
+  const upd = (k: keyof PartyData, v: string) => setForm(p => ({ ...p, [k]: v }))
+
+  return (
+    <div className="border rounded-xl p-3 bg-gray-50">
+      <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">{label}</h4>
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs text-gray-500 mb-0.5 block">NIP</label>
+          <div className="flex gap-1">
+            <input value={form.nip||''} onChange={e => { upd('nip',e.target.value); if(e.target.value.replace(/[\s-]/g,'').length===10) lookupGUS(e.target.value) }}
+              placeholder="000-000-00-00" className="flex-1 border rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none" />
+            {nipLoading && <span className="text-xs text-gray-400 self-center">↻</span>}
+          </div>
+        </div>
+        {[
+          {k:'name',l:'Nazwa firmy',ph:'ABC Sp. z o.o.'},
+          {k:'address',l:'Adres',ph:'ul. Przykładowa 1, 00-000 Warszawa'},
+          {k:'phone',l:'Telefon',ph:'+48 600 000 000'},
+          {k:'email',l:'E-mail',ph:'biuro@firma.pl'},
+        ].map(({k,l,ph}) => (
+          <div key={k}>
+            <label className="text-xs text-gray-500 mb-0.5 block">{l}</label>
+            <input value={form[k as keyof PartyData]||''} onChange={e => upd(k as keyof PartyData, e.target.value)}
+              placeholder={ph} className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none" />
+          </div>
+        ))}
+        <div className="border-t pt-2 mt-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-medium text-gray-600">Przedstawiciele</p>
+            <button onClick={() => setReps(p => [...p, {name:'',position:'',email:'',phone:''}])} className="text-xs text-blue-600">+ Dodaj</button>
+          </div>
+          {reps.map((r,i) => (
+            <div key={i} className="bg-white rounded p-2 mb-1 border">
+              <div className="grid grid-cols-2 gap-1">
+                <input value={r.name} onChange={e => setReps(p => p.map((x,j) => j===i?{...x,name:e.target.value}:x))} placeholder="Imię i nazwisko" className="border rounded px-2 py-1 text-xs col-span-2" />
+                <input value={r.position} onChange={e => setReps(p => p.map((x,j) => j===i?{...x,position:e.target.value}:x))} placeholder="Stanowisko" className="border rounded px-2 py-1 text-xs" />
+                <input value={r.phone} onChange={e => setReps(p => p.map((x,j) => j===i?{...x,phone:e.target.value}:x))} placeholder="+48 600..." className="border rounded px-2 py-1 text-xs" />
+                <input value={r.email} onChange={e => setReps(p => p.map((x,j) => j===i?{...x,email:e.target.value}:x))} placeholder="email@..." className="border rounded px-2 py-1 text-xs col-span-2" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
