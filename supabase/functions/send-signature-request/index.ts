@@ -38,6 +38,7 @@ serve(async (req) => {
       // Insert signature request
       const { data: sr, error: srErr } = await supabase.from('signature_requests').insert({
         document_id,
+        company_id: doc?.company_id,
         signer_email: signer.email,
         signer_name: signer.name,
         signer_role: signer.role || 'signer',
