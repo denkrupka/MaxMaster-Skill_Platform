@@ -5,6 +5,23 @@ import { } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import { TextStyle } from '@tiptap/extension-text-style'
+
+const FontSize = TextStyle.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      fontSize: {
+        default: null,
+        parseHTML: element => element.style.fontSize || null,
+        renderHTML: attributes => {
+          if (!attributes.fontSize) return {}
+          return { style: `font-size: ${attributes.fontSize}` }
+        },
+      },
+    }
+  },
+})
+
 import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
@@ -74,7 +91,7 @@ const DocumentViewPage: React.FC = () => {
   }, [id])
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, TextStyle, Color, Highlight.configure({ multicolor: true }), TextAlign.configure({ types: ['heading', 'paragraph'] }), FontFamily.configure({ types: ['textStyle'] })],
+    extensions: [StarterKit, Underline, FontSize, Color, Highlight.configure({ multicolor: true }), TextAlign.configure({ types: ['heading', 'paragraph'] }), FontFamily.configure({ types: ['textStyle'] })],
     content: '',
     editable: mode === 'edit',
     editorProps: { attributes: { class: 'prose prose-lg max-w-none focus:outline-none p-8 min-h-[500px]' } },
@@ -422,6 +439,34 @@ const DocumentViewPage: React.FC = () => {
                 <option value="Georgia, serif">Georgia</option>
                 <option value="'Courier New', monospace">Courier New</option>
                 <option value="Verdana, sans-serif">Verdana</option>
+              </select>
+              {/* Font Size */}
+              <select
+                className="text-xs border border-gray-200 rounded px-1 py-0.5 focus:outline-none bg-white w-16"
+                value={editor.getAttributes('textStyle').fontSize?.replace('px', '') || ''}
+                onChange={e => {
+                  if (e.target.value) {
+                    editor.chain().focus().setMark('textStyle', { fontSize: e.target.value + 'px' }).run()
+                  } else {
+                    editor.chain().focus().setMark('textStyle', { fontSize: null }).run()
+                  }
+                }}
+                onPointerDown={e => e.stopPropagation()}
+                title="Rozmiar czcionki"
+              >
+                <option value="">Rozmiar</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+                <option value="12">12</option>
+                <option value="14">14</option>
+                <option value="16">16</option>
+                <option value="18">18</option>
+                <option value="20">20</option>
+                <option value="24">24</option>
+                <option value="28">28</option>
+                <option value="32">32</option>
+                <option value="36">36</option>
+                <option value="48">48</option>
               </select>
               {/* Paragraph */}
               <button
