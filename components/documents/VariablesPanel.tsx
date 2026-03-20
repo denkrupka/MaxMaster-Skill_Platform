@@ -11,6 +11,7 @@ interface VariablesPanelProps {
   editor: Editor | null
   content: string
   onClose: () => void
+  onVariablesChange?: () => void
 }
 
 
@@ -59,7 +60,7 @@ function autoLabel(key: string): string {
     .replace(/\b\w/g, c => c.toUpperCase())
 }
 
-const VariablesPanel: React.FC<VariablesPanelProps> = ({ editor, content, onClose }) => {
+const VariablesPanel: React.FC<VariablesPanelProps> = ({ editor, content, onClose, onVariablesChange }) => {
   const [variables, setVariables] = useState<Variable[]>([])
   const [search, setSearch] = useState('')
 
@@ -84,6 +85,7 @@ const VariablesPanel: React.FC<VariablesPanelProps> = ({ editor, content, onClos
     const saved = JSON.parse(localStorage.getItem('doc_variables') || '{}')
     saved[name] = value
     localStorage.setItem('doc_variables', JSON.stringify(saved))
+    onVariablesChange?.()
   }
 
   const insertVariable = (name: string) => {

@@ -54,6 +54,7 @@ const DocumentViewPage: React.FC = () => {
   const [showVariables, setShowVariables] = useState(false)
   const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
   const [showVersions, setShowVersions] = useState(false)
+  const [variablesVersion, setVariablesVersion] = useState(0)
   const [portalLinkModal, setPortalLinkModal] = useState<string | null>(null)
   const [showDiff, setShowDiff] = useState(false)
   const [diffHtml, setDiffHtml] = useState('')
@@ -120,7 +121,7 @@ const DocumentViewPage: React.FC = () => {
     if (editor) editor.setEditable(mode === 'edit')
   }, [mode, editor])
 
-  // Set content when editor becomes ready or mode changes
+  // Set content when editor becomes ready or mode/variables change
   useEffect(() => {
     if (editor && docContent) {
       const isEmpty = !editor.getHTML().replace(/<[^>]*>/g, '').trim()
@@ -129,7 +130,7 @@ const DocumentViewPage: React.FC = () => {
         editor.commands.setContent(content)
       }
     }
-  }, [editor, docContent, mode, renderPreviewContent])
+  }, [editor, docContent, mode, renderPreviewContent, variablesVersion])
 
   const closeAllPanels = () => {
     setShowComments(false)
@@ -599,18 +600,6 @@ const DocumentViewPage: React.FC = () => {
             </div>
           )}
 
-          {/* Comment box */}
-          {showCommentBox && (
-            <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-              {selectedText && <p className="text-xs text-gray-500 mb-2 italic">Do: &quot;<span className="font-medium">{selectedText.slice(0,80)}</span>&quot;</p>}
-              <textarea ref={commentBoxRef} value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Napisz komentarz..." rows={3} className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <div className="flex gap-2 mt-2">
-                <button onClick={handleAddComment} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Dodaj</button>
-                <button onClick={() => { setShowCommentBox(false); setNewComment(''); setSelectedText('') }} className="px-3 py-1.5 rounded-lg text-xs border hover:bg-gray-50">Anuluj</button>
-              </div>
-            </div>
-          )}
-
           {/* Document content */}
           <div className="bg-white rounded-xl shadow-sm border">
             <EditorContent editor={editor} />
@@ -633,6 +622,17 @@ const DocumentViewPage: React.FC = () => {
                   <button onClick={() => setShowComments(false)} className="text-xs text-gray-400">×</button>
                 </div>
               </div>
+              {/* Comment form inside panel */}
+              {showCommentBox && (
+                <div className="px-4 py-3 bg-yellow-50 border-b border-yellow-200">
+                  {selectedText && <p className="text-xs text-gray-500 mb-2 italic">Do: &quot;<span className="font-medium">{selectedText.slice(0,80)}</span>&quot;</p>}
+                  <textarea ref={commentBoxRef} value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Napisz komentarz..." rows={3} className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={handleAddComment} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Dodaj</button>
+                    <button onClick={() => { setShowCommentBox(false); setNewComment(''); setSelectedText('') }} className="px-3 py-1.5 rounded-lg text-xs border hover:bg-gray-50">Anuluj</button>
+                  </div>
+                </div>
+              )}
               <div className="divide-y max-h-[65vh] overflow-y-auto">
                 {activeComments.length === 0 && <p className="px-4 py-6 text-sm text-gray-400 text-center">Brak komentarzy</p>}
                 {activeComments.map(c => (
@@ -701,6 +701,7 @@ const DocumentViewPage: React.FC = () => {
             editor={editor}
             content={docContent}
             onClose={() => setShowVariables(false)}
+            onVariablesChange={() => setVariablesVersion(v => v + 1)}
           />
         )}
 
