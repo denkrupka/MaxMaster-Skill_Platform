@@ -2323,7 +2323,17 @@ export const DMSPage: React.FC = () => {
             <p className="text-sm text-gray-500 mb-5">Wybierz sposób dodania dokumentu</p>
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => { setShowNewDocModal(false); navigate('/construction/dms/new') }}
+                onClick={async () => {
+                  setShowNewDocModal(false)
+                  try {
+                    const { data: newDoc } = await supabase
+                      .from('documents')
+                      .insert({ title: 'Nowy dokument', content: '<p></p>', status: 'draft', company_id: companyId })
+                      .select()
+                      .single()
+                    if (newDoc?.id) navigate('/construction/dms/' + newDoc.id)
+                  } catch (e) { console.error('Create doc error:', e) }
+                }}
                 className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
                 <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
                   <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -2356,7 +2366,7 @@ export const DMSPage: React.FC = () => {
                     title: file.name.replace(/\.[^.]+$/, ''),
                     content: '<p>' + raw.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>',
                     status: 'draft',
-                    company_id: profile?.company_id
+                    company_id: companyId
                   }).select().single()
                   if (data) { setShowNewDocModal(false); navigate('/construction/dms/' + data.id) }
                 }
