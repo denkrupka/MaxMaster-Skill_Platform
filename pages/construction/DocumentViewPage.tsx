@@ -48,6 +48,7 @@ const DocumentViewPage: React.FC = () => {
   const [replyText, setReplyText] = useState('')
   const [user, setUser] = useState<any>(null)
   const [showAI, setShowAI] = useState(false)
+  const [aiMenuPos, setAiMenuPos] = useState({ top: 0, left: 0 })
   const [aiPrompt, setAiPrompt] = useState('')
   const [showParties, setShowParties] = useState(false)
   const [showVariables, setShowVariables] = useState(false)
@@ -362,11 +363,15 @@ const DocumentViewPage: React.FC = () => {
 
           {/* AI dropdown */}
           <div className="relative">
-            <button onClick={() => setShowAI(v => !v)} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
+            <button onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect()
+              setAiMenuPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 230) })
+              setShowAI(v => !v)
+            }} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
               AI <span className="text-[10px]">▾</span>
             </button>
             {showAI && (
-              <div className="absolute right-0 top-full mt-1 bg-white border rounded-xl shadow-lg z-[9999] w-56 py-1">
+              <div className="fixed bg-white border rounded-xl shadow-2xl z-[9999] w-56 py-1" style={{ top: aiMenuPos.top, left: aiMenuPos.left }}>
                 <button onClick={() => handleAI('overview')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Analizuj dokument</button>
                 <button onClick={() => handleAI('risk')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
                 <button onClick={() => handleAI('clauses')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>

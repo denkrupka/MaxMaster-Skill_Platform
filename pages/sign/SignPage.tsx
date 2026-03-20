@@ -26,12 +26,21 @@ const SignPage: React.FC = () => {
   useEffect(() => { if (token) validateToken() }, [token])
 
   const validateToken = async () => {
-    const { data, error } = await supabase.rpc('get_sign_data', { sign_token: token! })
-    if (error || !data || data.error) { setStep('expired'); return }
-    setDoc(data.document)
-    setSignerName(data.request?.signer_name || '')
-    if (data.request?.signer_phone) setPhone(data.request.signer_phone)
-    if (data.company) setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
+    try {
+      const res = await fetch('https://diytvuczpciikzdhldny.supabase.co/functions/v1/get-sign-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) { setStep('expired'); return }
+      setDoc(data.document)
+      setSignerName(data.request?.signer_name || '')
+      if (data.request?.signer_phone) setPhone(data.request.signer_phone)
+      if (data.company) setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
+    } catch (e) {
+      setStep('expired')
+    }
   }
 
   const handleSendOtp = async () => {
