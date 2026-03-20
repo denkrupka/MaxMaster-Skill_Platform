@@ -14,26 +14,31 @@ const ClientPortal: React.FC = () => {
 
   const loadPortal = async () => {
     setLoading(true)
-    const { data: portalData } = await supabase
-      .from('client_portal_tokens')
-      .select('*, projects(id, name, status, description, address, start_date, end_date, budget), companies(name, logo_url, primary_color)')
-      .eq('token', token)
-      .eq('active', true)
-      .single()
+    try {
+      const { data: portalData, error: portalError } = await supabase
+        .from('client_portal_tokens')
+        .select('*, projects(id, name, status, description, address, start_date, end_date, budget), companies(name, logo_url, primary_color)')
+        .eq('token', token)
+        .eq('active', true)
+        .single()
 
-    if (!portalData) { setError('Link jest nieważny lub wygasł'); setLoading(false); return }
+      if (portalError || !portalData) { setError('Link jest nieważny lub wygasł'); setLoading(false); return }
 
-    setProject(portalData.projects)
-    setCompany(portalData.companies)
+      setProject(portalData.projects)
+      setCompany(portalData.companies)
 
-    if (portalData.projects?.id) {
-      const { data: docs } = await supabase
-        .from('documents')
-        .select('id, name, status, created_at, content')
-        .eq('project_id', portalData.projects.id)
-        .in('status', ['sent', 'client_signed', 'completed'])
-        .order('created_at', { ascending: false })
-      setDocuments(docs || [])
+      if (portalData.projects?.id) {
+        const { data: docs } = await supabase
+          .from('documents')
+          .select('id, name, status, created_at, content')
+          .eq('project_id', portalData.projects.id)
+          .in('status', ['sent', 'client_signed', 'completed'])
+          .order('created_at', { ascending: false })
+        setDocuments(docs || [])
+      }
+    } catch (err) {
+      console.error('ClientPortal loadPortal error:', err)
+      setError('Wystąpił błąd podczas ładowania portalu')
     }
     setLoading(false)
   }

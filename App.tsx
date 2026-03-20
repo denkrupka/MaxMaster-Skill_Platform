@@ -488,7 +488,7 @@ export default function App() {
           <Route path="/construction/dms" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><DMSPage /></ProtectedRoute>} />
           <Route path="/construction/dms/:id" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<div />}><DocumentViewPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/construction/dms/:id/certificate" element={<Suspense fallback={<div/>}><DocumentCertificatePage /></Suspense>} />
-          <Route path="/finance/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="dms"><React.Suspense fallback={<div />}><FinancialDashboard /></React.Suspense></ProtectedRoute>} />
+          <Route path="/finance/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="finance"><React.Suspense fallback={<div />}><FinancialDashboard /></React.Suspense></ProtectedRoute>} />
           <Route path="/portal/:token" element={<React.Suspense fallback={<div />}><ClientPortal /></React.Suspense>} />
           <Route path="/portal/v2/:token" element={<React.Suspense fallback={<div />}><ClientPortalPage /></React.Suspense>} />
                 <Route path="/construction/dms/:id/sign" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<div />}><DocumentSignPage /></React.Suspense></ProtectedRoute>} />
