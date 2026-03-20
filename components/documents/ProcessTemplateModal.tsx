@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 
 interface Step { email: string; name: string; role: 'signer' | 'approver' | 'viewer'; order: number }
-interface Props { supabase: any; companyId: string; onClose: () => void; onSelect?: (template: any) => void; mode: 'save' | 'load' }
+interface Props { supabase: any; companyId: string; onClose: () => void; onSelect?: (template: any, vars?: Record<string, string>) => void; mode: 'save' | 'load' }
 
 const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, onSelect, mode }) => {
   const [name, setName] = useState('')
@@ -9,6 +9,28 @@ const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, o
   const [signingOrder, setSigningOrder] = useState<'sequential' | 'parallel'>('sequential')
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
+  const [detectedVars, setDetectedVars] = useState<string[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
+
+  const extractVars = (content: string) => {
+    const raw = typeof content === 'string' ? content : JSON.stringify(content)
+    const matches = raw.match(/\{\{([A-Z_]+)\}\}/g) || []
+    const unique = [...new Set(matches.map(m => m.replace(/[{}]/g, '')))]
+    setDetectedVars(unique)
+    const initial: Record<string, string> = {}
+    unique.forEach(v => initial[v] = '')
+    setTemplateVars(initial)
+    return unique
+  }
+
+  const applyVars = (content: string, vars: Record<string, string>) => {
+    let result = content
+    Object.entries(vars).forEach(([k, v]) => {
+      result = result.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v || `{{${k}}}`)
+    })
+    return result
+  }
 
   React.useEffect(() => {
     if (mode === 'load') {
@@ -32,17 +54,59 @@ const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, o
 
   if (mode === 'load') return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between mb-4">
-          <h2 className="text-lg font-semibold">Wybierz szablon procesu</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+          <h2 className="text-lg font-semibold">{selectedTemplate ? 'Uzupełnij dane szablonu' : 'Wybierz szablon procesu'}</h2>
+          <button onClick={() => { if (selectedTemplate) { setSelectedTemplate(null); setDetectedVars([]); setTemplateVars({}) } else onClose() }} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
-        {templates.length === 0 ? (
+
+        {selectedTemplate && detectedVars.length > 0 ? (
+          <>
+            <div className="border rounded-xl p-4 bg-blue-50 mb-4">
+              <h4 className="text-sm font-semibold text-blue-800 mb-3">📝 Uzupełnij zmienne szablonu</h4>
+              <div className="space-y-2">
+                {detectedVars.map(varName => (
+                  <div key={varName} className="flex items-center gap-3">
+                    <label className="text-xs text-gray-600 w-40 shrink-0 font-mono bg-white px-2 py-1 rounded border">
+                      {'{{'}{varName}{'}}'}
+                    </label>
+                    <input
+                      value={templateVars[varName] || ''}
+                      onChange={e => setTemplateVars(p => ({ ...p, [varName]: e.target.value }))}
+                      placeholder={varName.toLowerCase().replace(/_/g, ' ')}
+                      className="flex-1 border rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setSelectedTemplate(null); setDetectedVars([]); setTemplateVars({}) }} className="flex-1 py-2 border rounded-lg hover:bg-gray-50 text-sm">Wróć</button>
+              <button onClick={() => { onSelect?.(selectedTemplate, templateVars); onClose() }} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Utwórz dokument</button>
+            </div>
+          </>
+        ) : selectedTemplate ? (
+          <>
+            <p className="text-sm text-gray-500 mb-4">Szablon nie zawiera zmiennych do uzupełnienia.</p>
+            <div className="flex gap-2">
+              <button onClick={() => { setSelectedTemplate(null) }} className="flex-1 py-2 border rounded-lg hover:bg-gray-50 text-sm">Wróć</button>
+              <button onClick={() => { onSelect?.(selectedTemplate); onClose() }} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Utwórz dokument</button>
+            </div>
+          </>
+        ) : templates.length === 0 ? (
           <p className="text-gray-500 text-sm">Brak zapisanych szablonów</p>
         ) : (
           <div className="space-y-2">
             {templates.map(t => (
-              <button key={t.id} onClick={() => { onSelect?.(t); onClose() }}
+              <button key={t.id} onClick={() => {
+                const content = t.content || t.steps?.map((s: any) => s.content || '').join(' ') || ''
+                const vars = extractVars(typeof content === 'string' ? content : JSON.stringify(content))
+                if (vars.length > 0) {
+                  setSelectedTemplate(t)
+                } else {
+                  onSelect?.(t); onClose()
+                }
+              }}
                 className="w-full text-left p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300">
                 <div className="font-medium">{t.name}</div>
                 <div className="text-xs text-gray-500">{t.steps?.length || 0} kroków · {t.signing_order === 'sequential' ? 'Sekwencyjnie' : 'Równolegle'}</div>
@@ -50,7 +114,7 @@ const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, o
             ))}
           </div>
         )}
-        <button onClick={onClose} className="mt-4 w-full py-2 border rounded-lg hover:bg-gray-50">Zamknij</button>
+        {!selectedTemplate && <button onClick={onClose} className="mt-4 w-full py-2 border rounded-lg hover:bg-gray-50">Zamknij</button>}
       </div>
     </div>
   )

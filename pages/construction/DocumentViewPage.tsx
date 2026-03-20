@@ -29,8 +29,11 @@ const DocumentViewPage: React.FC = () => {
   const [replyText, setReplyText] = useState('')
   const [user, setUser] = useState<any>(null)
   const [showAI, setShowAI] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
   const [showParties, setShowParties] = useState(false)
   const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
+  const [showVersions, setShowVersions] = useState(false)
+  const [versions, setVersions] = useState<any[]>([])
   const [aiResult, setAiResult] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const commentBoxRef = useRef<HTMLTextAreaElement>(null)
@@ -50,6 +53,11 @@ const DocumentViewPage: React.FC = () => {
   useEffect(() => {
     if (editor) editor.setEditable(mode === 'edit')
   }, [mode, editor])
+
+  const loadVersions = async () => {
+    const { data } = await supabase.from('document_versions').select('*').eq('document_id', id!).order('version_number', { ascending: false }).limit(20)
+    setVersions(data || [])
+  }
 
   const loadDocument = async () => {
     setLoading(true)
@@ -88,8 +96,20 @@ const DocumentViewPage: React.FC = () => {
     setSaving(true)
     const html = editor.getHTML()
     await supabase.from('documents').update({ content: html, updated_at: new Date().toISOString() }).eq('id', id)
+
+    // Save version snapshot for history
+    await supabase.functions.invoke('log-document-event', {
+      body: {
+        document_id: id,
+        action: 'content_saved',
+        actor_email: user?.email,
+        content_snapshot: html,
+        snapshot_reason: 'autosave',
+      }
+    }).catch(() => {})
+
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 3000)
-  }, [editor, id])
+  }, [editor, id, user])
 
   useEffect(() => {
     if (mode === 'edit') { const t = setInterval(handleSave, 30000); return () => clearInterval(t) }
@@ -194,6 +214,9 @@ const DocumentViewPage: React.FC = () => {
           <button onClick={() => setShowParties(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showParties ? 'bg-blue-50 border-blue-300 text-blue-700' : 'hover:bg-gray-50'}`}>
             Dane stron
           </button>
+          <button onClick={() => { setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVersions ? 'bg-purple-50 border-purple-300 text-purple-700' : 'hover:bg-gray-50'}`}>
+            Historia wersji
+          </button>
 
           {/* AI dropdown */}
           <div className="relative">
@@ -266,9 +289,28 @@ const DocumentViewPage: React.FC = () => {
             <button onClick={() => editor.chain().focus().toggleHighlight({color:'#fef08a'}).run()} className="p-1 rounded text-xs hover:bg-gray-100" style={{background:'#fef08a'}}>Zaznacz</button>
             <div className="w-px h-4 bg-gray-200" />
             <button onClick={() => { const sel = window.getSelection()?.toString() || ''; setSelectedText(sel); setShowComments(true); setShowCommentBox(true); setTimeout(() => commentBoxRef.current?.focus(), 100) }} className="p-1 rounded text-xs text-blue-600 font-medium hover:bg-blue-50">+ Komentarz</button>
+            <div className="w-px h-4 bg-gray-200" />
+            <button
+              onClick={async () => {
+                const { from, to } = editor.state.selection
+                const selectedText = editor.state.doc.textBetween(from, to, ' ')
+                if (!selectedText) return
+                setAiPrompt(`Przepisz ten fragment lepiej: "${selectedText.slice(0, 200)}"`)
+                setShowAI(true)
+                handleAI('rewrite')
+              }}
+              className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 font-medium"
+            >
+              ✨ AI
+            </button>
           </div>
         </BubbleMenu>
       )}
+
+      {/* Document Status Timeline */}
+      <div className="max-w-screen-xl mx-auto w-full px-4 pt-4">
+        <DocumentTimeline status={doc?.status} />
+      </div>
 
       {/* Main content */}
       <div className="flex-1 flex max-w-screen-xl mx-auto w-full px-4 py-6 gap-6">
@@ -376,6 +418,36 @@ const DocumentViewPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Historia wersji sidebar */}
+        {showVersions && (
+          <div className="w-72 flex-shrink-0">
+            <div className="bg-white rounded-xl border shadow-sm sticky top-32">
+              <div className="px-4 py-3 border-b flex items-center justify-between">
+                <h3 className="font-semibold text-sm">Historia wersji</h3>
+                <button onClick={() => setShowVersions(false)} className="text-xs text-gray-400">✕</button>
+              </div>
+              <div className="max-h-[70vh] overflow-y-auto">
+                {versions.length === 0 && <p className="text-xs text-gray-400 p-4 text-center">Brak zapisanych wersji</p>}
+                {versions.map(v => (
+                  <div key={v.id} className="px-4 py-3 border-b hover:bg-gray-50">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-gray-700">v{v.version_number}</span>
+                      <span className="text-xs text-gray-400">{new Date(v.created_at).toLocaleString('pl-PL', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{v.snapshot_reason || 'zapisano'}</p>
+                    {v.created_by && <p className="text-xs text-gray-400">{v.created_by}</p>}
+                    {v.content && (
+                      <button onClick={() => { if(editor) editor.commands.setContent(v.content); setShowVersions(false) }} className="mt-1 text-xs text-blue-600 hover:underline">
+                        Przywróć tę wersję
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -472,6 +544,43 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
           Zapisz dane strony
         </button>
       </div>
+    </div>
+  )
+}
+
+const STATUS_STEPS = [
+  { key: 'draft', label: 'Szkic', icon: '📝' },
+  { key: 'sent', label: 'Wysłano', icon: '📤' },
+  { key: 'viewed', label: 'Odczytano', icon: '👁' },
+  { key: 'client_signed', label: 'Podpisano', icon: '✍️' },
+  { key: 'completed', label: 'Zakończono', icon: '✅' },
+]
+
+const DocumentTimeline: React.FC<{ status?: string }> = ({ status }) => {
+  const currentIdx = STATUS_STEPS.findIndex(s => s.key === status)
+  const activeIdx = currentIdx >= 0 ? currentIdx : 0
+
+  return (
+    <div className="flex items-center gap-0 w-full my-4">
+      {STATUS_STEPS.map((step, i) => (
+        <React.Fragment key={step.key}>
+          <div className="flex flex-col items-center flex-1">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm border-2 transition-all ${
+              i < activeIdx ? 'bg-green-500 border-green-500 text-white' :
+              i === activeIdx ? 'bg-blue-600 border-blue-600 text-white' :
+              'bg-white border-gray-200 text-gray-400'
+            }`}>
+              {i < activeIdx ? '✓' : step.icon}
+            </div>
+            <span className={`text-xs mt-1 font-medium ${i === activeIdx ? 'text-blue-600' : i < activeIdx ? 'text-green-600' : 'text-gray-400'}`}>
+              {step.label}
+            </span>
+          </div>
+          {i < STATUS_STEPS.length - 1 && (
+            <div className={`h-0.5 flex-1 mb-4 ${i < activeIdx ? 'bg-green-400' : 'bg-gray-200'}`} />
+          )}
+        </React.Fragment>
+      ))}
     </div>
   )
 }
