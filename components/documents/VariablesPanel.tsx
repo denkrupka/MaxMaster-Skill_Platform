@@ -13,6 +13,52 @@ interface VariablesPanelProps {
   onClose: () => void
 }
 
+
+// Auto-generate readable label from variable key
+function autoLabel(key: string): string {
+  const translations: Record<string, string> = {
+    'protocol_date': 'Data protokołu',
+    'client_name': 'Nazwa klienta',
+    'contractor_name': 'Nazwa wykonawcy',
+    'contract_date': 'Data umowy',
+    'contract_number': 'Numer umowy',
+    'project_name': 'Nazwa projektu',
+    'project_address': 'Adres projektu',
+    'start_date': 'Data rozpoczęcia',
+    'end_date': 'Data zakończenia',
+    'deadline': 'Termin',
+    'amount': 'Kwota',
+    'payment_date': 'Termin płatności',
+    'payment_method': 'Forma płatności',
+    'nip': 'NIP',
+    'regon': 'REGON',
+    'address': 'Adres',
+    'phone': 'Telefon',
+    'email': 'Email',
+    'representative': 'Przedstawiciel',
+    'position': 'Stanowisko',
+    'warranty': 'Gwarancja',
+    'penalty': 'Kara umowna',
+    'scope': 'Zakres prac',
+    'city': 'Miasto',
+    'zip_code': 'Kod pocztowy',
+    'bank_account': 'Numer konta',
+    'company_name': 'Nazwa firmy',
+    'investor_name': 'Nazwa inwestora',
+    'investor_address': 'Adres inwestora',
+    'completion_date': 'Data zakończenia',
+    'inspection_date': 'Data odbioru',
+    'total_amount': 'Kwota łączna',
+    'vat_rate': 'Stawka VAT',
+    'net_amount': 'Kwota netto',
+    'gross_amount': 'Kwota brutto',
+  }
+  if (translations[key]) return translations[key]
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
 const VariablesPanel: React.FC<VariablesPanelProps> = ({ editor, content, onClose }) => {
   const [variables, setVariables] = useState<Variable[]>([])
   const [search, setSearch] = useState('')
@@ -81,9 +127,7 @@ const VariablesPanel: React.FC<VariablesPanelProps> = ({ editor, content, onClos
               <div key={v.name} className="bg-gray-50 rounded-xl p-3">
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div className="min-w-0">
-                    {v.label && (
-                      <p className="text-xs font-medium text-gray-800 mb-0.5 truncate">{v.label}</p>
-                    )}
+                    <p className="text-xs font-medium text-gray-800 mb-0.5 truncate">{v.label || autoLabel(v.name)}</p>
                     <span className="text-xs font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">
                       {`{{${v.name}}}`}
                     </span>

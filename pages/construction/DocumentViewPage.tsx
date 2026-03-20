@@ -349,7 +349,7 @@ const DocumentViewPage: React.FC = () => {
               AI <span className="text-[10px]">▾</span>
             </button>
             {showAI && (
-              <div className="absolute right-0 top-full mt-1 bg-white border rounded-xl shadow-lg z-[200] w-56 py-1">
+              <div className="absolute right-0 top-full mt-1 bg-white border rounded-xl shadow-lg z-[9999] w-56 py-1">
                 <button onClick={() => handleAI('overview')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Analizuj dokument</button>
                 <button onClick={() => handleAI('risk')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
                 <button onClick={() => handleAI('clauses')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>
@@ -669,18 +669,35 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
     setNipLoading(true)
     try {
       const clean = nip.replace(/[\s-]/g,'')
-      const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/${clean}`)
+      const today = new Date().toISOString().split('T')[0]
+      const r = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/\${clean}?date=\${today}`)
       const d = await r.json()
-      const co = d?.company || d?.result?.[0] || d
-      if (co?.name || co?.companyName) {
+      const s = d?.result?.subject
+      if (s) {
         setForm(prev => ({
           ...prev,
-          name: co.name || co.companyName || prev.name,
-          address: co.address?.street ? `${co.address.street} ${co.address.buildingNumber||''}, ${co.address.postalCode||''} ${co.address.city||''}`.trim() : prev.address,
+          name: s.name || prev.name,
+          address: s.workingAddress || s.residenceAddress || prev.address,
           nip: clean,
         }))
       }
-    } catch { /* GUS API może być niedostępne */ }
+    } catch {
+      // Biała Lista API fallback
+      try {
+        const clean = nip.replace(/[\s-]/g,'')
+        const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/\${clean}`)
+        const d = await r.json()
+        const co = d?.company || d?.result?.[0] || d
+        if (co?.name || co?.companyName) {
+          setForm(prev => ({
+            ...prev,
+            name: co.name || co.companyName || prev.name,
+            address: co.address?.street ? `\${co.address.street} \${co.address.buildingNumber||''}, \${co.address.postalCode||''} \${co.address.city||''}`.trim() : prev.address,
+            nip: clean,
+          }))
+        }
+      } catch { /* API niedostępne */ }
+    }
     setNipLoading(false)
   }
 
@@ -716,7 +733,14 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
         ].map(({k,l,ph}) => (
           <div key={k}>
             <label className="text-xs text-gray-500 mb-0.5 block">{l}</label>
-            <input value={form[k as keyof PartyData]||''} onChange={e => upd(k as keyof PartyData, e.target.value)}
+            <input value={form[k as keyof PartyData]||''} onChange={e => {
+              if (k === 'phone') {
+                const v = e.target.value.replace(/[^0-9+\s-]/g, '')
+                upd(k as keyof PartyData, v.slice(0, 15))
+              } else {
+                upd(k as keyof PartyData, e.target.value)
+              }
+            }}
               placeholder={ph} className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none" />
           </div>
         ))}
