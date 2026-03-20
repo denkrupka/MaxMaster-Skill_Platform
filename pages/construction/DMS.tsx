@@ -1700,6 +1700,8 @@ export const DMSPage: React.FC = () => {
 
   const [tab, setTab] = useState<'templates' | 'documents' | 'settings'>('documents');
   const [showAIGenerate, setShowAIGenerate] = useState(false);
+  const [showOCR, setShowOCR] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderDays1, setReminderDays1] = useState(3);
   const [reminderDays2, setReminderDays2] = useState(7);
@@ -1964,6 +1966,7 @@ export const DMSPage: React.FC = () => {
             <button onClick={() => navigate('/finance/dashboard')} className="px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-slate-50 flex items-center gap-1">
               📊 Dashboard
             </button>
+            <button onClick={() => setShowOCR(true)} className="px-4 py-2 text-xs border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 flex items-center gap-1">📷 Importuj z pliku</button>
             <button onClick={() => setShowAIGenerate(true)} className="flex items-center gap-2 px-4 py-2 text-sm border border-purple-200 text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 whitespace-nowrap">
               ✨ Generuj z AI
             </button>
@@ -2216,6 +2219,47 @@ export const DMSPage: React.FC = () => {
         </div>
       )}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* OCR Import */}
+      {showOCR && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">📷 Importuj z pliku</h3>
+              <button onClick={() => setShowOCR(false)} className="text-gray-400">✕</button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Zrób zdjęcie faktury, umowy lub protokołu — AI wyciągnie dane automatycznie</p>
+            <input type="file" accept="image/*,.pdf" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setOcrLoading(true)
+              const reader = new FileReader()
+              reader.onload = async (ev) => {
+                const base64 = (ev.target?.result as string)?.split(',')[1]
+                try {
+                  const { data } = await supabase.functions.invoke('ocr-document', { body: { image_base64: base64 } })
+                  if (data?.data) {
+                    await supabase.from('documents').insert({
+                      name: data.data.title || file.name,
+                      content: `<p>${data.data.full_text || ''}</p>`,
+                      status: 'draft',
+                      parties: { party1: data.data.company1, party2: data.data.company2 }
+                    })
+                    setShowOCR(false)
+                    loadDocuments?.()
+                  }
+                } catch (err) {
+                  console.error('OCR error:', err)
+                } finally {
+                  setOcrLoading(false)
+                }
+              }
+              reader.readAsDataURL(file)
+            }} className="w-full border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-sm text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500" />
+            {ocrLoading && <p className="text-xs text-center text-blue-600 mt-3 animate-pulse">AI przetwarza dokument...</p>}
+          </div>
+        </div>
+      )}
     </div>
     </DocumentsErrorBoundary>
   );

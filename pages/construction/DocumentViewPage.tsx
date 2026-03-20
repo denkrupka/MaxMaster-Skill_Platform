@@ -59,6 +59,20 @@ const DocumentViewPage: React.FC = () => {
     setVersions(data || [])
   }
 
+  const generatePortalLink = async () => {
+    const { data } = await supabase.from('client_portal_tokens').insert({
+      project_id: doc?.project_id,
+      company_id: doc?.company_id,
+      label: doc?.name,
+      active: true
+    }).select('token').single()
+    if (data?.token) {
+      const link = `${window.location.origin}${window.location.pathname.split('#')[0]}#/portal/${data.token}`
+      await navigator.clipboard.writeText(link)
+      alert('Link skopiowany do schowka!')
+    }
+  }
+
   const loadDocument = async () => {
     setLoading(true)
     const { data } = await supabase.from('documents').select('*, document_templates(name, type, content), contractors(name), projects(name)').eq('id', id!).single()
@@ -237,6 +251,9 @@ const DocumentViewPage: React.FC = () => {
 
           <button onClick={handlePrintPDF} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
             ↓ PDF
+          </button>
+          <button onClick={generatePortalLink} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
+            🔗 Portal
           </button>
           <button onClick={() => navigate(`/construction/dms/${id}/certificate`)} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 text-gray-700">Certyfikat</button>
           {doc?.status === 'client_signed' && (
