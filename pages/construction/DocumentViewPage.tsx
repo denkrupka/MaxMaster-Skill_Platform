@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
-import { BubbleMenu } from '@tiptap/react/menus'
+import { } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import { TextStyle } from '@tiptap/extension-text-style'
@@ -372,35 +372,7 @@ const DocumentViewPage: React.FC = () => {
         )}
       </div>
 
-      {/* BubbleMenu */}
-      {editor && mode === 'edit' && (
-        <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
-          <div className="flex items-center gap-1 bg-white border shadow-lg rounded-lg px-2 py-1">
-            <button onClick={() => editor.chain().focus().toggleBold().run()} className="p-1 rounded text-xs font-bold hover:bg-gray-100">B</button>
-            <button onClick={() => editor.chain().focus().toggleItalic().run()} className="p-1 rounded text-xs italic hover:bg-gray-100">I</button>
-            <button onClick={() => editor.chain().focus().toggleHighlight({color:'#fef08a'}).run()} className="p-1 rounded text-xs hover:bg-gray-100" style={{background:'#fef08a'}}>Zaznacz</button>
-            <div className="w-px h-4 bg-gray-200" />
-            <button onClick={() => { const sel = window.getSelection()?.toString() || ''; setSelectedText(sel); setShowComments(true); setShowCommentBox(true); setTimeout(() => commentBoxRef.current?.focus(), 100) }} className="p-1 rounded text-xs text-blue-600 font-medium hover:bg-blue-50">+ Komentarz</button>
-            <div className="w-px h-4 bg-gray-200" />
-            <button
-              onClick={async () => {
-                const { from, to } = editor.state.selection
-                const selectedText = editor.state.doc.textBetween(from, to, ' ')
-                if (!selectedText) return
-                setAiPrompt(`Przepisz ten fragment lepiej: "${selectedText.slice(0, 200)}"`)
-                setShowAI(true)
-                handleAI('rewrite')
-              }}
-              className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 font-medium flex items-center gap-1"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-              </svg>
-              AI
-            </button>
-          </div>
-        </BubbleMenu>
-      )}
+
 
       {/* Document Status Timeline */}
       <div className="max-w-screen-xl mx-auto w-full px-4 pt-4">
