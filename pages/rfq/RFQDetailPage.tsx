@@ -140,7 +140,7 @@ const RFQDetailPage: React.FC = () => {
                     {responded.map(r => (
                       <td key={r.id} className={`px-4 py-3 text-center ${r.status === 'chosen' ? 'bg-green-50' : ''}`}>
                         {r.status === 'chosen'
-                          ? <span className="text-green-600 font-medium text-xs">✓ Wybrano</span>
+                          ? <span className="text-green-600 font-medium text-xs">Wybrano</span>
                           : <button onClick={() => handleChoose(r.id)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700">Wybierz</button>
                         }
                       </td>

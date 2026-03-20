@@ -60,7 +60,7 @@ const DocumentAnalytics: React.FC<Props> = ({ supabase, companyId }) => {
     { label: 'Wysłane', value: data.sent_count, color: 'bg-blue-50 text-blue-700' },
     { label: 'Podpisane', value: data.signed_count, color: 'bg-green-50 text-green-700' },
     { label: 'Wygasłe', value: data.expired_count, color: 'bg-orange-50 text-orange-700' },
-    { label: '⚠️ Przeterminowane', value: data.overdue_count, color: 'bg-red-50 text-red-700' },
+    { label: 'Przeterminowane', value: data.overdue_count, color: 'bg-red-50 text-red-700' },
   ]
 
   return (

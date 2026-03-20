@@ -63,7 +63,7 @@ const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, o
         {selectedTemplate && detectedVars.length > 0 ? (
           <>
             <div className="border rounded-xl p-4 bg-blue-50 mb-4">
-              <h4 className="text-sm font-semibold text-blue-800 mb-3">📝 Uzupełnij zmienne szablonu</h4>
+              <h4 className="text-sm font-semibold text-blue-800 mb-3">Uzupełnij zmienne szablonu</h4>
               <div className="space-y-2">
                 {detectedVars.map(varName => (
                   <div key={varName} className="flex items-center gap-3">
