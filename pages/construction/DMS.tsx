@@ -629,9 +629,7 @@ const DocumentView = ({ docId, onClose, onRefresh }: { docId: string; onClose: (
           </div>
           {doc?.status !== 'archived' && (
             <button onClick={archive}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
-              <Archive className="w-4 h-4" /> Archiwizuj
-            </button>
+              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"><Archive className="w-4 h-4" /> Archiwizuj</button>
           )}
         </div>
       </div>
@@ -1275,9 +1273,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
             }} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg" aria-label="Pobierz PDF">
               <Download className="w-3.5 h-3.5" /> PDF
             </button>
-            <button onClick={handlePdfPreview} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 rounded-lg hover:bg-slate-200">
-              <Eye className="w-3.5 h-3.5" /> Podgląd
-            </button>
+            
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg" aria-label="Zamknij">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-slate-500"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
@@ -1398,11 +1394,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
                     {savingNotes ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                     Zapisz notatki
                   </button>
-                  <button
-                    onClick={handlePdfPreview}
-                    className="inline-flex items-center gap-1 px-4 py-1.5 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
-                    <Eye className="w-3.5 h-3.5" /> Otwórz PDF
-                  </button>
+                  
                 </div>
                 {pdfPreviewError && (
                   <p className="text-xs text-red-500 mt-1">{pdfPreviewError}</p>
@@ -1765,6 +1757,7 @@ export const DMSPage: React.FC = () => {
   const [contractors, setContractors] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showNewDocModal, setShowNewDocModal] = useState(false)
 
 
   const loadTemplates = useCallback(async () => {
@@ -1995,12 +1988,7 @@ export const DMSPage: React.FC = () => {
               <option value="completed">Gotowe</option>
               <option value="archived">Archiwum</option>
             </select>
-            <button onClick={() => {
-              const csv = exportDocumentsCSV(filteredDocuments);
-              downloadCSV(csv, `dokumenty-${new Date().toISOString().slice(0,10)}.csv`);
-            }} className="px-3 py-2 text-sm border rounded-lg hover:bg-slate-50" aria-label="Eksport CSV">
-              CSV
-            </button>
+            
             <button onClick={() => navigate('/finance/dashboard')} className="px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-slate-50 flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
               Dashboard
@@ -2013,30 +2001,14 @@ export const DMSPage: React.FC = () => {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg>
               Generuj z AI
             </button>
-            <button onClick={() => setShowDocWizard(true)}
+            <button onClick={() => setShowNewDocModal(true)}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap">
               <Plus className="w-4 h-4" /> Nowy dokument
             </button>
           </div>
 
           {/* Stats cards */}
-          {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {[
-                { label: 'Wszystkie', value: stats.total, color: 'bg-blue-50 text-blue-700' },
-                { label: 'Szkice', value: stats.drafts, color: 'bg-yellow-50 text-yellow-700' },
-                { label: 'Gotowe', value: stats.completed, color: 'bg-green-50 text-green-700' },
-                { label: 'Archiwum', value: stats.archived, color: 'bg-slate-50 text-slate-500' },
-                { label: 'Do podpisu', value: stats.pendingSignatures, color: 'bg-orange-50 text-orange-700' },
-                { label: 'Ten miesiąc', value: stats.thisMonth, color: 'bg-purple-50 text-purple-700' },
-              ].map(s => (
-                <div key={s.label} className={`p-3 rounded-lg ${s.color}`}>
-                  <p className="text-2xl font-bold">{s.value}</p>
-                  <p className="text-xs">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          )}
+          
 
           {quickActionResult && (
             <ActionResultCard
@@ -2343,6 +2315,57 @@ export const DMSPage: React.FC = () => {
         </div>
       )}
     </div>
+    
+      {showNewDocModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowNewDocModal(false)}>
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Nowy dokument</h2>
+            <p className="text-sm text-gray-500 mb-5">Wybierz sposób dodania dokumentu</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => { setShowNewDocModal(false); navigate('/construction/dms/new') }}
+                className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                </div>
+                <div className="text-center">
+                  <p className="font-medium text-sm text-gray-900">Utwórz nowy</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Pusty dokument</p>
+                </div>
+              </button>
+              <button
+                onClick={() => { (document.getElementById('dms-file-import') as HTMLInputElement)?.click() }}
+                className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all">
+                <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                </div>
+                <div className="text-center">
+                  <p className="font-medium text-sm text-gray-900">Importuj plik</p>
+                  <p className="text-xs text-gray-400 mt-0.5">DOCX, PDF, TXT, ODT</p>
+                </div>
+              </button>
+            </div>
+            <input id="dms-file-import" type="file" accept=".docx,.pdf,.txt,.odt,.doc" className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = async (ev) => {
+                  const raw = ((ev.target?.result as string) || '').slice(0, 50000)
+                  const { data } = await supabase.from('documents').insert({
+                    title: file.name.replace(/\.[^.]+$/, ''),
+                    content: '<p>' + raw.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>',
+                    status: 'draft',
+                    company_id: profile?.company_id
+                  }).select().single()
+                  if (data) { setShowNewDocModal(false); navigate('/construction/dms/' + data.id) }
+                }
+                reader.readAsText(file)
+              }}
+            />
+          </div>
+        </div>
+      )}
     </DocumentsErrorBoundary>
   );
 };
@@ -2394,6 +2417,8 @@ const RequiredClausesEditor: React.FC = () => {
         <button onClick={add} className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700">Dodaj</button>
       </div>
     </div>
+      
+
   )
 }
 
