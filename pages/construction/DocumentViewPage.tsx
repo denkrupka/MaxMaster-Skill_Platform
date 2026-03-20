@@ -35,6 +35,7 @@ const DocumentViewPage: React.FC = () => {
   const [showVariables, setShowVariables] = useState(false)
   const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
   const [showVersions, setShowVersions] = useState(false)
+  const [portalLinkModal, setPortalLinkModal] = useState<string | null>(null)
   const [showDiff, setShowDiff] = useState(false)
   const [diffHtml, setDiffHtml] = useState('')
   const [versions, setVersions] = useState<any[]>([])
@@ -142,7 +143,7 @@ const DocumentViewPage: React.FC = () => {
     if (data?.token) {
       const link = `${window.location.origin}${window.location.pathname.split('#')[0]}#/portal/${data.token}`
       await navigator.clipboard.writeText(link)
-      alert('Link skopiowany do schowka!')
+      setPortalLinkModal(link)
     }
   }
 
@@ -570,6 +571,36 @@ const DocumentViewPage: React.FC = () => {
               <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-100 border border-green-300 rounded inline-block"></span> Dodane</span>
             </div>
             <div className="font-mono text-xs" dangerouslySetInnerHTML={{ __html: diffHtml }} />
+          </div>
+        </div>
+      )}
+
+      {/* Portal Link Modal */}
+      {portalLinkModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPortalLinkModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-900">Link do portalu klienta</h3>
+              <button onClick={() => setPortalLinkModal(null)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Udostępnij ten link klientowi — może on przeglądać dokument bez logowania.</p>
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+              <span className="flex-1 text-xs text-gray-700 font-mono truncate">{portalLinkModal}</span>
+              <button
+                onClick={() => { navigator.clipboard.writeText(portalLinkModal); }}
+                className="flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                </svg>
+                Kopiuj
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-3">Link wygasa po 30 dniach</p>
           </div>
         </div>
       )}
