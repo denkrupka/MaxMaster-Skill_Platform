@@ -26,28 +26,12 @@ const SignPage: React.FC = () => {
   useEffect(() => { if (token) validateToken() }, [token])
 
   const validateToken = async () => {
-    const { data } = await supabase
-      .from('signature_tokens')
-      .select('*, signature_requests(signer_name, signer_phone, documents(name, content, document_templates(name, content)))')
-      .eq('token', token!)
-      .eq('used', false)
-      .gte('expires_at', new Date().toISOString())
-      .single()
-    if (!data) { setStep('expired'); return }
-    const req = data.signature_requests as any
-    setDoc(req?.documents)
-    setSignerName(req?.signer_name || '')
-    if (req?.signer_phone) setPhone(req.signer_phone)
-
-    // Load company branding for whitelabel
-    if (req?.documents?.company_id) {
-      const { data: company } = await supabase
-        .from('company_settings')
-        .select('company_name, logo_url, primary_color')
-        .eq('company_id', req.documents.company_id)
-        .single()
-      if (company) setCompanyBranding({ name: company.company_name, logo_url: company.logo_url, color: company.primary_color })
-    }
+    const { data, error } = await supabase.rpc('get_sign_data', { sign_token: token! })
+    if (error || !data || data.error) { setStep('expired'); return }
+    setDoc(data.document)
+    setSignerName(data.request?.signer_name || '')
+    if (data.request?.signer_phone) setPhone(data.request.signer_phone)
+    if (data.company) setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
   }
 
   const handleSendOtp = async () => {
