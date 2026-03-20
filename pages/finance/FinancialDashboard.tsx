@@ -73,7 +73,7 @@ const FinancialDashboard: React.FC = () => {
           { label: 'Przychody', value: fmt(stats.income), color: 'text-green-600', bg: 'bg-green-50', icon: '↑' },
           { label: 'Koszty', value: fmt(stats.expenses), color: 'text-red-500', bg: 'bg-red-50', icon: '↓' },
           { label: 'Zysk netto', value: fmt(profit), color: profit >= 0 ? 'text-blue-600' : 'text-red-600', bg: 'bg-blue-50', icon: '=' },
-          { label: 'Oczekujące', value: fmt(stats.pending), color: 'text-orange-500', bg: 'bg-orange-50', icon: '⏳' },
+          { label: 'Oczekujące', value: fmt(stats.pending), color: 'text-orange-500', bg: 'bg-orange-50', icon: '' },
         ].map(c => (
           <div key={c.label} className={`${c.bg} rounded-2xl p-5`}>
             <p className="text-xs font-medium text-gray-500 mb-1">{c.label}</p>

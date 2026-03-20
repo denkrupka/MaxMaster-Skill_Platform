@@ -57,7 +57,7 @@ const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, o
       <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between mb-4">
           <h2 className="text-lg font-semibold">{selectedTemplate ? 'Uzupełnij dane szablonu' : 'Wybierz szablon procesu'}</h2>
-          <button onClick={() => { if (selectedTemplate) { setSelectedTemplate(null); setDetectedVars([]); setTemplateVars({}) } else onClose() }} className="text-gray-400 hover:text-gray-600">✕</button>
+          <button onClick={() => { if (selectedTemplate) { setSelectedTemplate(null); setDetectedVars([]); setTemplateVars({}) } else onClose() }} className="text-gray-400 hover:text-gray-600">×</button>
         </div>
 
         {selectedTemplate && detectedVars.length > 0 ? (
@@ -124,7 +124,7 @@ const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, o
       <div className="bg-white rounded-xl p-6 w-full max-w-lg overflow-auto max-h-screen">
         <div className="flex justify-between mb-4">
           <h2 className="text-lg font-semibold">Zapisz szablon procesu</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">×</button>
         </div>
         <div className="space-y-4">
           <div>
@@ -154,7 +154,7 @@ const ProcessTemplateModal: React.FC<Props> = ({ supabase, companyId, onClose, o
                   <option value="approver">Approver</option>
                   <option value="viewer">Viewer</option>
                 </select>
-                <button onClick={() => removeStep(i)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
+                <button onClick={() => removeStep(i)} className="text-red-400 hover:text-red-600 text-xs">×</button>
               </div>
             ))}
           </div>

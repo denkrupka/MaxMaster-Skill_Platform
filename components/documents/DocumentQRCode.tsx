@@ -22,7 +22,7 @@ const DocumentQRCode: React.FC<Props> = ({ documentId }) => {
       </button>
       {verified && (
         <div className={`text-xs p-2 rounded ${verified.valid ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-          {verified.valid ? `✅ Dokument autentyczny · ${verified.signatures?.length || 0} podpisów` : '❌ Dokument nieważny'}
+          {verified.valid ? ` Dokument autentyczny · ${verified.signatures?.length || 0} podpisów` : ' Dokument nieważny'}
         </div>
       )}
     </div>

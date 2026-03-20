@@ -85,9 +85,9 @@ export const DocumentReminders: React.FC<DocumentRemindersProps> = ({
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'email': return '📧';
+      case 'email': return '';
       case 'notification': return '🔔';
-      case 'both': return '📧🔔';
+      case 'both': return '🔔';
       default: return '🔔';
     }
   };

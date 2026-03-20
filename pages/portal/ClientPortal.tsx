@@ -46,7 +46,7 @@ const ClientPortal: React.FC = () => {
 
   if (error) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center"><p className="text-2xl mb-2">🔒</p><p className="text-gray-600">{error}</p></div>
+      <div className="text-center"><p className="text-2xl mb-2"></p><p className="text-gray-600">{error}</p></div>
     </div>
   )
 

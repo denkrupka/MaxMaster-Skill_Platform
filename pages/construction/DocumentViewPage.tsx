@@ -392,7 +392,7 @@ const DocumentViewPage: React.FC = () => {
             <div className="mb-4 bg-purple-50 border border-purple-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-semibold text-purple-800">Analiza AI</h4>
-                <button onClick={() => { setShowAI(false); setAiResult('') }} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+                <button onClick={() => { setShowAI(false); setAiResult('') }} className="text-xs text-gray-400 hover:text-gray-600">×</button>
               </div>
               {aiLoading ? <div className="text-sm text-gray-500">Analizuję...</div> : <div className="text-sm text-gray-700 whitespace-pre-wrap">{aiResult}</div>}
             </div>
@@ -425,7 +425,7 @@ const DocumentViewPage: React.FC = () => {
                 <h3 className="font-semibold text-sm">Komentarze ({activeComments.length})</h3>
                 <div className="flex gap-2">
                   <button onClick={() => { setShowCommentBox(true); setSelectedText(''); setTimeout(() => commentBoxRef.current?.focus(), 100) }} className="text-xs text-blue-600">+ Dodaj</button>
-                  <button onClick={() => setShowComments(false)} className="text-xs text-gray-400">✕</button>
+                  <button onClick={() => setShowComments(false)} className="text-xs text-gray-400">×</button>
                 </div>
               </div>
               <div className="divide-y max-h-[65vh] overflow-y-auto">
@@ -464,7 +464,7 @@ const DocumentViewPage: React.FC = () => {
                         <textarea value={replyText} onChange={e => setReplyText(e.target.value)} rows={2} placeholder="Odpowiedz..." className="w-full border rounded px-2 py-1 text-xs resize-none" />
                         <div className="flex gap-1 mt-1">
                           <button onClick={() => handleReply(c.id)} className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs">OK</button>
-                          <button onClick={() => setActiveCommentId(null)} className="px-2 py-0.5 rounded text-xs border">✕</button>
+                          <button onClick={() => setActiveCommentId(null)} className="px-2 py-0.5 rounded text-xs border">×</button>
                         </div>
                       </div>
                     ) : <button onClick={e => { e.stopPropagation(); setActiveCommentId(c.id) }} className="text-xs text-blue-600 hover:underline">Odpowiedz</button>}
@@ -480,7 +480,7 @@ const DocumentViewPage: React.FC = () => {
             <div className="bg-white rounded-xl border shadow-sm sticky top-32">
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Dane stron</h3>
-                <button onClick={() => setShowParties(false)} className="text-xs text-gray-400">✕</button>
+                <button onClick={() => setShowParties(false)} className="text-xs text-gray-400">×</button>
               </div>
               <div className="p-4 max-h-[70vh] overflow-y-auto space-y-4">
                 <DocumentParty label="Strona 1 (Zamawiający)" value={parties.party1} onChange={v => setParties(p => ({...p, party1: v}))} onSave={() => saveParties({...parties, party1: parties.party1})} />
@@ -496,7 +496,7 @@ const DocumentViewPage: React.FC = () => {
             <div className="bg-white rounded-xl border shadow-sm sticky top-32">
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Historia wersji</h3>
-                <button onClick={() => setShowVersions(false)} className="text-xs text-gray-400">✕</button>
+                <button onClick={() => setShowVersions(false)} className="text-xs text-gray-400">×</button>
               </div>
               <div className="max-h-[70vh] overflow-y-auto">
                 {versions.length === 0 && <p className="text-xs text-gray-400 p-4 text-center">Brak zapisanych wersji</p>}
@@ -621,11 +621,11 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
 }
 
 const STATUS_STEPS = [
-  { key: 'draft', label: 'Szkic', icon: '📝' },
+  { key: 'draft', label: 'Szkic', icon: '' },
   { key: 'sent', label: 'Wysłano', icon: '📤' },
   { key: 'viewed', label: 'Odczytano', icon: '👁' },
-  { key: 'client_signed', label: 'Podpisano', icon: '✍️' },
-  { key: 'completed', label: 'Zakończono', icon: '✅' },
+  { key: 'client_signed', label: 'Podpisano', icon: '✍' },
+  { key: 'completed', label: 'Zakończono', icon: '' },
 ]
 
 const DocumentTimeline: React.FC<{ status?: string }> = ({ status }) => {
@@ -660,7 +660,7 @@ const DocumentTimeline: React.FC<{ status?: string }> = ({ status }) => {
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">Porównanie wersji</h3>
-              <button onClick={() => setShowDiff(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <button onClick={() => setShowDiff(false)} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
             <div className="text-xs text-gray-500 mb-3 flex gap-4">
               <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-100 border border-red-300 rounded inline-block"></span> Usunięte</span>

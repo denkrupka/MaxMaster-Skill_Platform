@@ -89,7 +89,7 @@ export const AIDocumentGenerator: React.FC<Props> = ({ onClose, onCreated }) => 
       <div className="flex gap-3">
         <button onClick={onClose} className="flex-1 border rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50">Anuluj</button>
         <button onClick={handleGenerate} disabled={loading} className="flex-1 bg-purple-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
-          {loading ? '✨ Generuję...' : '✨ Generuj dokument'}
+          {loading ? ' Generuję...' : ' Generuj dokument'}
         </button>
       </div>
     </div>
