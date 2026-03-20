@@ -138,7 +138,7 @@ const DocumentSignPage: React.FC = () => {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate(`/construction/dms/${id}`)} className="text-gray-500 hover:text-gray-800 text-sm">← Powrót</button>
           <div className="w-px h-5 bg-gray-200" />
-          <h1 className="text-sm font-semibold text-gray-900">Wyślij do podpisu</h1>
+          <h1 className="text-sm font-semibold text-gray-900">Podpis</h1>
           <span className="text-sm text-gray-500 truncate">{docTitle}</span>
         </div>
       </div>
@@ -243,13 +243,7 @@ const DocumentSignPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Email template */}
-        {signMethod.email && (
-          <div className="bg-white rounded-xl border p-5">
-            <h2 className="font-semibold text-gray-900 mb-3">Treść e-maila</h2>
-            <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} rows={8} className="w-full border rounded-lg px-3 py-3 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono" />
-          </div>
-        )}
+
 
         {/* SMS template */}
         {(signMethod.sms || signers.some(s => s.sendSms)) && (

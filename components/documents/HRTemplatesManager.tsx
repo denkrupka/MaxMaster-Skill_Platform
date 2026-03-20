@@ -358,7 +358,7 @@ export const HRTemplatesManager: React.FC<HRTemplatesManagerProps> = ({ onSendFo
             <div className="mt-6 flex gap-2">
               <Button onClick={handleSendForSigning} className="flex-1">
                 <Send size={16} className="mr-2" />
-                Wyślij do podpisu
+                Podpis
               </Button>
             </div>
           </div>

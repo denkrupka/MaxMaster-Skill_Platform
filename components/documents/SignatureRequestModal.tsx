@@ -158,7 +158,7 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
-          <h3 className="font-semibold text-gray-900">Wyślij do podpisu</h3>
+          <h3 className="font-semibold text-gray-900">Podpis</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -304,7 +304,7 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
             Anuluj
           </button>
           <button onClick={handleSend} disabled={sending} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {sending ? 'Wysyłam...' : 'Wyślij do podpisu'}
+            {sending ? 'Wysyłam...' : 'Podpis'}
           </button>
         </div>
       </div>

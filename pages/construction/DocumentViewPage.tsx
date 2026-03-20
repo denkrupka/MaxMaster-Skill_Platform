@@ -107,8 +107,8 @@ const DocumentViewPage: React.FC = () => {
   const renderPreviewContent = useCallback((html: string): string => {
     if (!html) return ''
     const storedVars: Record<string, string> = JSON.parse(localStorage.getItem('doc_variables') || '{}')
-    return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-      const value = storedVars[key]
+    return html.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+      const value = storedVars[key.trim()]
       if (value && value.trim()) {
         return `<span style="color:inherit;font-weight:inherit;text-decoration:underline;text-decoration-color:#3b82f6">${value}</span>`
       }
@@ -406,7 +406,7 @@ const DocumentViewPage: React.FC = () => {
           {/* Mode buttons */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
             <button onClick={() => setMode('preview')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'preview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Podgląd</button>
-            <button onClick={() => setMode('edit')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'edit' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>Edytuj</button>
+            <button onClick={() => setMode('edit')} disabled={doc?.status === 'client_signed' || doc?.status === 'completed' || doc?.status === 'sent'} className={`px-3 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'edit' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>Edytuj</button>
           </div>
 
           {/* Action buttons */}
@@ -487,7 +487,7 @@ const DocumentViewPage: React.FC = () => {
             </button>
           )}
           <button onClick={() => navigate(`/construction/dms/${id}/sign`)} className="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-            Wyślij do podpisu
+            Podpis
           </button>
 
           {mode === 'edit' && (
@@ -896,10 +896,9 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
     try {
       const clean = nip.replace(/[\s-]/g,'')
       const today = new Date().toISOString().split('T')[0]
-      const r = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/${clean}?date=${today}`, {
-        headers: { 'Accept': 'application/json' }
-      })
-      const d = await r.json()
+      const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://wl-api.mf.gov.pl/api/search/nip/${clean}?date=${today}`)}`)
+      const raw = await r.json()
+      const d = typeof raw.contents === 'string' ? JSON.parse(raw.contents) : raw
       const s = d?.result?.subject
       if (s) {
         setForm(prev => ({
