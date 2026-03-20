@@ -118,8 +118,9 @@ const SignPage: React.FC = () => {
               dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400">Brak treści dokumentu</p>' }}
             />
           </div>
-          <button onClick={() => setShowPreview(false)} className="w-full bg-blue-600 text-white rounded-2xl py-4 font-semibold shadow-lg hover:bg-blue-700 transition-colors">
-            Przejdź do podpisania →
+          <button onClick={() => setShowPreview(false)} className="w-full bg-blue-600 text-white rounded-2xl py-4 font-semibold shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+            Przejdź do podpisania
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
           </button>
         </div>
       </div>
@@ -129,7 +130,9 @@ const SignPage: React.FC = () => {
   if (step === 'expired') return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" className="w-8 h-8 text-red-500"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+        </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Link wygasl</h2>
         <p className="text-sm text-gray-500">Ten link jest niewazny lub uzytkownik juz podpisal. Skontaktuj sie z nadawca.</p>
       </div>
@@ -153,7 +156,7 @@ const SignPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-md">
         <div className="px-6 pt-6 pb-4 border-b">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-3">
             {companyBranding?.logo_url ? (
               <img src={companyBranding.logo_url} alt={companyBranding.name || 'Logo'} className="w-8 h-8 rounded-lg object-contain" />
             ) : (
@@ -163,7 +166,32 @@ const SignPage: React.FC = () => {
             )}
             <span className="font-semibold text-gray-900">{companyBranding?.name || 'MaxMaster'}</span>
           </div>
-          <p className="text-sm text-gray-500">{signerName ? `Dzien dobry, ${signerName}! ` : ''}Przeslano Ci dokument do podpisu.</p>
+          <p className="text-sm text-gray-500 mb-4">{signerName ? `Dzien dobry, ${signerName}! ` : ''}Przeslano Ci dokument do podpisu.</p>
+          {/* Step progress */}
+          <div className="flex items-center gap-0">
+            {[
+              { num: 1, label: 'Telefon', key: 'phone' },
+              { num: 2, label: 'Weryfikacja', key: 'otp' },
+              { num: 3, label: 'Podpis', key: 'document' },
+            ].map((s, i) => {
+              const stepIdx = { phone: 0, otp: 1, document: 2 }[step as string] ?? 0;
+              const isDone = i < stepIdx;
+              const isActive = i === stepIdx;
+              return (
+                <React.Fragment key={s.key}>
+                  <div className="flex flex-col items-center">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isDone ? 'bg-blue-600 text-white' : isActive ? 'bg-blue-600 text-white ring-2 ring-blue-200' : 'bg-gray-100 text-gray-400'}`}>
+                      {isDone ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                      ) : s.num}
+                    </div>
+                    <span className={`text-[10px] mt-1 font-medium ${isActive ? 'text-blue-600' : isDone ? 'text-blue-400' : 'text-gray-400'}`}>{s.label}</span>
+                  </div>
+                  {i < 2 && <div className={`flex-1 h-0.5 mx-1 mb-4 transition-colors ${isDone ? 'bg-blue-600' : 'bg-gray-200'}`} />}
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
         <div className="p-6">
           {step === 'phone' && <>
@@ -243,7 +271,12 @@ const SignPage: React.FC = () => {
                   }} className="mt-2 w-full text-xs bg-blue-600 text-white py-1.5 rounded-lg hover:bg-blue-700">
                     Wyślij sugestie do weryfikacji
                   </button>
-                ) : <p className="text-xs text-green-600 mt-1">✓ Sugestie wysłane do weryfikacji</p>}
+                ) : (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                    Sugestie wysłane do weryfikacji
+                  </p>
+                )}
               </div>
             )}
             {error && <p className="text-sm text-red-500 mb-3">{error}</p>}

@@ -1256,7 +1256,9 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
             <button onClick={handlePdfPreview} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-100 rounded-lg hover:bg-slate-200">
               <Eye className="w-3.5 h-3.5" /> Podgląd
             </button>
-            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg" aria-label="Zamknij">✕</button>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg" aria-label="Zamknij">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-slate-500"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         </div>
 
@@ -1859,8 +1861,8 @@ export const DMSPage: React.FC = () => {
     if (!expiresAt) return null;
     const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
     if (days < 0) return <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-medium">Wygasło</span>;
-    if (days <= 7) return <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-medium">⚠️ {days}d</span>;
-    if (days <= 30) return <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-[10px] font-medium">⏰ {days}d</span>;
+    if (days <= 7) return <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-medium"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>{days}d</span>;
+    if (days <= 30) return <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-[10px] font-medium"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>{days}d</span>;
     return null;
   };
 
@@ -1995,12 +1997,17 @@ export const DMSPage: React.FC = () => {
             }} className="px-3 py-2 text-sm border rounded-lg hover:bg-slate-50" aria-label="Eksport CSV">
               CSV
             </button>
-            <button onClick={() => navigate('/finance/dashboard')} className="px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-slate-50 flex items-center gap-1">
-              📊 Dashboard
+            <button onClick={() => navigate('/finance/dashboard')} className="px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-slate-50 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
+              Dashboard
             </button>
-            <button onClick={() => setShowOCR(true)} className="px-4 py-2 text-xs border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 flex items-center gap-1">📷 Importuj z pliku</button>
-            <button onClick={() => setShowAIGenerate(true)} className="flex items-center gap-2 px-4 py-2 text-sm border border-purple-200 text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 whitespace-nowrap">
-              ✨ Generuj z AI
+            <button onClick={() => setShowOCR(true)} className="px-4 py-2 text-xs border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>
+              Importuj z pliku
+            </button>
+            <button onClick={() => setShowAIGenerate(true)} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-purple-200 text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 whitespace-nowrap">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg>
+              Generuj z AI
             </button>
             <button onClick={() => setShowDocWizard(true)}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap">
@@ -2105,11 +2112,13 @@ export const DMSPage: React.FC = () => {
                       }
                       setSelectedIds(new Set()); loadDocuments();
                       setToast({ message: `Zarchiwizowano ${count} dokumentów`, type: 'success' });
-                    }} className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700">
-                      📦 Archiwizuj
+                    }} className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
+                      Archiwizuj
                     </button>
-                    <button onClick={() => setShowBulkSend(true)} className="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600">
-                      ✉️ Wyślij do podpisu ({selectedIds.size})
+                    <button onClick={() => setShowBulkSend(true)} className="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+                      Wyślij do podpisu ({selectedIds.size})
                     </button>
                     <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:underline">Anuluj</button>
                   </div>
@@ -2124,10 +2133,10 @@ export const DMSPage: React.FC = () => {
                             onChange={e => setSelectedIds(e.target.checked ? new Set(filteredDocuments.map(d => d.id)) : new Set())} />
                         </th>
                         <th className="text-left px-4 py-3 cursor-pointer hover:text-blue-600 select-none" onClick={() => { setSortField('name'); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}>
-                          Nazwa dokumentu {sortField === 'name' && (sortDir === 'asc' ? '↑' : '↓')}
+                          <span className="flex items-center gap-1">Nazwa dokumentu {sortField === 'name' && <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3 h-3">{sortDir === 'asc' ? <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /> : <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />}</svg>}</span>
                         </th>
                         <th className="text-left px-4 py-3 hidden sm:table-cell cursor-pointer hover:text-blue-600 select-none" onClick={() => { setSortField('created_at'); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}>
-                          Data utworzenia {sortField === 'created_at' && (sortDir === 'asc' ? '↑' : '↓')}
+                          <span className="flex items-center gap-1">Data utworzenia {sortField === 'created_at' && <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3 h-3">{sortDir === 'asc' ? <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /> : <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />}</svg>}</span>
                         </th>
                         <th className="text-left px-4 py-3 hidden sm:table-cell">Ostatnia aktualizacja</th>
                         <th className="text-left px-4 py-3 hidden md:table-cell">Autor</th>
@@ -2243,11 +2252,16 @@ export const DMSPage: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
             <div className="px-6 py-4 border-b flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold">✨ Generuj dokument z AI</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Opisz co potrzebujesz — AI stworzy szkic</p>
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-purple-600"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg>
+                <div>
+                  <h3 className="font-semibold">Generuj dokument z AI</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Opisz co potrzebujesz — AI stworzy szkic</p>
+                </div>
               </div>
-              <button onClick={() => setShowAIGenerate(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <button onClick={() => setShowAIGenerate(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
             </div>
             <AIDocumentGenerator onClose={() => setShowAIGenerate(false)} onCreated={(id: string) => { setShowAIGenerate(false); loadDocuments(); }} />
           </div>
@@ -2260,7 +2274,9 @@ export const DMSPage: React.FC = () => {
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-slate-800">Wyślij {selectedIds.size} dokumentów do podpisu</h3>
-              <button onClick={() => setShowBulkSend(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <button onClick={() => setShowBulkSend(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
             </div>
             <div className="mb-4">
               <label className="text-xs font-medium text-gray-700 mb-1 block">Email podpisującego</label>
@@ -2282,8 +2298,13 @@ export const DMSPage: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">📷 Importuj z pliku</h3>
-              <button onClick={() => setShowOCR(false)} className="text-gray-400">✕</button>
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-gray-600"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>
+                <h3 className="font-semibold">Importuj z pliku</h3>
+              </div>
+              <button onClick={() => setShowOCR(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
             </div>
             <p className="text-sm text-gray-500 mb-4">Zrób zdjęcie faktury, umowy lub protokołu — AI wyciągnie dane automatycznie</p>
             <input type="file" accept="image/*,.pdf" onChange={async (e) => {
@@ -2358,7 +2379,9 @@ const RequiredClausesEditor: React.FC = () => {
           <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
             <span className="text-xs text-gray-500 w-5">{i+1}.</span>
             <span className="text-sm text-gray-800 flex-1">{cl}</span>
-            <button onClick={() => remove(i)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
+            <button onClick={() => remove(i)} className="text-gray-400 hover:text-red-500 p-0.5 rounded">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         ))}
       </div>
