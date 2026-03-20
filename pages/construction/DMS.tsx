@@ -1961,6 +1961,9 @@ export const DMSPage: React.FC = () => {
             }} className="px-3 py-2 text-sm border rounded-lg hover:bg-slate-50" aria-label="Eksport CSV">
               CSV
             </button>
+            <button onClick={() => navigate('/finance/dashboard')} className="px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-slate-50 flex items-center gap-1">
+              📊 Dashboard
+            </button>
             <button onClick={() => setShowAIGenerate(true)} className="flex items-center gap-2 px-4 py-2 text-sm border border-purple-200 text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 whitespace-nowrap">
               ✨ Generuj z AI
             </button>
