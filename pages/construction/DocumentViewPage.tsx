@@ -322,7 +322,7 @@ const DocumentViewPage: React.FC = () => {
   }
 
   const handleAI = async (type: string) => {
-    setAiLoading(true); setShowAI(true); setAiResult('')
+    setAiLoading(true); setAiResult('')
     const content = (editor?.getText() || editor?.getHTML() || doc?.content || '').slice(0, 8000)
     const { data } = await supabase.functions.invoke('analyze-document', {
       body: {
@@ -355,21 +355,61 @@ const DocumentViewPage: React.FC = () => {
 
   const handleDownloadPDF = async () => {
     if (!doc) return
-    const content = editor?.getHTML() || doc.content || ''
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;margin:40px;line-height:1.6}h1,h2,h3{color:#111}</style></head><body>${content}</body></html>`
-    const blob = new Blob([html], { type: 'text/html' })
+    const content = editor?.getHTML() || doc?.content || ''
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 2cm; }
+  @media print { body { margin: 0; } }
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #111;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 2cm;
+    box-sizing: border-box;
+  }
+  h1, h2, h3 { color: #111; }
+  p { margin: 0.5em 0; }
+</style>
+</head>
+<body>${content}</body>
+</html>`
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
     const url = URL.createObjectURL(blob)
-    const a = Object.assign(document.createElement('a'), { href: url, download: (doc.name || 'dokument') + '.html' })
-    a.click(); URL.revokeObjectURL(url)
+    const a = Object.assign(document.createElement('a'), { href: url, download: (doc?.title || 'dokument') + '.html' })
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const handleDownloadDOC = () => {
     if (!doc) return
-    const content = editor?.getHTML() || doc.content || ''
-    const blob = new Blob(["<html xmlns:o='urn:schemas-microsoft-com:office:office'><body>" + content + '</body></html>'], { type: 'application/msword' })
+    const content = editor?.getHTML() || doc?.content || ''
+    // Word XML з UTF-8 для польських символів
+    const wordXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?mso-application progid="Word.Document"?>
+<w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"
+  xmlns:wx="http://schemas.microsoft.com/office/word/2003/auxHint"
+  xmlns:o="urn:schemas-microsoft-com:office:office">
+<w:body>
+<w:p><w:r><w:t xml:space="preserve">${(content || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim()}</w:t></w:r></w:p>
+</w:body>
+</w:wordDocument>`
+    const BOM = '\uFEFF'
+    const blob = new Blob([BOM + wordXml], { type: 'application/msword;charset=utf-8' })
     const url = URL.createObjectURL(blob)
-    const a = Object.assign(document.createElement('a'), { href: url, download: (doc.name || 'dokument') + '.doc' })
-    a.click(); URL.revokeObjectURL(url)
+    const a = Object.assign(document.createElement('a'), { href: url, download: (doc?.title || 'dokument') + '.doc' })
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const handleGenerujAI = async () => {
@@ -383,7 +423,13 @@ const DocumentViewPage: React.FC = () => {
       })
       const data = await res.json()
       if (data.result && editor) {
-        editor.commands.setContent('<p>' + data.result.replace(/\n/g, '</p><p>') + '</p>')
+        // Вставити згенерований текст в editor як HTML з форматуванням
+        const htmlContent = data.result
+          .split('\n\n')
+          .map((para: string) => para.trim() ? `<p>${para.replace(/\n/g, '<br/>')}</p>` : '')
+          .join('')
+        editor.commands.setContent(htmlContent || `<p>${data.result}</p>`)
+        editor.commands.focus()
         setShowGenerujModal(false)
         setGenerujPrompt('')
       }
@@ -428,13 +474,7 @@ const DocumentViewPage: React.FC = () => {
             Historia wersji
           </button>
 
-          {/* AI generate contract */}
-          <button onClick={() => setShowGenerujModal(true)} disabled={aiLoading} className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
-            </svg>
-            Generuj AI
-          </button>
+          <div className="w-px h-6 bg-gray-200 mx-1" />
 
           {/* AI dropdown */}
           <div className="relative">
@@ -451,13 +491,15 @@ const DocumentViewPage: React.FC = () => {
               <div className="fixed bg-white border rounded-xl shadow-2xl z-[9999] w-56 py-1" style={{ top: aiMenuPos.top, left: aiMenuPos.left }}>
                 <button onClick={() => { setShowAI(false); setShowGenerujModal(true) }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 font-medium text-purple-700">Generuj dokument</button>
                 <div className="border-t border-gray-100 my-1" />
-                <button onClick={() => handleAI('overview')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Analizuj dokument</button>
-                <button onClick={() => handleAI('risk')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
-                <button onClick={() => handleAI('clauses')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>
-                <button onClick={() => handleAI('summary')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Streszczenie</button>
+                <button onClick={() => { setShowAI(false); handleAI('overview') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Analizuj dokument</button>
+                <button onClick={() => { setShowAI(false); handleAI('risk') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
+                <button onClick={() => { setShowAI(false); handleAI('clauses') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>
+                <button onClick={() => { setShowAI(false); handleAI('summary') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Streszczenie</button>
               </div>
             )}
           </div>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
 
           <div className="relative">
             <button
@@ -472,13 +514,15 @@ const DocumentViewPage: React.FC = () => {
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
           </div>
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
           <button onClick={generatePortalLink} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 1 1.242 7.244" />
             </svg>
-            Odnośnik
+            Link
           </button>
-          <button onClick={() => navigate(`/construction/dms/${id}/certificate`)} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 text-gray-700">Certyfikat podpisu</button>
+
           {doc?.status === 'client_signed' && (
             <button onClick={async () => {
               await supabase.functions.invoke('process-signature', { body: { document_id: id, signed_by: 'owner', notify_all: true } })
@@ -590,11 +634,11 @@ const DocumentViewPage: React.FC = () => {
         {/* Document area */}
         <div className="flex-1">
           {/* AI result panel */}
-          {showAI && aiResult && (
+          {(aiResult || aiLoading) && (
             <div className="mb-4 bg-purple-50 border border-purple-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-semibold text-purple-800">Analiza AI</h4>
-                <button onClick={() => { setShowAI(false); setAiResult('') }} className="text-xs text-gray-400 hover:text-gray-600">×</button>
+                <button onClick={() => { setAiResult(''); setAiLoading(false) }} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
               </div>
               {aiLoading ? <div className="text-sm text-gray-500">Analizuję...</div> : <div className="text-sm text-gray-700 whitespace-pre-wrap">{aiResult}</div>}
             </div>
@@ -892,40 +936,63 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
   }
 
   const lookupGUS = async (nip: string) => {
-    if (nip.replace(/[\s-]/g,'').length !== 10) return
+    const clean = nip.replace(/[\s-]/g,'')
+    if (clean.length !== 10) return
     setNipLoading(true)
     try {
-      const clean = nip.replace(/[\s-]/g,'')
+      // Próba 1: rejestr.io (CORS-friendly)
+      const res = await fetch(`https://rejestr.io/api/v2/krs/company?nip=${clean}`, {
+        headers: { 'Accept': 'application/json' }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.name || data?.firma) {
+          setForm(prev => ({
+            ...prev,
+            name: data.name || data.firma || prev.name,
+            address: data.address || data.adres || prev.address,
+            nip: clean,
+          }))
+          setNipLoading(false)
+          return
+        }
+      }
+    } catch {}
+    try {
+      // Próba 2: wl-api przez allorigins
       const today = new Date().toISOString().split('T')[0]
-      const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://wl-api.mf.gov.pl/api/search/nip/${clean}?date=${today}`)}`)
-      const raw = await r.json()
-      const d = typeof raw.contents === 'string' ? JSON.parse(raw.contents) : raw
-      const s = d?.result?.subject
-      if (s) {
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://wl-api.mf.gov.pl/api/search/nip/${clean}?date=${today}`)}`
+      const r = await fetch(proxyUrl)
+      if (r.ok) {
+        const raw = await r.json()
+        const d = typeof raw.contents === 'string' ? JSON.parse(raw.contents) : raw
+        const s = d?.result?.subject
+        if (s) {
+          setForm(prev => ({
+            ...prev,
+            name: s.name || prev.name,
+            address: s.workingAddress || s.residenceAddress || prev.address,
+            nip: clean,
+          }))
+          setNipLoading(false)
+          return
+        }
+      }
+    } catch {}
+    try {
+      // Próba 3: biznes.gov.pl
+      const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/${clean}`)
+      const d = await r.json()
+      const co = d?.company || d?.result?.[0] || d
+      if (co?.name || co?.companyName) {
         setForm(prev => ({
           ...prev,
-          name: s.name || prev.name,
-          address: s.workingAddress || s.residenceAddress || prev.address,
+          name: co.name || co.companyName || prev.name,
+          address: co.address?.street ? `${co.address.street} ${co.address.buildingNumber||''}, ${co.address.postalCode||''} ${co.address.city||''}`.trim() : prev.address,
           nip: clean,
         }))
       }
-    } catch {
-      // Biała Lista API fallback
-      try {
-        const clean = nip.replace(/[\s-]/g,'')
-        const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/${clean}`)
-        const d = await r.json()
-        const co = d?.company || d?.result?.[0] || d
-        if (co?.name || co?.companyName) {
-          setForm(prev => ({
-            ...prev,
-            name: co.name || co.companyName || prev.name,
-            address: co.address?.street ? `${co.address.street} ${co.address.buildingNumber||''}, ${co.address.postalCode||''} ${co.address.city||''}`.trim() : prev.address,
-            nip: clean,
-          }))
-        }
-      } catch { /* API niedostępne */ }
-    }
+    } catch { /* API niedostępne */ }
     setNipLoading(false)
   }
 
