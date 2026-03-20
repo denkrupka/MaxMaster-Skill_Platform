@@ -1,3 +1,4 @@
+import { AIDocumentGenerator } from '../../components/documents/AIDocumentGenerator';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -877,6 +878,54 @@ const SettingsTab = ({ companyId }: { companyId: string }) => {
         <p className="text-xs text-gray-500 mb-4">AI sprawdzi czy te klauzule są obecne w analizowanym dokumencie.</p>
         <RequiredClausesEditor />
       </div>
+
+      {/* Powiadomienia */}
+      <div className="bg-white rounded-xl border p-5 mt-4">
+        <h4 className="font-semibold text-sm mb-4">Przypomnienia o podpisaniu</h4>
+        <div className="space-y-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={reminderEnabled} onChange={e => setReminderEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600" />
+            <div>
+              <p className="text-sm font-medium">Automatyczne przypomnienia</p>
+              <p className="text-xs text-gray-500">Wysyłaj email/SMS jeśli dokument nie został podpisany</p>
+            </div>
+          </label>
+          {reminderEnabled && (
+            <div className="ml-7 space-y-3">
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-gray-600 w-32">Pierwsze po</label>
+                <select value={reminderDays1} onChange={e => setReminderDays1(Number(e.target.value))} className="border rounded-lg px-3 py-1.5 text-xs">
+                  <option value={1}>1 dniu</option>
+                  <option value={2}>2 dniach</option>
+                  <option value={3}>3 dniach</option>
+                  <option value={7}>7 dniach</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-gray-600 w-32">Drugie po</label>
+                <select value={reminderDays2} onChange={e => setReminderDays2(Number(e.target.value))} className="border rounded-lg px-3 py-1.5 text-xs">
+                  <option value={0}>Nie wysyłaj</option>
+                  <option value={3}>3 dniach</option>
+                  <option value={5}>5 dniach</option>
+                  <option value={7}>7 dniach</option>
+                  <option value={14}>14 dniach</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-gray-600 w-32">Metoda</label>
+                <div className="flex gap-2">
+                  <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={reminderViaEmail} onChange={e => setReminderViaEmail(e.target.checked)} /> Email</label>
+                  <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={reminderViaSMS} onChange={e => setReminderViaSMS(e.target.checked)} /> SMS</label>
+                </div>
+              </div>
+              <button onClick={saveReminderSettings} className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700">
+                Zapisz ustawienia
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -1650,6 +1699,12 @@ export const DMSPage: React.FC = () => {
   const userName = (state.currentUser as any)?.full_name || (state.currentUser as any)?.name || 'Użytkownik';
 
   const [tab, setTab] = useState<'templates' | 'documents' | 'settings'>('documents');
+  const [showAIGenerate, setShowAIGenerate] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderDays1, setReminderDays1] = useState(3);
+  const [reminderDays2, setReminderDays2] = useState(7);
+  const [reminderViaEmail, setReminderViaEmail] = useState(true);
+  const [reminderViaSMS, setReminderViaSMS] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success'|'error'|'info' } | null>(null);
 
@@ -1686,6 +1741,20 @@ export const DMSPage: React.FC = () => {
   const [contractors, setContractors] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+
+  const saveReminderSettings = async () => {
+    try {
+      await supabase.from('document_settings').upsert({
+        company_id: companyId,
+        key: 'reminder_settings',
+        value: JSON.stringify({ enabled: reminderEnabled, days1: reminderDays1, days2: reminderDays2, via_email: reminderViaEmail, via_sms: reminderViaSMS })
+      }, { onConflict: 'company_id,key' });
+      setToast({ message: 'Ustawienia przypomnień zapisane', type: 'success' });
+    } catch {
+      setToast({ message: 'Błąd zapisu ustawień', type: 'error' });
+    }
+  };
 
   const loadTemplates = useCallback(async () => {
     if (!companyId) return;
@@ -1891,6 +1960,9 @@ export const DMSPage: React.FC = () => {
               downloadCSV(csv, `dokumenty-${new Date().toISOString().slice(0,10)}.csv`);
             }} className="px-3 py-2 text-sm border rounded-lg hover:bg-slate-50" aria-label="Eksport CSV">
               CSV
+            </button>
+            <button onClick={() => setShowAIGenerate(true)} className="flex items-center gap-2 px-4 py-2 text-sm border border-purple-200 text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 whitespace-nowrap">
+              ✨ Generuj z AI
             </button>
             <button onClick={() => setShowDocWizard(true)}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap">
@@ -2123,6 +2195,22 @@ export const DMSPage: React.FC = () => {
           }}
           onToast={setToast}
         />
+      )}
+
+      {/* AI Generator */}
+      {showAIGenerate && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">✨ Generuj dokument z AI</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Opisz co potrzebujesz — AI stworzy szkic</p>
+              </div>
+              <button onClick={() => setShowAIGenerate(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <AIDocumentGenerator onClose={() => setShowAIGenerate(false)} onCreated={(id: string) => { setShowAIGenerate(false); loadDocuments(); }} />
+          </div>
+        </div>
       )}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
