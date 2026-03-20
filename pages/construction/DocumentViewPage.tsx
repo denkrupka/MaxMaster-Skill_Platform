@@ -410,57 +410,65 @@ ${content}
     }, 500)
   }
 
-  const handleDownloadDOC = async () => {
+  const handleDownloadDOC = () => {
     if (!doc) return
     const content = editor?.getHTML() || doc?.content || ''
     const title = doc?.title || 'dokument'
     
-    try {
-      // Спробуємо html-docx-js (якщо є)
-      const htmlDocx = await import('html-docx-js/dist/html-docx').catch(() => null)
-      
-      if (htmlDocx?.default?.asBlob) {
-        // html-docx-js конвертує HTML → DOCX зберігаючи форматування
-        const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${content}</body></html>`
-        const blob = htmlDocx.default.asBlob(htmlContent)
-        const url = URL.createObjectURL(blob)
-        const a = Object.assign(document.createElement('a'), { href: url, download: title + '.docx' })
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      } else {
-        // Fallback: Word XML з базовим форматуванням
-        const BOM = '\uFEFF'
-        // Конвертуємо HTML теги в Word XML теги
-        let wordContent = content
-          .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">$1</w:t></w:r>')
-          .replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">$1</w:t></w:r>')
-          .replace(/<u[^>]*>([\s\S]*?)<\/u>/gi, '<w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">$1</w:t></w:r>')
-          .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>$1</w:t></w:r></w:p>')
-          .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>$1</w:t></w:r></w:p>')
-          .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '<w:p><w:r><w:t xml:space="preserve">$1</w:t></w:r></w:p>')
-          .replace(/<br\s*\/?>/gi, '</w:t><w:br/><w:t>')
-          .replace(/<[^>]+>/g, '') // Remove remaining HTML tags
-        
-        const wordXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<?mso-application progid="Word.Document"?>
-<w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"
-  xmlns:wx="http://schemas.microsoft.com/office/word/2003/auxHint">
-<w:body>${wordContent || '<w:p><w:r><w:t> </w:t></w:r></w:p>'}</w:body>
-</w:wordDocument>`
-        
-        const blob = new Blob([BOM + wordXml], { type: 'application/msword;charset=utf-8' })
-        const url = URL.createObjectURL(blob)
-        const a = Object.assign(document.createElement('a'), { href: url, download: title + '.doc' })
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      }
-    } catch (e) {
-      console.error('DOC download error:', e)
-    }
+    // Word MHTML format — зберігає HTML форматування у .doc файлі
+    const BOM = '\uFEFF'
+    const mhtmlDoc = `MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_NextPart_001"
+
+------=_NextPart_001
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html xmlns:o=3D"urn:schemas-microsoft-com:office:office"
+  xmlns:w=3D"urn:schemas-microsoft-com:office:word"
+  xmlns=3D"http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset=3D"UTF-8">
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+@page { size: A4; margin: 2.5cm 2cm; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.6; color: #000; }
+h1 { font-size: 16pt; font-weight: bold; margin: 0 0 12pt; }
+h2 { font-size: 14pt; font-weight: bold; margin: 10pt 0 6pt; }
+h3 { font-size: 12pt; font-weight: bold; margin: 8pt 0 4pt; }
+p { margin: 0 0 8pt; }
+ul, ol { margin: 4pt 0 8pt; padding-left: 20pt; }
+li { margin: 2pt 0; }
+table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
+td, th { border: 1pt solid #000; padding: 4pt 6pt; font-size: 10pt; }
+th { background: #f0f0f0; font-weight: bold; }
+strong, b { font-weight: bold; }
+em, i { font-style: italic; }
+u { text-decoration: underline; }
+</style>
+</head>
+<body>
+${content}
+</body>
+</html>
+------=_NextPart_001--`
+    
+    const blob = new Blob([BOM + mhtmlDoc], { type: 'application/msword;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = Object.assign(document.createElement('a'), { href: url, download: title + '.doc' })
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const handleGenerujAI = async () => {
