@@ -38,6 +38,8 @@ const DocumentViewPage: React.FC = () => {
   const [versions, setVersions] = useState<any[]>([])
   const [aiResult, setAiResult] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [docContent, setDocContent] = useState<string>('')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const commentBoxRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -55,6 +57,13 @@ const DocumentViewPage: React.FC = () => {
   useEffect(() => {
     if (editor) editor.setEditable(mode === 'edit')
   }, [mode, editor])
+
+  // Set content when editor becomes ready (it initializes async)
+  useEffect(() => {
+    if (editor && docContent && !editor.getHTML().replace(/<[^>]*>/g, '').trim()) {
+      editor.commands.setContent(docContent)
+    }
+  }, [editor, docContent])
 
   const loadVersions = async () => {
     const { data } = await supabase.from('document_versions').select('*').eq('document_id', id!).order('version_number', { ascending: false }).limit(20)
@@ -115,8 +124,11 @@ const DocumentViewPage: React.FC = () => {
 
   const loadDocument = async () => {
     setLoading(true)
-    const { data } = await supabase.from('documents').select('*, document_templates(name, type, content), contractors(name), projects(name)').eq('id', id!).single()
-    if (data) {
+    setLoadError(null)
+    try {
+      const { data, error } = await supabase.from('documents').select('*, document_templates(name, type, content), contractors(name), projects(name)').eq('id', id!).single()
+      if (error) { setLoadError(error.message); setLoading(false); return }
+      if (!data) { setLoadError('Dokument nie został znaleziony'); setLoading(false); return }
       setDoc(data)
       if (data?.parties) setParties(data.parties)
       let raw = ''
@@ -127,7 +139,10 @@ const DocumentViewPage: React.FC = () => {
           : String(data.document_templates.content)
         raw = secs
       }
+      if (raw) setDocContent(raw)
       if (editor && raw) editor.commands.setContent(raw)
+    } catch (err: any) {
+      setLoadError(err?.message || 'Błąd ładowania dokumentu')
     }
     setLoading(false)
   }
@@ -239,6 +254,15 @@ const DocumentViewPage: React.FC = () => {
   }
 
   if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
+
+  if (loadError || !doc) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center">
+        <p className="text-red-500 text-lg mb-4">{loadError || 'Dokument nie został znaleziony'}</p>
+        <button onClick={() => navigate(-1)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Wróć</button>
+      </div>
+    </div>
+  )
 
   const docTitle = doc?.name || doc?.document_templates?.name || 'Dokument'
   const activeComments = comments.filter(c => !c.resolved)
