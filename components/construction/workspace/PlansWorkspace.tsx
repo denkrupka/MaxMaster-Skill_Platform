@@ -3362,7 +3362,7 @@ export const PlansWorkspace: React.FC = () => {
               <button
                 onClick={() => setVersionHistoryTab('changelog')}
                 className={`flex-1 py-2 text-xs font-medium transition ${versionHistoryTab === 'changelog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-              >Dziennik zmian{changeLog.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[9px]">{changeLog.length}</span>}</button>
+              >Changelog</button>
             </div>
             {/* Tab content */}
             <div className="max-h-72 overflow-y-auto">
