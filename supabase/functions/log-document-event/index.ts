@@ -78,7 +78,7 @@ serve(async (req) => {
         document_id,
         version_number: nextVersion,
         content: content_snapshot,
-        created_by: actor_email || user_id || null,
+        created_by: user_id || null,
         snapshot_reason: snapshot_reason || effectiveAction,
       })
     }
