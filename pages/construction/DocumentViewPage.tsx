@@ -90,6 +90,13 @@ const DocumentViewPage: React.FC = () => {
     }
   }, [editor, docContent])
 
+  const closeAllPanels = () => {
+    setShowComments(false)
+    setShowParties(false)
+    setShowVariables(false)
+    setShowVersions(false)
+  }
+
   const loadVersions = async () => {
     const { data } = await supabase.from('document_versions').select('*').eq('document_id', id!).order('version_number', { ascending: false }).limit(20)
     setVersions(data || [])
@@ -296,7 +303,7 @@ const DocumentViewPage: React.FC = () => {
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Top Bar */}
       <div className="bg-white border-b shadow-sm sticky top-0 z-20">
-        <div className="max-w-screen-xl mx-auto px-4 py-2 flex items-center gap-2 flex-wrap">
+        <div className="max-w-screen-xl mx-auto px-4 py-2 flex items-center gap-2 flex-wrap overflow-x-auto">
           <button onClick={() => navigate('/construction/dms')} className="text-gray-500 hover:text-gray-800 p-2 rounded text-sm">← Powrót</button>
           <div className="w-px h-5 bg-gray-200" />
           <h1 className="text-sm font-semibold text-gray-900 truncate max-w-sm">{docTitle}</h1>
@@ -310,20 +317,20 @@ const DocumentViewPage: React.FC = () => {
           </div>
 
           {/* Action buttons */}
-          <button onClick={() => setShowComments(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showComments ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'hover:bg-gray-50'}`}>
+          <button onClick={() => { closeAllPanels(); setShowComments(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showComments ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'hover:bg-gray-50'}`}>
             Komentarze {activeComments.length > 0 && <span className="bg-yellow-400 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">{activeComments.length}</span>}
           </button>
 
-          <button onClick={() => setShowParties(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showParties ? 'bg-blue-50 border-blue-300 text-blue-700' : 'hover:bg-gray-50'}`}>
+          <button onClick={() => { closeAllPanels(); setShowParties(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showParties ? 'bg-blue-50 border-blue-300 text-blue-700' : 'hover:bg-gray-50'}`}>
             Dane stron
           </button>
-          <button onClick={() => setShowVariables(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVariables ? 'bg-green-50 border-green-300 text-green-700' : 'hover:bg-gray-50'}`}>
+          <button onClick={() => { closeAllPanels(); setShowVariables(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVariables ? 'bg-green-50 border-green-300 text-green-700' : 'hover:bg-gray-50'}`}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
             </svg>
             Zmienne
           </button>
-          <button onClick={() => { setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVersions ? 'bg-purple-50 border-purple-300 text-purple-700' : 'hover:bg-gray-50'}`}>
+          <button onClick={() => { closeAllPanels(); setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVersions ? 'bg-purple-50 border-purple-300 text-purple-700' : 'hover:bg-gray-50'}`}>
             Historia wersji
           </button>
 
@@ -346,8 +353,6 @@ const DocumentViewPage: React.FC = () => {
                 <button onClick={() => handleAI('risk')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
                 <button onClick={() => handleAI('clauses')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>
                 <button onClick={() => handleAI('summary')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Streszczenie</button>
-                <div className="border-t my-1" />
-                <button onClick={() => { setShowAI(false); navigate(`/construction/dms/${id}/sign`) }} className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 font-medium">Wyślij do podpisu →</button>
               </div>
             )}
           </div>
