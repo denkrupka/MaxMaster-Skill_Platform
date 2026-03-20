@@ -1,19 +1,21 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2 } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2, FileText } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { WorkingHours, WorkingHoursDay, RoundTime, HolidayDay } from '../../types';
 import { supabase } from '../../lib/supabase';
+import DocumentVariablesSettings from '../../components/documents/DocumentVariablesSettings';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-type TabKey = 'company' | 'working_time' | 'holidays' | 'construction';
+type TabKey = 'company' | 'working_time' | 'holidays' | 'construction' | 'zmienne';
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'company', label: 'Dane firmy', icon: <Building2 className="w-4 h-4" /> },
   { key: 'working_time', label: 'Czas pracy', icon: <Clock className="w-4 h-4" /> },
   { key: 'holidays', label: 'Dni wolne', icon: <CalendarDays className="w-4 h-4" /> },
   { key: 'construction', label: 'Budowlanka', icon: <HardHat className="w-4 h-4" /> },
+  { key: 'zmienne', label: 'Zmienne', icon: <FileText className="w-4 h-4" /> },
 ];
 
 const TIMEZONES = [
@@ -1476,6 +1478,12 @@ export const CompanySettingsPage: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* ═══ Tab 5: Zmienne dokumentów ═══ */}
+      {activeTab === 'zmienne' && (
+        <DocumentVariablesSettings />
+      )}
+
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-xl text-white text-sm font-medium animate-in slide-in-from-bottom-4 duration-300 ${
