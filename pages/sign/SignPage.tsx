@@ -6,6 +6,7 @@ type Step = 'phone' | 'otp' | 'document' | 'signed' | 'expired'
 
 const SignPage: React.FC = () => {
   const { token } = useParams<{ token: string }>()
+  const [companyBranding, setCompanyBranding] = useState<{name?: string; logo_url?: string; color?: string} | null>(null)
   const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
@@ -36,6 +37,16 @@ const SignPage: React.FC = () => {
     setDoc(req?.documents)
     setSignerName(req?.signer_name || '')
     if (req?.signer_phone) setPhone(req.signer_phone)
+
+    // Load company branding for whitelabel
+    if (req?.documents?.company_id) {
+      const { data: company } = await supabase
+        .from('company_settings')
+        .select('company_name, logo_url, primary_color')
+        .eq('company_id', req.documents.company_id)
+        .single()
+      if (company) setCompanyBranding({ name: company.company_name, logo_url: company.logo_url, color: company.primary_color })
+    }
   }
 
   const handleSendOtp = async () => {
@@ -110,8 +121,14 @@ const SignPage: React.FC = () => {
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-md">
         <div className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><span className="text-white text-xs font-bold">MM</span></div>
-            <span className="font-semibold text-gray-900">MaxMaster</span>
+            {companyBranding?.logo_url ? (
+              <img src={companyBranding.logo_url} alt={companyBranding.name || 'Logo'} className="w-8 h-8 rounded-lg object-contain" />
+            ) : (
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: companyBranding?.color || '#2563eb' }}>
+                <span className="text-white text-xs font-bold">{(companyBranding?.name || 'MM').slice(0, 2).toUpperCase()}</span>
+              </div>
+            )}
+            <span className="font-semibold text-gray-900">{companyBranding?.name || 'MaxMaster'}</span>
           </div>
           <p className="text-sm text-gray-500">{signerName ? `Dzien dobry, ${signerName}! ` : ''}Przeslano Ci dokument do podpisu.</p>
         </div>
