@@ -59,13 +59,14 @@ serve(async (req) => {
 
       if (srErr) { results.push({ email: signer.email, error: srErr.message }); continue }
 
-      // Insert token
-      await supabase.from('signature_tokens').insert({
+      // Insert token (table columns: id, request_id, token, used_at, ip_address, user_agent, signature_data, created_at, metadata)
+      const { error: tokenErr } = await supabase.from('signature_tokens').insert({
         token,
-        signature_request_id: sr.id,
-        document_id,
-        expires_at,
+        request_id: sr.id,
       })
+      if (tokenErr) {
+        console.error('Failed to insert signature_token:', tokenErr)
+      }
 
       // Send email via Postmark
       if (postmarkKey) {
