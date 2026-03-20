@@ -143,7 +143,13 @@ const SignPage: React.FC = () => {
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Dokument podpisany!</h2>
         <p className="text-gray-500 mb-2">Dokument <strong>{docTitle}</strong> zostal pomyslnie podpisany.</p>
-        <p className="text-xs text-gray-400">Kopia zostanie wyslana na Twoj e-mail.</p>
+        <p className="text-xs text-gray-400 mb-4">Kopia zostanie wyslana na Twoj e-mail.</p>
+        <button
+          onClick={() => window.open('/sign/' + token + '/certificate', '_blank')}
+          className="px-4 py-2 text-sm border border-green-200 rounded-lg text-green-700 hover:bg-green-50 transition-colors font-medium"
+        >
+          Certyfikat podpisu
+        </button>
       </div>
     </div>
   )
