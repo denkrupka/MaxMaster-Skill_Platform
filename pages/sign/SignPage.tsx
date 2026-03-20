@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase'
 
 type Step = 'phone' | 'otp' | 'document' | 'signed' | 'expired'
 
@@ -29,7 +29,11 @@ const SignPage: React.FC = () => {
     try {
       const res = await fetch('https://diytvuczpciikzdhldny.supabase.co/functions/v1/get-sign-data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
         body: JSON.stringify({ token })
       })
       const data = await res.json()
@@ -37,6 +41,7 @@ const SignPage: React.FC = () => {
       setDoc(data.document)
       setSignerName(data.request?.signer_name || '')
       if (data.request?.signer_phone) setPhone(data.request.signer_phone)
+      // Company branding from document's company_id (fetched separately if needed)
       if (data.company) setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
     } catch (e) {
       setStep('expired')
@@ -77,7 +82,16 @@ const SignPage: React.FC = () => {
 
   const docContent = (() => {
     if (!doc) return ''
-    if (doc.content) return typeof doc.content === 'string' ? doc.content : ''
+    // EF returns document with 'data' field (from documents table), not 'content'
+    const raw = doc.data || doc.content
+    if (raw) {
+      if (typeof raw === 'string') return raw
+      // If data is an object with sections array
+      if (Array.isArray(raw)) return raw.map((s: any) => `<h2>${s.title||''}</h2><p>${s.body||''}</p>`).join('')
+      if (typeof raw === 'object' && raw.sections) return raw.sections.map((s: any) => `<h2>${s.title||''}</h2><p>${s.body||''}</p>`).join('')
+      if (typeof raw === 'object' && raw.html) return raw.html
+      return JSON.stringify(raw)
+    }
     if (doc.document_templates?.content) {
       const c = doc.document_templates.content
       return Array.isArray(c) ? c.map((s: any) => `<h2>${s.title||''}</h2><p>${s.body||''}</p>`).join('') : String(c)
