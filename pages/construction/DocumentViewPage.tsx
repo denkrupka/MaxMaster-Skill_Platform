@@ -62,6 +62,11 @@ const DocumentViewPage: React.FC = () => {
   const [aiLoading, setAiLoading] = useState(false)
   const [docContent, setDocContent] = useState<string>('')
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+  const [downloadMenuPos, setDownloadMenuPos] = useState({ top: 0, left: 0 })
+  const [showGenerujModal, setShowGenerujModal] = useState(false)
+  const [generujPrompt, setGenerujPrompt] = useState('')
+  const [generujLoading, setGenerujLoading] = useState(false)
   const commentBoxRef = useRef<HTMLTextAreaElement>(null)
 
 
@@ -318,6 +323,46 @@ const DocumentViewPage: React.FC = () => {
   const docTitle = doc?.name || doc?.document_templates?.name || 'Dokument'
   const activeComments = comments.filter(c => !c.resolved)
 
+  const handleDownloadPDF = async () => {
+    if (!doc) return
+    const content = editor?.getHTML() || doc.content || ''
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;margin:40px;line-height:1.6}h1,h2,h3{color:#111}</style></head><body>${content}</body></html>`
+    const blob = new Blob([html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = Object.assign(document.createElement('a'), { href: url, download: (doc.name || 'dokument') + '.html' })
+    a.click(); URL.revokeObjectURL(url)
+  }
+
+  const handleDownloadDOC = () => {
+    if (!doc) return
+    const content = editor?.getHTML() || doc.content || ''
+    const blob = new Blob(["<html xmlns:o='urn:schemas-microsoft-com:office:office'><body>" + content + '</body></html>'], { type: 'application/msword' })
+    const url = URL.createObjectURL(blob)
+    const a = Object.assign(document.createElement('a'), { href: url, download: (doc.name || 'dokument') + '.doc' })
+    a.click(); URL.revokeObjectURL(url)
+  }
+
+  const handleGenerujAI = async () => {
+    if (!generujPrompt.trim()) return
+    setGenerujLoading(true)
+    try {
+      const res = await fetch('https://diytvuczpciikzdhldny.supabase.co/functions/v1/analyze-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: generujPrompt, action: 'generate' })
+      })
+      const data = await res.json()
+      if (data.result && editor) {
+        editor.commands.setContent('<p>' + data.result.replace(/\n/g, '</p><p>') + '</p>')
+        setShowGenerujModal(false)
+        setGenerujPrompt('')
+      }
+    } catch (e) {
+      console.error('Generuj AI error', e)
+    }
+    setGenerujLoading(false)
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Top Bar */}
@@ -354,7 +399,7 @@ const DocumentViewPage: React.FC = () => {
           </button>
 
           {/* AI generate contract */}
-          <button onClick={generateContractAI} disabled={aiLoading} className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1">
+          <button onClick={() => setShowGenerujModal(true)} disabled={aiLoading} className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
             </svg>
@@ -367,11 +412,15 @@ const DocumentViewPage: React.FC = () => {
               const rect = e.currentTarget.getBoundingClientRect()
               setAiMenuPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 230) })
               setShowAI(v => !v)
-            }} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
-              AI <span className="text-[10px]">▾</span>
+            }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors font-medium">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347-.347.347a3.5 3.5 0 01-4.95 0l-.347-.347-.347-.347z" /></svg>
+              AI
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
             {showAI && (
               <div className="fixed bg-white border rounded-xl shadow-2xl z-[9999] w-56 py-1" style={{ top: aiMenuPos.top, left: aiMenuPos.left }}>
+                <button onClick={() => { setShowAI(false); setShowGenerujModal(true) }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 font-medium text-purple-700">Generuj dokument</button>
+                <div className="border-t border-gray-100 my-1" />
                 <button onClick={() => handleAI('overview')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Analizuj dokument</button>
                 <button onClick={() => handleAI('risk')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
                 <button onClick={() => handleAI('clauses')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>
@@ -380,16 +429,26 @@ const DocumentViewPage: React.FC = () => {
             )}
           </div>
 
-          <button onClick={handlePrintPDF} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
-            ↓ PDF
-          </button>
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+                setDownloadMenuPos({ top: rect.bottom + 4, left: rect.left })
+                setShowDownloadMenu(!showDownloadMenu)
+              }}
+              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+            >
+              Pobierz
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+          </div>
           <button onClick={generatePortalLink} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 1 1.242 7.244" />
             </svg>
-            Portal
+            Odnośnik
           </button>
-          <button onClick={() => navigate(`/construction/dms/${id}/certificate`)} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 text-gray-700">Certyfikat</button>
+          <button onClick={() => navigate(`/construction/dms/${id}/certificate`)} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 text-gray-700">Certyfikat podpisu</button>
           {doc?.status === 'client_signed' && (
             <button onClick={async () => {
               await supabase.functions.invoke('process-signature', { body: { document_id: id, signed_by: 'owner', notify_all: true } })
@@ -691,6 +750,62 @@ const DocumentViewPage: React.FC = () => {
               </button>
             </div>
             <p className="text-xs text-gray-400 mt-3">Link wygasa po 30 dniach</p>
+          </div>
+        </div>
+      )}
+
+      {/* Download dropdown menu */}
+      {showDownloadMenu && (
+        <div
+          className="fixed bg-white border border-gray-200 rounded-xl shadow-2xl py-1 min-w-[160px] z-[9999]"
+          style={{ top: downloadMenuPos.top, left: downloadMenuPos.left }}
+          onMouseLeave={() => setShowDownloadMenu(false)}
+        >
+          <button
+            onClick={() => { setShowDownloadMenu(false); handleDownloadPDF() }}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+            PDF
+          </button>
+          <button
+            onClick={() => { setShowDownloadMenu(false); handleDownloadDOC() }}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            Word (DOCX)
+          </button>
+        </div>
+      )}
+
+      {/* Generuj AI modal */}
+      {showGenerujModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowGenerujModal(false)}>
+          <div className="bg-white rounded-2xl p-6 w-[520px] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Generuj dokument z AI</h2>
+            <p className="text-sm text-gray-500 mb-4">Opisz czego ma dotyczyć dokument, a AI go napisze</p>
+            <textarea
+              value={generujPrompt}
+              onChange={e => setGenerujPrompt(e.target.value)}
+              placeholder="Np: Umowa o roboty budowlane między MaxMaster a wykonawcą XYZ. Prace elektryczne w budynku mieszkalnym. Termin 60 dni, kara 0.5% za dzień zwłoki..."
+              className="w-full h-32 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 resize-none"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowGenerujModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                Anuluj
+              </button>
+              <button
+                onClick={handleGenerujAI}
+                disabled={!generujPrompt.trim() || generujLoading}
+                className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {generujLoading ? (
+                  <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Generuję...</>
+                ) : (
+                  <>Generuj</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
