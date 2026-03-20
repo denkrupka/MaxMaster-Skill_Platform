@@ -30,6 +30,7 @@ const DocumentViewPage: React.FC = () => {
   const [user, setUser] = useState<any>(null)
   const [showAI, setShowAI] = useState(false)
   const [showParties, setShowParties] = useState(false)
+  const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
   const [aiResult, setAiResult] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const commentBoxRef = useRef<HTMLTextAreaElement>(null)
@@ -55,6 +56,7 @@ const DocumentViewPage: React.FC = () => {
     const { data } = await supabase.from('documents').select('*, document_templates(name, type, content), contractors(name), projects(name)').eq('id', id!).single()
     if (data) {
       setDoc(data)
+      if (data?.parties) setParties(data.parties)
       let raw = ''
       if (data.content) raw = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
       else if (data.document_templates?.content) {
@@ -66,6 +68,11 @@ const DocumentViewPage: React.FC = () => {
       if (editor && raw) editor.commands.setContent(raw)
     }
     setLoading(false)
+  }
+
+  const saveParties = async (newParties?: typeof parties) => {
+    const toSave = newParties || parties
+    await supabase.from('documents').update({ parties: toSave }).eq('id', id!)
   }
 
   const loadComments = async () => {
@@ -322,8 +329,8 @@ const DocumentViewPage: React.FC = () => {
                 <button onClick={() => setShowParties(false)} className="text-xs text-gray-400">✕</button>
               </div>
               <div className="p-4 max-h-[70vh] overflow-y-auto space-y-4">
-                <DocumentParty label="Strona 1 (Zamawiający)" data={doc?.contractors} />
-                <DocumentParty label="Strona 2 (Wykonawca)" data={null} isOwner />
+                <DocumentParty label="Strona 1 (Zamawiający)" value={parties.party1} onChange={v => setParties(p => ({...p, party1: v}))} onSave={() => saveParties({...parties, party1: parties.party1})} />
+                <DocumentParty label="Strona 2 (Wykonawca)" value={parties.party2} onChange={v => setParties(p => ({...p, party2: v}))} onSave={() => saveParties({...parties, party2: parties.party2})} />
               </div>
             </div>
           </div>
@@ -343,8 +350,8 @@ interface PartyData {
   contact_position?: string
 }
 
-const DocumentParty: React.FC<{ label: string; data?: PartyData | null; isOwner?: boolean }> = ({ label, data, isOwner }) => {
-  const [form, setForm] = React.useState<PartyData>(data || {})
+const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: PartyData) => void; onSave: () => void }> = ({ label, value, onChange, onSave }) => {
+  const [form, setForm] = React.useState<PartyData>(value || {})
   const [nipLoading, setNipLoading] = React.useState(false)
   const [reps, setReps] = React.useState<Array<{name:string;position:string;email:string;phone:string}>>([{ name: form.contact_person||'', position: form.contact_position||'', email: form.email||'', phone: form.phone||'' }])
 
@@ -368,7 +375,17 @@ const DocumentParty: React.FC<{ label: string; data?: PartyData | null; isOwner?
     setNipLoading(false)
   }
 
-  const upd = (k: keyof PartyData, v: string) => setForm(p => ({ ...p, [k]: v }))
+  const upd = (k: keyof PartyData, v: string) => {
+    const newForm = { ...form, [k]: v }
+    setForm(newForm)
+    onChange(newForm)
+  }
+
+  React.useEffect(() => {
+    if (value && JSON.stringify(value) !== JSON.stringify(form)) {
+      setForm(value)
+    }
+  }, [value])
 
   return (
     <div className="border rounded-xl p-3 bg-gray-50">
@@ -410,6 +427,9 @@ const DocumentParty: React.FC<{ label: string; data?: PartyData | null; isOwner?
             </div>
           ))}
         </div>
+        <button onClick={onSave} className="mt-3 w-full text-xs bg-blue-600 text-white py-1.5 rounded-lg hover:bg-blue-700 font-medium">
+          Zapisz dane strony
+        </button>
       </div>
     </div>
   )
