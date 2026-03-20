@@ -669,12 +669,30 @@ const buildPreview = (cfg: NumberingConfig): string => {
   return parts.join(cfg.separator);
 };
 
-const SettingsTab = ({ companyId }: { companyId: string }) => {
+const SettingsTab = ({ companyId, onToast }: { companyId: string; onToast?: (t: { message: string; type: 'success'|'error'|'info' }) => void }) => {
   const [numbering, setNumbering] = useState<Record<DocumentTemplateType, NumberingConfig>>(DEFAULT_NUMBERING);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [success,   setSuccess]   = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderDays1, setReminderDays1] = useState(3);
+  const [reminderDays2, setReminderDays2] = useState(7);
+  const [reminderViaEmail, setReminderViaEmail] = useState(true);
+  const [reminderViaSMS, setReminderViaSMS] = useState(false);
+
+  const saveReminderSettings = async () => {
+    try {
+      await supabase.from('document_settings').upsert({
+        company_id: companyId,
+        key: 'reminder_settings',
+        value: JSON.stringify({ enabled: reminderEnabled, days1: reminderDays1, days2: reminderDays2, via_email: reminderViaEmail, via_sms: reminderViaSMS })
+      }, { onConflict: 'company_id,key' });
+      onToast?.({ message: 'Ustawienia przypomnień zapisane', type: 'success' });
+    } catch {
+      onToast?.({ message: 'Błąd zapisu ustawień', type: 'error' });
+    }
+  };
 
   useEffect(() => {
     if (!companyId) return;
@@ -1708,11 +1726,6 @@ export const DMSPage: React.FC = () => {
   const [showAIGenerate, setShowAIGenerate] = useState(false);
   const [showOCR, setShowOCR] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
-  const [reminderEnabled, setReminderEnabled] = useState(false);
-  const [reminderDays1, setReminderDays1] = useState(3);
-  const [reminderDays2, setReminderDays2] = useState(7);
-  const [reminderViaEmail, setReminderViaEmail] = useState(true);
-  const [reminderViaSMS, setReminderViaSMS] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success'|'error'|'info' } | null>(null);
 
@@ -1753,19 +1766,6 @@ export const DMSPage: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-
-  const saveReminderSettings = async () => {
-    try {
-      await supabase.from('document_settings').upsert({
-        company_id: companyId,
-        key: 'reminder_settings',
-        value: JSON.stringify({ enabled: reminderEnabled, days1: reminderDays1, days2: reminderDays2, via_email: reminderViaEmail, via_sms: reminderViaSMS })
-      }, { onConflict: 'company_id,key' });
-      setToast({ message: 'Ustawienia przypomnień zapisane', type: 'success' });
-    } catch {
-      setToast({ message: 'Błąd zapisu ustawień', type: 'error' });
-    }
-  };
 
   const loadTemplates = useCallback(async () => {
     if (!companyId) return;
@@ -2208,7 +2208,7 @@ export const DMSPage: React.FC = () => {
 
       {/* ── SETTINGS TAB ── */}
       {tab === 'settings' && (
-        <SettingsTab companyId={companyId} />
+        <SettingsTab companyId={companyId} onToast={setToast} />
       )}
 
       {/* Modals */}
