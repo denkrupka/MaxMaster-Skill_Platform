@@ -426,9 +426,9 @@ const DocumentViewPage: React.FC = () => {
               {/* Paragraph */}
               <button
                 onPointerDown={e => e.preventDefault()} onTouchStart={e => e.preventDefault()}
-                onClick={() => editor.chain().focus().setParagraph().run()}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${editor.isActive('paragraph') ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-                title="Paragraf"
+                onClick={() => editor.chain().focus().insertContent('§ ').run()}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${false ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                title="Wstaw § (paragraf)"
               >
                 ¶
               </button>
