@@ -545,6 +545,24 @@ const DocumentViewPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Version Diff Modal */}
+      {showDiff && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Porównanie wersji</h3>
+              <button onClick={() => setShowDiff(false)} className="text-gray-400 hover:text-gray-600">×</button>
+            </div>
+            <div className="text-xs text-gray-500 mb-3 flex gap-4">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-100 border border-red-300 rounded inline-block"></span> Usunięte</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-100 border border-green-300 rounded inline-block"></span> Dodane</span>
+            </div>
+            <div className="font-mono text-xs" dangerouslySetInnerHTML={{ __html: diffHtml }} />
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
@@ -677,23 +695,6 @@ const DocumentTimeline: React.FC<{ status?: string }> = ({ status }) => {
           )}
         </React.Fragment>
       ))}
-
-      {/* Version Diff Modal */}
-      {showDiff && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Porównanie wersji</h3>
-              <button onClick={() => setShowDiff(false)} className="text-gray-400 hover:text-gray-600">×</button>
-            </div>
-            <div className="text-xs text-gray-500 mb-3 flex gap-4">
-              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-100 border border-red-300 rounded inline-block"></span> Usunięte</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-100 border border-green-300 rounded inline-block"></span> Dodane</span>
-            </div>
-            <div className="font-mono text-xs" dangerouslySetInnerHTML={{ __html: diffHtml }} />
-          </div>
-        </div>
-      )}
 
     </div>
   )
