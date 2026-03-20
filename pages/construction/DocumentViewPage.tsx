@@ -120,6 +120,44 @@ const DocumentViewPage: React.FC = () => {
     }
   }
 
+  const handlePrintPDF = () => {
+    const style = document.createElement('style')
+    style.id = 'print-dms-style'
+    style.innerHTML = `
+      @media print {
+        body > * { display: none !important; }
+        #dms-print-area { display: block !important; }
+        #dms-print-area { position: fixed; top: 0; left: 0; width: 100%; }
+        .no-print { display: none !important; }
+      }
+    `
+    document.head.appendChild(style)
+
+    const printArea = document.createElement('div')
+    printArea.id = 'dms-print-area'
+    printArea.style.display = 'none'
+    printArea.innerHTML = `
+      <div style="font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto;">
+        <h1 style="font-size: 20px; margin-bottom: 8px;">${doc?.name || 'Dokument'}</h1>
+        <p style="color: #6b7280; font-size: 12px; margin-bottom: 24px;">Data: ${new Date(doc?.created_at || '').toLocaleDateString('pl-PL')} | Autor: ${doc?.author_name || ''}</p>
+        <hr style="margin-bottom: 24px;" />
+        <div style="font-size: 13px; line-height: 1.6;">
+          ${doc?.content || '<p style="color:#999">Treść dokumentu niedostępna</p>'}
+        </div>
+        <hr style="margin-top: 40px; margin-bottom: 16px;" />
+        <p style="font-size: 11px; color: #6b7280; text-align: center;">Wygenerowano przez MaxMaster | ${window.location.href}</p>
+      </div>
+    `
+    document.body.appendChild(printArea)
+
+    window.print()
+
+    setTimeout(() => {
+      document.head.removeChild(style)
+      document.body.removeChild(printArea)
+    }, 500)
+  }
+
   const handleAI = async (type: string) => {
     setAiLoading(true); setShowAI(true); setAiResult('')
     const { data } = await supabase.functions.invoke('analyze-document', { body: { document_id: id, analysis_type: type } })
@@ -174,6 +212,9 @@ const DocumentViewPage: React.FC = () => {
             )}
           </div>
 
+          <button onClick={handlePrintPDF} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
+            ↓ PDF
+          </button>
           <button onClick={() => navigate(`/construction/dms/${id}/certificate`)} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 text-gray-700">Certyfikat</button>
           {doc?.status === 'client_signed' && (
             <button onClick={async () => {

@@ -109,7 +109,13 @@ const DocumentCertificatePage: React.FC = () => {
                 <p className="text-xs text-gray-400">Wygenerowano przez MaxMaster</p>
                 <p className="text-xs text-gray-400">ID dokumentu: {id?.slice(0,8)}...</p>
               </div>
-              <button onClick={() => window.print()} className="text-xs text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50">
+              <button onClick={() => {
+                const style = document.createElement('style')
+                style.innerHTML = '@media print { .no-print { display: none !important; } }'
+                document.head.appendChild(style)
+                window.print()
+                setTimeout(() => document.head.removeChild(style), 1000)
+              }} className="text-xs text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 no-print">
                 Drukuj / PDF
               </button>
             </div>
