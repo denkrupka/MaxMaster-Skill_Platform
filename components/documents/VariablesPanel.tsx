@@ -51,7 +51,7 @@ const VariablesPanel: React.FC<VariablesPanelProps> = ({ editor, content, onClos
   )
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full">
+    <div className="fixed right-0 top-0 h-full w-80 max-w-[90vw] bg-white border-l border-gray-200 flex flex-col z-50 shadow-xl md:relative md:shadow-none">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">Zmienne dokumentu</h3>

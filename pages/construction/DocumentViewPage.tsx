@@ -389,21 +389,21 @@ const DocumentViewPage: React.FC = () => {
         {/* Edit toolbar (only in edit mode) */}
         {mode === 'edit' && editor && (
           <div className="border-t bg-gray-50 px-4 py-1.5 flex items-center gap-1 flex-wrap">
-            <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 rounded text-xs font-bold ${editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>B</button>
-            <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 rounded text-xs italic ${editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>I</button>
-            <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 rounded text-xs underline ${editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>U</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 rounded text-xs font-bold ${editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>B</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 rounded text-xs italic ${editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>I</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 rounded text-xs underline ${editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>U</button>
             <div className="w-px h-4 bg-gray-300 mx-1" />
-            <button onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={`px-2 py-1 rounded text-xs font-bold ${editor.isActive('heading',{level:1}) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>H1</button>
-            <button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={`px-2 py-1 rounded text-xs font-bold ${editor.isActive('heading',{level:2}) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>H2</button>
-            <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`px-2 py-1 rounded text-xs ${editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>• Lista</button>
-            <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`px-2 py-1 rounded text-xs ${editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>1. Lista</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={`px-2 py-1 rounded text-xs font-bold ${editor.isActive('heading',{level:1}) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>H1</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={`px-2 py-1 rounded text-xs font-bold ${editor.isActive('heading',{level:2}) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>H2</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} className={`px-2 py-1 rounded text-xs ${editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>• Lista</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`px-2 py-1 rounded text-xs ${editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'}`}>1. Lista</button>
             <div className="w-px h-4 bg-gray-300 mx-1" />
-            <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200">L</button>
-            <button onClick={() => editor.chain().focus().setTextAlign('center').run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200">C</button>
-            <button onClick={() => editor.chain().focus().setTextAlign('right').run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200">R</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('left').run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200">L</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('center').run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200">C</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('right').run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200">R</button>
             <div className="w-px h-4 bg-gray-300 mx-1" />
             <input type="color" onChange={e => editor.chain().focus().setColor(e.target.value).run()} className="w-6 h-6 rounded cursor-pointer border-0" title="Kolor tekstu" />
-            <button onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200" style={{background:'#fef08a80'}}>Zaznacz</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()} className="px-2 py-1 rounded text-xs hover:bg-gray-200" style={{background:'#fef08a80'}}>Zaznacz</button>
           </div>
         )}
       </div>
@@ -450,9 +450,13 @@ const DocumentViewPage: React.FC = () => {
         </div>
 
         {/* Comments sidebar */}
+      {/* Mobile backdrop */}
+      {(showVariables || showComments || showParties || showVersions) && (
+        <div className="fixed inset-0 bg-black/20 z-40 md:hidden" onClick={() => closeAllPanels()} />
+      )}
         {showComments && (
-          <div className="w-72 flex-shrink-0">
-            <div className="bg-white rounded-xl border shadow-sm sticky top-32">
+          <div className="fixed right-0 top-0 h-full w-72 max-w-[90vw] z-50 shadow-xl md:relative md:shadow-none md:h-auto flex-shrink-0">
+            <div className="bg-white rounded-xl border shadow-sm h-full md:h-auto md:sticky md:top-32">
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Komentarze ({activeComments.length})</h3>
                 <div className="flex gap-2">
@@ -508,8 +512,8 @@ const DocumentViewPage: React.FC = () => {
         )}
         {/* Dane stron sidebar */}
         {showParties && (
-          <div className="w-80 flex-shrink-0">
-            <div className="bg-white rounded-xl border shadow-sm sticky top-32">
+          <div className="fixed right-0 top-0 h-full w-80 max-w-[90vw] z-50 shadow-xl md:relative md:shadow-none md:h-auto flex-shrink-0">
+            <div className="bg-white rounded-xl border shadow-sm h-full md:h-auto md:sticky md:top-32">
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Dane stron</h3>
                 <button onClick={() => setShowParties(false)} className="text-xs text-gray-400">×</button>
@@ -533,8 +537,8 @@ const DocumentViewPage: React.FC = () => {
 
         {/* Historia wersji sidebar */}
         {showVersions && (
-          <div className="w-72 flex-shrink-0">
-            <div className="bg-white rounded-xl border shadow-sm sticky top-32">
+          <div className="fixed right-0 top-0 h-full w-72 max-w-[90vw] z-50 shadow-xl md:relative md:shadow-none md:h-auto flex-shrink-0">
+            <div className="bg-white rounded-xl border shadow-sm h-full md:h-auto md:sticky md:top-32">
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Historia wersji</h3>
                 <button onClick={() => setShowVersions(false)} className="text-xs text-gray-400">×</button>
@@ -710,11 +714,11 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
 }
 
 const STATUS_STEPS = [
-  { key: 'draft', label: 'Szkic', icon: '' },
-  { key: 'sent', label: 'Wysłano', icon: '📤' },
-  { key: 'viewed', label: 'Odczytano', icon: '👁' },
-  { key: 'client_signed', label: 'Podpisano', icon: '✍' },
-  { key: 'completed', label: 'Zakończono', icon: '' },
+  { key: 'draft', label: 'Szkic' },
+  { key: 'sent', label: 'Wysłano' },
+  { key: 'viewed', label: 'Odczytano' },
+  { key: 'client_signed', label: 'Podpisano' },
+  { key: 'completed', label: 'Zakończono' },
 ]
 
 const DocumentTimeline: React.FC<{ status?: string }> = ({ status }) => {
@@ -731,7 +735,7 @@ const DocumentTimeline: React.FC<{ status?: string }> = ({ status }) => {
               i === activeIdx ? 'bg-blue-600 border-blue-600 text-white' :
               'bg-white border-gray-200 text-gray-400'
             }`}>
-              {i < activeIdx ? '✓' : step.icon}
+              {i < activeIdx ? '✓' : i + 1}
             </div>
             <span className={`text-xs mt-1 font-medium ${i === activeIdx ? 'text-blue-600' : i < activeIdx ? 'text-green-600' : 'text-gray-400'}`}>
               {step.label}
