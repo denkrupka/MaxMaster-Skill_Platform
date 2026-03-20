@@ -146,6 +146,8 @@ const ContractorRequestPage = React.lazy(() => import('./pages/construction/Cont
 const FinancialDashboard = React.lazy(() => import('./pages/finance/FinancialDashboard'));
 const ClientPortal = React.lazy(() => import('./pages/portal/ClientPortal'));
 const RFQPage = React.lazy(() => import('./pages/rfq/RFQPage'));
+const RFQRespondPage = React.lazy(() => import('./pages/rfq/RFQRespondPage'));
+const ClientPortalPage = React.lazy(() => import('./pages/portal/ClientPortalPage'));
 const ConstructionDiary = React.lazy(() => import('./pages/diary/ConstructionDiary'));
 
 // Lazy-loaded heavy pages from other modules
@@ -493,6 +495,8 @@ export default function App() {
           <Route path="/rfq" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="dms"><React.Suspense fallback={<div />}><RFQPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/diary/:projectId?" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="dms"><React.Suspense fallback={<div />}><ConstructionDiary /></React.Suspense></ProtectedRoute>} />
           <Route path="/portal/:token" element={<React.Suspense fallback={<div />}><ClientPortal /></React.Suspense>} />
+          <Route path="/portal/v2/:token" element={<React.Suspense fallback={<div />}><ClientPortalPage /></React.Suspense>} />
+          <Route path="/rfq/respond/:token" element={<React.Suspense fallback={<div />}><RFQRespondPage /></React.Suspense>} />
                 <Route path="/construction/dms/:id/sign" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<div />}><DocumentSignPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/construction/gantt" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="gantt"><GanttPage /></ProtectedRoute>} />
           <Route path="/construction/finance" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="finance"><FinancePage /></ProtectedRoute>} />
