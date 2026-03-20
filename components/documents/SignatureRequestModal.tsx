@@ -67,7 +67,11 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <h3 className="font-semibold text-gray-900">Wyślij do podpisu</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
         <div className="p-6 space-y-4">
           <div>
@@ -84,7 +88,11 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
                 {signerTemplates.map((t, i) => (
                   <div key={i} className="flex items-center gap-0.5">
                     <button onClick={() => loadTemplate(t.emails)} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100">{t.name}</button>
-                    <button onClick={() => removeTemplate(i)} className="text-[10px] text-gray-400 hover:text-red-500">✕</button>
+                    <button onClick={() => removeTemplate(i)} className="text-gray-400 hover:text-red-500">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
                 ))}
               </div>

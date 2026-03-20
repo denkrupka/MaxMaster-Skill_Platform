@@ -62,7 +62,11 @@ const RFQRespondPage: React.FC = () => {
   if (done) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-2xl p-10 text-center shadow-lg max-w-md">
-        <div className="text-5xl mb-4">✅</div>
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-green-600">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+        </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Dziękujemy za ofertę!</h2>
         <p className="text-gray-500 text-sm">Twoja oferta została przesłana. Skontaktujemy się wkrótce.</p>
       </div>
@@ -84,7 +88,14 @@ const RFQRespondPage: React.FC = () => {
             </div>
           </div>
           {rfq.description && <p className="text-sm text-gray-600 mb-3">{rfq.description}</p>}
-          {rfq.deadline && <p className="text-xs text-orange-600 font-medium">⏰ Termin składania ofert: {new Date(rfq.deadline).toLocaleDateString('pl-PL')}</p>}
+          {rfq.deadline && (
+            <p className="text-xs text-orange-600 font-medium flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              Termin składania ofert: {new Date(rfq.deadline).toLocaleDateString('pl-PL')}
+            </p>
+          )}
         </div>
 
         {/* Items */}

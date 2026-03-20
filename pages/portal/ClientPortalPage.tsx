@@ -33,7 +33,18 @@ const ClientPortalPage: React.FC = () => {
   const statusLabel: Record<string, string> = { draft: 'Szkic', sent: 'Wysłano', client_signed: 'Podpisano', completed: 'Zakończono', expired: 'Wygasło' }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
-  if (error) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-center"><p className="text-4xl mb-3">🔒</p><p className="text-gray-500">{error}</p></div></div>
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="flex justify-center mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-gray-300">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+        </div>
+        <p className="text-gray-500">{error}</p>
+      </div>
+    </div>
+  )
 
   const progress = project?.progress || 0
 
