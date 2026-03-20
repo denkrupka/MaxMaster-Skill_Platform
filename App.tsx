@@ -147,6 +147,7 @@ const FinancialDashboard = React.lazy(() => import('./pages/finance/FinancialDas
 const ClientPortal = React.lazy(() => import('./pages/portal/ClientPortal'));
 const RFQPage = React.lazy(() => import('./pages/rfq/RFQPage'));
 const RFQRespondPage = React.lazy(() => import('./pages/rfq/RFQRespondPage'));
+const RFQDetailPage = React.lazy(() => import('./pages/rfq/RFQDetailPage'));
 const ClientPortalPage = React.lazy(() => import('./pages/portal/ClientPortalPage'));
 const ConstructionDiary = React.lazy(() => import('./pages/diary/ConstructionDiary'));
 
@@ -493,6 +494,7 @@ export default function App() {
           <Route path="/construction/dms/:id/certificate" element={<Suspense fallback={<div/>}><DocumentCertificatePage /></Suspense>} />
           <Route path="/finance/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="dms"><React.Suspense fallback={<div />}><FinancialDashboard /></React.Suspense></ProtectedRoute>} />
           <Route path="/rfq" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="dms"><React.Suspense fallback={<div />}><RFQPage /></React.Suspense></ProtectedRoute>} />
+          <Route path="/rfq/:id" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="dms"><React.Suspense fallback={<div />}><RFQDetailPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/diary/:projectId?" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="dms"><React.Suspense fallback={<div />}><ConstructionDiary /></React.Suspense></ProtectedRoute>} />
           <Route path="/portal/:token" element={<React.Suspense fallback={<div />}><ClientPortal /></React.Suspense>} />
           <Route path="/portal/v2/:token" element={<React.Suspense fallback={<div />}><ClientPortalPage /></React.Suspense>} />

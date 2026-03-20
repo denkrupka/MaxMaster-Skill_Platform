@@ -333,6 +333,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                    <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
                    <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                    <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                   <NavItem to="/rfq" icon={Inbox} label="Zapytania RFQ" />
+                   <NavItem to="/diary" icon={BookOpen} label="Dziennik budowy" />
+                   <NavItem to="/finance/dashboard" icon={BarChart3} label="Finanse ogólne" />
                  </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/hr/settings" icon={Settings} label="Ustawienia" />
@@ -363,6 +366,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                    <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
                    <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                    <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                   <NavItem to="/rfq" icon={Inbox} label="Zapytania RFQ" />
+                   <NavItem to="/diary" icon={BookOpen} label="Dziennik budowy" />
+                   <NavItem to="/finance/dashboard" icon={BarChart3} label="Finanse ogólne" />
                  </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
@@ -458,6 +464,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                       <NavItem to="/construction/gantt" icon={GanttChartSquare} label="Harmonogram" />
                       <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                       <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                      <NavItem to="/rfq" icon={Inbox} label="Zapytania RFQ" />
+                      <NavItem to="/diary" icon={BookOpen} label="Dziennik budowy" />
+                      <NavItem to="/finance/dashboard" icon={BarChart3} label="Finanse ogólne" />
                     </CollapsibleNavGroup>
                     <NavItem to="/coordinator/profile" icon={User} label="Mój Profil" />
                 </>
@@ -505,6 +514,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                       <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                       <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                       <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                      <NavItem to="/rfq" icon={Inbox} label="Zapytania RFQ" />
+                      <NavItem to="/diary" icon={BookOpen} label="Dziennik budowy" />
                     </CollapsibleNavGroup>
                 </>
             )}
@@ -529,6 +540,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                       <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                       <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                       <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                      <NavItem to="/rfq" icon={Inbox} label="Zapytania RFQ" />
+                      <NavItem to="/diary" icon={BookOpen} label="Dziennik budowy" />
                     </CollapsibleNavGroup>
                   </>
                 )}

@@ -14,6 +14,7 @@ interface Props { supabase: any; companyId: string }
 const DocumentAnalytics: React.FC<Props> = ({ supabase, companyId }) => {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [signStats, setSignStats] = useState({ avg_hours: 0, completion_rate: 0, total: 0, completed: 0 })
 
   useEffect(() => {
     const load = async () => {
@@ -34,6 +35,22 @@ const DocumentAnalytics: React.FC<Props> = ({ supabase, companyId }) => {
     load()
   }, [companyId])
 
+  useEffect(() => {
+    supabase.from('signature_requests').select('created_at, signed_at, status').then(({ data: reqData }: any) => {
+      if (!reqData?.length) return
+      const completed = reqData.filter((r: any) => r.status === 'signed' && r.signed_at)
+      const avgMs = completed.length
+        ? completed.reduce((s: number, r: any) => s + (new Date(r.signed_at).getTime() - new Date(r.created_at).getTime()), 0) / completed.length
+        : 0
+      setSignStats({
+        avg_hours: Math.round(avgMs / 3600000),
+        completion_rate: Math.round((completed.length / reqData.length) * 100),
+        total: reqData.length,
+        completed: completed.length
+      })
+    })
+  }, [companyId])
+
   if (loading) return <div className="animate-pulse h-32 bg-gray-100 rounded-xl" />
   if (!data) return null
 
@@ -47,6 +64,7 @@ const DocumentAnalytics: React.FC<Props> = ({ supabase, companyId }) => {
   ]
 
   return (
+    <>
     <div className="grid grid-cols-3 gap-3 mb-6 sm:grid-cols-6">
       {cards.map(c => (
         <div key={c.label} className={`rounded-xl p-3 text-center ${c.color}`}>
@@ -55,6 +73,28 @@ const DocumentAnalytics: React.FC<Props> = ({ supabase, companyId }) => {
         </div>
       ))}
     </div>
+      {/* Signature stats */}
+      {signStats.total > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-blue-50 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-blue-700">{signStats.avg_hours}h</div>
+            <div className="text-xs mt-1 text-blue-600">Śr. czas podpisu</div>
+          </div>
+          <div className="bg-green-50 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-green-700">{signStats.completion_rate}%</div>
+            <div className="text-xs mt-1 text-green-600">Skuteczność</div>
+          </div>
+          <div className="bg-purple-50 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-purple-700">{signStats.completed}</div>
+            <div className="text-xs mt-1 text-purple-600">Podpisane</div>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-orange-700">{signStats.total - signStats.completed}</div>
+            <div className="text-xs mt-1 text-orange-600">Oczekujące</div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

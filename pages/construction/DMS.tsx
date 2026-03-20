@@ -1736,6 +1736,9 @@ export const DMSPage: React.FC = () => {
   const [sortField, setSortField] = useState<'name'|'created_at'|'number'>('created_at');
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkSend, setShowBulkSend] = useState(false);
+  const [bulkEmail, setBulkEmail] = useState('');
+  const [bulkSending, setBulkSending] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -1832,6 +1835,35 @@ export const DMSPage: React.FC = () => {
 
   const totalPages = Math.ceil(filteredDocuments.length / PAGE_SIZE);
   const paginatedDocuments = filteredDocuments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleBulkSend = async () => {
+    if (!bulkEmail.trim() || selectedIds.size === 0) return;
+    setBulkSending(true);
+    for (const docId of selectedIds) {
+      try {
+        await supabase.functions.invoke('send-signature-request', {
+          body: { document_id: docId, signer_email: bulkEmail, signer_name: bulkEmail.split('@')[0] }
+        });
+      } catch {}
+    }
+    setBulkSending(false);
+    setShowBulkSend(false);
+    setBulkEmail('');
+    setSelectedIds(new Set());
+    setToast({ message: `Wysłano ${selectedIds.size} dokumentów do podpisu`, type: 'success' });
+  };
+
+
+  const getExpiryBadge = (doc: DocumentRecord) => {
+    const expiresAt = (doc as any).expires_at;
+    if (!expiresAt) return null;
+    const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
+    if (days < 0) return <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-medium">Wygasło</span>;
+    if (days <= 7) return <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-medium">⚠️ {days}d</span>;
+    if (days <= 30) return <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-[10px] font-medium">⏰ {days}d</span>;
+    return null;
+  };
+
 
   return (
     <DocumentsErrorBoundary>
@@ -2076,6 +2108,9 @@ export const DMSPage: React.FC = () => {
                     }} className="text-xs px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700">
                       📦 Archiwizuj
                     </button>
+                    <button onClick={() => setShowBulkSend(true)} className="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600">
+                      ✉️ Wyślij do podpisu ({selectedIds.size})
+                    </button>
                     <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:underline">Anuluj</button>
                   </div>
                 )}
@@ -2114,7 +2149,7 @@ export const DMSPage: React.FC = () => {
                               }} />
                           </td>
                           <td className="px-4 py-3">
-                            <div className="font-medium text-slate-800 truncate max-w-xs">{d.name}</div>
+                            <div className="font-medium text-slate-800 truncate max-w-xs">{d.name}{getExpiryBadge(d)}</div>
                             {d.number && <div className="text-xs text-slate-400 font-mono">{d.number}</div>}
                           </td>
                           <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{fmt(d.created_at)}</td>
@@ -2215,6 +2250,28 @@ export const DMSPage: React.FC = () => {
               <button onClick={() => setShowAIGenerate(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
             <AIDocumentGenerator onClose={() => setShowAIGenerate(false)} onCreated={(id: string) => { setShowAIGenerate(false); loadDocuments(); }} />
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Send to Signature Modal */}
+      {showBulkSend && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-800">Wyślij {selectedIds.size} dokumentów do podpisu</h3>
+              <button onClick={() => setShowBulkSend(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="mb-4">
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Email podpisującego</label>
+              <input value={bulkEmail} onChange={e => setBulkEmail(e.target.value)} type="email" placeholder="klient@firma.pl" className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-orange-300 focus:outline-none" />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowBulkSend(false)} className="flex-1 border rounded-xl py-2.5 text-sm text-gray-600 hover:bg-gray-50">Anuluj</button>
+              <button onClick={handleBulkSend} disabled={bulkSending || !bulkEmail.trim()} className="flex-1 bg-orange-500 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-orange-600">
+                {bulkSending ? 'Wysyłam...' : `Wyślij do ${selectedIds.size} dok.`}
+              </button>
+            </div>
           </div>
         </div>
       )}

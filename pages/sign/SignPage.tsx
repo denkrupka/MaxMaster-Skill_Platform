@@ -7,6 +7,7 @@ type Step = 'phone' | 'otp' | 'document' | 'signed' | 'expired'
 const SignPage: React.FC = () => {
   const { token } = useParams<{ token: string }>()
   const [companyBranding, setCompanyBranding] = useState<{name?: string; logo_url?: string; color?: string} | null>(null)
+  const [showPreview, setShowPreview] = useState(true)
   const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
@@ -92,6 +93,38 @@ const SignPage: React.FC = () => {
   })()
 
   const docTitle = doc?.name || doc?.document_templates?.name || 'Dokument'
+
+  // Preview screen before signing
+  if (showPreview && doc) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4">
+        <div className="max-w-2xl mx-auto">
+          {companyBranding && (
+            <div className="flex items-center gap-3 mb-6">
+              {companyBranding.logo_url ? (
+                <img src={companyBranding.logo_url} alt={companyBranding.name || 'Logo'} className="w-10 h-10 rounded-lg object-contain" />
+              ) : (
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: companyBranding.color || '#2563eb' }}>
+                  <span className="text-white text-sm font-bold">{(companyBranding.name || 'MM').slice(0, 2).toUpperCase()}</span>
+                </div>
+              )}
+              <span className="font-semibold text-gray-900">{companyBranding.name || 'MaxMaster'}</span>
+            </div>
+          )}
+          <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">{docTitle}</h2>
+            <p className="text-sm text-gray-500 mb-4">Przejrzyj dokument przed podpisaniem</p>
+            <div className="border rounded-xl p-4 max-h-96 overflow-y-auto bg-gray-50 text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400">Brak treści dokumentu</p>' }}
+            />
+          </div>
+          <button onClick={() => setShowPreview(false)} className="w-full bg-blue-600 text-white rounded-2xl py-4 font-semibold shadow-lg hover:bg-blue-700 transition-colors">
+            Przejdź do podpisania →
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (step === 'expired') return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

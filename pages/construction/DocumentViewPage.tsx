@@ -33,6 +33,8 @@ const DocumentViewPage: React.FC = () => {
   const [showParties, setShowParties] = useState(false)
   const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
   const [showVersions, setShowVersions] = useState(false)
+  const [showDiff, setShowDiff] = useState(false)
+  const [diffHtml, setDiffHtml] = useState('')
   const [versions, setVersions] = useState<any[]>([])
   const [aiResult, setAiResult] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
@@ -57,6 +59,44 @@ const DocumentViewPage: React.FC = () => {
   const loadVersions = async () => {
     const { data } = await supabase.from('document_versions').select('*').eq('document_id', id!).order('version_number', { ascending: false }).limit(20)
     setVersions(data || [])
+  }
+  const showVersionDiff = (v: any) => {
+    const prev = (v.content || '').replace(/<[^>]*>/g, '')
+    const curr = (editor?.getHTML() || '').replace(/<[^>]*>/g, '')
+    const prevLines = prev.split('\n').filter((l: string) => l.trim())
+    const currLines = curr.split('\n').filter((l: string) => l.trim())
+    const removed = prevLines.filter((l: string) => !currLines.includes(l))
+    const added = currLines.filter((l: string) => !prevLines.includes(l))
+    const html = [
+      ...removed.map((l: string) => `<div style="background:#fee2e2;padding:2px 6px;margin:2px 0;border-radius:4px;border-left:3px solid #ef4444">- ${l}</div>`),
+      ...added.map((l: string) => `<div style="background:#d1fae5;padding:2px 6px;margin:2px 0;border-radius:4px;border-left:3px solid #10b981">+ ${l}</div>`)
+    ].join('')
+    setDiffHtml(html || '<p class="text-gray-400 text-center py-4">Brak różnic</p>')
+    setShowDiff(true)
+  }
+
+
+  const generateContractAI = async () => {
+    if (!doc) return
+    const confirmed = window.confirm('AI wygeneruje treść umowy na podstawie danych dokumentu. Zastąpi obecną treść. Kontynuować?')
+    if (!confirmed) return
+    setAiLoading(true)
+    const { data } = await supabase.functions.invoke('analyze-document', {
+      body: {
+        document_id: doc.id,
+        action: 'generate_contract',
+        context: {
+          title: doc.name,
+          parties: doc.parties,
+          project_id: doc.project_id,
+          type: doc.document_type || 'umowa'
+        }
+      }
+    })
+    if (data?.result) {
+      editor?.commands.setContent(data.result)
+    }
+    setAiLoading(false)
   }
 
   const generatePortalLink = async () => {
@@ -231,6 +271,9 @@ const DocumentViewPage: React.FC = () => {
           <button onClick={() => { setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVersions ? 'bg-purple-50 border-purple-300 text-purple-700' : 'hover:bg-gray-50'}`}>
             Historia wersji
           </button>
+
+          {/* AI generate contract */}
+          <button onClick={generateContractAI} disabled={aiLoading} className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1">✨ Generuj AI</button>
 
           {/* AI dropdown */}
           <div className="relative">
@@ -455,9 +498,10 @@ const DocumentViewPage: React.FC = () => {
                     <p className="text-xs text-gray-500">{v.snapshot_reason || 'zapisano'}</p>
                     {v.created_by && <p className="text-xs text-gray-400">{v.created_by}</p>}
                     {v.content && (
-                      <button onClick={() => { if(editor) editor.commands.setContent(v.content); setShowVersions(false) }} className="mt-1 text-xs text-blue-600 hover:underline">
-                        Przywróć tę wersję
-                      </button>
+                      <div className="flex gap-2 mt-1">
+                        <button onClick={() => showVersionDiff(v)} className="text-xs text-purple-600 hover:underline">Diff</button>
+                        <button onClick={() => { if(editor) editor.commands.setContent(v.content); setShowVersions(false) }} className="text-xs text-blue-600 hover:underline">Przywróć</button>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -598,6 +642,24 @@ const DocumentTimeline: React.FC<{ status?: string }> = ({ status }) => {
           )}
         </React.Fragment>
       ))}
+
+      {/* Version Diff Modal */}
+      {showDiff && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Porównanie wersji</h3>
+              <button onClick={() => setShowDiff(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="text-xs text-gray-500 mb-3 flex gap-4">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-100 border border-red-300 rounded inline-block"></span> Usunięte</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-100 border border-green-300 rounded inline-block"></span> Dodane</span>
+            </div>
+            <div className="font-mono text-xs" dangerouslySetInnerHTML={{ __html: diffHtml }} />
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
