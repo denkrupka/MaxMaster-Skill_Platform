@@ -14,17 +14,22 @@ const ClientPortalPage: React.FC = () => {
 
   const loadPortal = async () => {
     setLoading(true)
-    const { data: pt } = await supabase.from('client_portal_tokens').select('*').eq('token', token).eq('active', true).single()
-    if (!pt) { setError('Link jest nieważny lub wygasł'); setLoading(false); return }
-    setPortalData(pt)
+    try {
+      const { data, error: rpcError } = await supabase.rpc('get_portal_data', { portal_token: token })
 
-    // Load project
-    if (pt.project_id) {
-      const { data: proj } = await supabase.from('projects').select('*').eq('id', pt.project_id).single()
-      setProject(proj)
-      // Load project documents
-      const { data: docs } = await supabase.from('documents').select('id,name,status,created_at').eq('project_id', pt.project_id).order('created_at', { ascending: false }).limit(10)
-      setDocuments(docs || [])
+      if (rpcError || !data || data.error) {
+        console.error('Portal RPC error:', rpcError || data?.error)
+        setError('Link jest nieważny lub wygasł')
+        setLoading(false)
+        return
+      }
+
+      setPortalData(data.portal)
+      setProject(data.project)
+      setDocuments(data.documents || [])
+    } catch (err) {
+      console.error('ClientPortalPage loadPortal error:', err)
+      setError('Wystąpił błąd podczas ładowania portalu')
     }
     setLoading(false)
   }
