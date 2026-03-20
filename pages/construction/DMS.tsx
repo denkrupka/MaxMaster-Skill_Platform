@@ -34,6 +34,7 @@ import {
 } from '../../lib/documentValidation';
 import { getSignatureDisplayStatus } from '../../lib/documentSigning';
 import DocumentAnalytics from '../../components/documents/DocumentAnalytics'
+import DocumentVariablesSettings from '../../components/documents/DocumentVariablesSettings'
 import type {
   DocumentTemplate, DocumentRecord, TemplateVariable,
   DocumentTemplateType, DocumentStatus, TemplateSection,
@@ -926,6 +927,9 @@ const SettingsTab = ({ companyId }: { companyId: string }) => {
           )}
         </div>
       </div>
+
+      {/* ── Zmienne dokumentów ── */}
+      <DocumentVariablesSettings />
     </div>
   );
 };
