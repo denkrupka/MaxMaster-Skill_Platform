@@ -42,6 +42,28 @@ const DocumentViewPage: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null)
   const commentBoxRef = useRef<HTMLTextAreaElement>(null)
 
+
+  // Convert sections JSON to HTML if needed
+  const convertContentToHtml = (raw: string): string => {
+    if (!raw) return '<p></p>'
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.sections && Array.isArray(parsed.sections)) {
+        return parsed.sections.map((s: any) => 
+          `<h2>${s.title || ''}</h2><p>${(s.content || s.body || '').replace(/\n/g, '</p><p>')}</p>`
+        ).join('\n')
+      }
+      if (Array.isArray(parsed)) {
+        return parsed.map((s: any) => 
+          `<h2>${s.title || ''}</h2><p>${(s.content || s.body || '').replace(/\n/g, '</p><p>')}</p>`
+        ).join('\n')
+      }
+    } catch {
+      // Not JSON, return as-is
+    }
+    return raw
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user))
     if (id) { loadDocument(); loadComments() }
@@ -139,8 +161,8 @@ const DocumentViewPage: React.FC = () => {
           : String(data.document_templates.content)
         raw = secs
       }
-      if (raw) setDocContent(raw)
-      if (editor && raw) editor.commands.setContent(raw)
+      if (raw) setDocContent(convertContentToHtml(raw))
+      if (editor && raw) editor.commands.setContent(convertContentToHtml(raw))
     } catch (err: any) {
       setLoadError(err?.message || 'Błąd ładowania dokumentu')
     }
@@ -507,7 +529,7 @@ const DocumentViewPage: React.FC = () => {
                     {v.content && (
                       <div className="flex gap-2 mt-1">
                         <button onClick={() => showVersionDiff(v)} className="text-xs text-purple-600 hover:underline">Diff</button>
-                        <button onClick={() => { if(editor) editor.commands.setContent(v.content); setShowVersions(false) }} className="text-xs text-blue-600 hover:underline">Przywróć</button>
+                        <button onClick={() => { if(editor) editor.commands.setContent(convertContentToHtml(v.content)); setShowVersions(false) }} className="text-xs text-blue-600 hover:underline">Przywróć</button>
                       </div>
                     )}
                   </div>
