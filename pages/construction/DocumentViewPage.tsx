@@ -9,6 +9,7 @@ import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
 import { supabase } from '../../lib/supabase'
+import VariablesPanel from '../../components/documents/VariablesPanel'
 
 type Mode = 'preview' | 'edit' | 'sign'
 
@@ -31,6 +32,7 @@ const DocumentViewPage: React.FC = () => {
   const [showAI, setShowAI] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [showParties, setShowParties] = useState(false)
+  const [showVariables, setShowVariables] = useState(false)
   const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
   const [showVersions, setShowVersions] = useState(false)
   const [showDiff, setShowDiff] = useState(false)
@@ -314,6 +316,12 @@ const DocumentViewPage: React.FC = () => {
           <button onClick={() => setShowParties(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showParties ? 'bg-blue-50 border-blue-300 text-blue-700' : 'hover:bg-gray-50'}`}>
             Dane stron
           </button>
+          <button onClick={() => setShowVariables(v => !v)} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVariables ? 'bg-green-50 border-green-300 text-green-700' : 'hover:bg-gray-50'}`}>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+            </svg>
+            Zmienne
+          </button>
           <button onClick={() => { setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVersions ? 'bg-purple-50 border-purple-300 text-purple-700' : 'hover:bg-gray-50'}`}>
             Historia wersji
           </button>
@@ -506,6 +514,15 @@ const DocumentViewPage: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Variables sidebar */}
+        {showVariables && (
+          <VariablesPanel
+            editor={editor}
+            content={docContent}
+            onClose={() => setShowVariables(false)}
+          />
         )}
 
         {/* Historia wersji sidebar */}
