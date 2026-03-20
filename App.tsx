@@ -145,6 +145,8 @@ const KosztorysEditorPage = React.lazy(() => import('./pages/construction/Koszto
 const ContractorRequestPage = React.lazy(() => import('./pages/construction/ContractorRequestPage').then(m => ({ default: m.ContractorRequestPage })));
 const FinancialDashboard = React.lazy(() => import('./pages/finance/FinancialDashboard'));
 const ClientPortal = React.lazy(() => import('./pages/portal/ClientPortal'));
+const RFQPage = React.lazy(() => import('./pages/rfq/RFQPage'));
+const ConstructionDiary = React.lazy(() => import('./pages/diary/ConstructionDiary'));
 
 // Lazy-loaded heavy pages from other modules
 const SalesCompanies = React.lazy(() => import('./pages/sales/Companies').then(m => ({ default: m.SalesCompanies })));
@@ -488,6 +490,8 @@ export default function App() {
           <Route path="/construction/dms/:id" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<div />}><DocumentViewPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/construction/dms/:id/certificate" element={<Suspense fallback={<div/>}><DocumentCertificatePage /></Suspense>} />
           <Route path="/finance/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="dms"><React.Suspense fallback={<div />}><FinancialDashboard /></React.Suspense></ProtectedRoute>} />
+          <Route path="/rfq" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="dms"><React.Suspense fallback={<div />}><RFQPage /></React.Suspense></ProtectedRoute>} />
+          <Route path="/diary/:projectId?" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="dms"><React.Suspense fallback={<div />}><ConstructionDiary /></React.Suspense></ProtectedRoute>} />
           <Route path="/portal/:token" element={<React.Suspense fallback={<div />}><ClientPortal /></React.Suspense>} />
                 <Route path="/construction/dms/:id/sign" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<div />}><DocumentSignPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/construction/gantt" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="gantt"><GanttPage /></ProtectedRoute>} />
