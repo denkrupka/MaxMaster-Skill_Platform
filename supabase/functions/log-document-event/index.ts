@@ -49,9 +49,8 @@ serve(async (req) => {
     // Log audit event
     const { data, error } = await supabase.from('document_audit_log').insert({
       document_id,
-      event_type: effectiveAction,
-      description: description || details || effectiveAction,
-      user_id,
+      action: effectiveAction,
+      actor_id: user_id,
       actor_email: actor_email || null,
       metadata: metadata || {},
       ip_address,

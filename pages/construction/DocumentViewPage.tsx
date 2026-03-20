@@ -103,16 +103,33 @@ const DocumentViewPage: React.FC = () => {
     editorProps: { attributes: { class: 'prose prose-lg max-w-none focus:outline-none p-8 min-h-[500px]' } },
   })
 
+  // Replace {{variable}} with stored values for preview, or highlight unfilled
+  const renderPreviewContent = useCallback((html: string): string => {
+    if (!html) return ''
+    const storedVars: Record<string, string> = JSON.parse(localStorage.getItem('doc_variables') || '{}')
+    return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+      const value = storedVars[key]
+      if (value && value.trim()) {
+        return `<span style="color:inherit;font-weight:inherit;text-decoration:underline;text-decoration-color:#3b82f6">${value}</span>`
+      }
+      return `<span style="background:#fee2e2;color:#dc2626;border-radius:3px;padding:1px 4px;font-size:0.875em" title="Zmienna niezapełniona: ${key}">${match}</span>`
+    })
+  }, [])
+
   useEffect(() => {
     if (editor) editor.setEditable(mode === 'edit')
   }, [mode, editor])
 
-  // Set content when editor becomes ready (it initializes async)
+  // Set content when editor becomes ready or mode changes
   useEffect(() => {
-    if (editor && docContent && !editor.getHTML().replace(/<[^>]*>/g, '').trim()) {
-      editor.commands.setContent(docContent)
+    if (editor && docContent) {
+      const isEmpty = !editor.getHTML().replace(/<[^>]*>/g, '').trim()
+      if (isEmpty || mode === 'preview') {
+        const content = mode === 'preview' ? renderPreviewContent(docContent) : docContent
+        editor.commands.setContent(content)
+      }
     }
-  }, [editor, docContent])
+  }, [editor, docContent, mode, renderPreviewContent])
 
   const closeAllPanels = () => {
     setShowComments(false)
@@ -305,7 +322,19 @@ const DocumentViewPage: React.FC = () => {
 
   const handleAI = async (type: string) => {
     setAiLoading(true); setShowAI(true); setAiResult('')
-    const { data } = await supabase.functions.invoke('analyze-document', { body: { document_id: id, analysis_type: type } })
+    const content = (editor?.getText() || editor?.getHTML() || doc?.content || '').slice(0, 8000)
+    const { data } = await supabase.functions.invoke('analyze-document', {
+      body: {
+        document_id: id,
+        analysis_type: type,
+        content,
+        context: {
+          title: doc?.name,
+          type: doc?.document_type,
+          parties: doc?.parties
+        }
+      }
+    })
     setAiResult(data?.result || 'Błąd analizy'); setAiLoading(false)
   }
 
@@ -828,6 +857,38 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
   const [form, setForm] = React.useState<PartyData>(value || {})
   const [nipLoading, setNipLoading] = React.useState(false)
   const [reps, setReps] = React.useState<Array<{name:string;position:string;email:string;phone:string}>>([{ name: form.contact_person||'', position: form.contact_position||'', email: form.email||'', phone: form.phone||'' }])
+  const [addressSuggestions, setAddressSuggestions] = React.useState<Array<{display: string; street: string; city: string; postcode: string}>>([])
+  const [addressSearchTimeout, setAddressSearchTimeout] = React.useState<ReturnType<typeof setTimeout> | null>(null)
+
+  const searchAddress = async (query: string) => {
+    if (query.length < 3) { setAddressSuggestions([]); return }
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&countrycodes=pl&limit=5`, {
+        headers: { 'Accept-Language': 'pl' }
+      })
+      const data = await res.json()
+      setAddressSuggestions(data.map((item: any) => ({
+        display: item.display_name,
+        street: item.address?.road ? `${item.address.road} ${item.address?.house_number || ''}`.trim() : '',
+        city: item.address?.city || item.address?.town || item.address?.village || '',
+        postcode: item.address?.postcode || ''
+      })))
+    } catch { setAddressSuggestions([]) }
+  }
+
+  const handleAddressInput = (value: string) => {
+    upd('address', value)
+    if (addressSearchTimeout) clearTimeout(addressSearchTimeout)
+    setAddressSearchTimeout(setTimeout(() => searchAddress(value), 400))
+  }
+
+  const selectAddress = (suggestion: {display: string; street: string; city: string; postcode: string}) => {
+    const formatted = suggestion.street
+      ? `${suggestion.street}, ${suggestion.postcode} ${suggestion.city}`.trim()
+      : suggestion.display.split(',').slice(0, 3).join(',').trim()
+    upd('address', formatted)
+    setAddressSuggestions([])
+  }
 
   const lookupGUS = async (nip: string) => {
     if (nip.replace(/[\s-]/g,'').length !== 10) return
@@ -835,7 +896,9 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
     try {
       const clean = nip.replace(/[\s-]/g,'')
       const today = new Date().toISOString().split('T')[0]
-      const r = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/\${clean}?date=\${today}`)
+      const r = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/${clean}?date=${today}`, {
+        headers: { 'Accept': 'application/json' }
+      })
       const d = await r.json()
       const s = d?.result?.subject
       if (s) {
@@ -850,14 +913,14 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
       // Biała Lista API fallback
       try {
         const clean = nip.replace(/[\s-]/g,'')
-        const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/\${clean}`)
+        const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/${clean}`)
         const d = await r.json()
         const co = d?.company || d?.result?.[0] || d
         if (co?.name || co?.companyName) {
           setForm(prev => ({
             ...prev,
             name: co.name || co.companyName || prev.name,
-            address: co.address?.street ? `\${co.address.street} \${co.address.buildingNumber||''}, \${co.address.postalCode||''} \${co.address.city||''}`.trim() : prev.address,
+            address: co.address?.street ? `${co.address.street} ${co.address.buildingNumber||''}, ${co.address.postalCode||''} ${co.address.city||''}`.trim() : prev.address,
             nip: clean,
           }))
         }
@@ -892,7 +955,6 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
         </div>
         {[
           {k:'name',l:'Nazwa firmy',ph:'ABC Sp. z o.o.'},
-          {k:'address',l:'Adres',ph:'ul. Przykładowa 1, 00-000 Warszawa'},
           {k:'phone',l:'Telefon',ph:'+48 600 000 000'},
           {k:'email',l:'E-mail',ph:'biuro@firma.pl'},
         ].map(({k,l,ph}) => (
@@ -909,6 +971,20 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
               placeholder={ph} className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none" />
           </div>
         ))}
+        <div className="relative">
+          <label className="text-xs text-gray-500 mb-0.5 block">Adres</label>
+          <input value={form.address||''} onChange={e => handleAddressInput(e.target.value)}
+            placeholder="ul. Przykładowa 1, 00-000 Warszawa" className="w-full border rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none" />
+          {addressSuggestions.length > 0 && (
+            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+              {addressSuggestions.map((s, i) => (
+                <button key={i} onClick={() => selectAddress(s)} className="w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 border-b last:border-0 truncate">
+                  {s.display}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="border-t pt-2 mt-2">
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-medium text-gray-600">Przedstawiciele</p>

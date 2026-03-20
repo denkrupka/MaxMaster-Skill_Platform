@@ -15,7 +15,15 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const { document_id, signers } = await req.json()
+    const body = await req.json()
+    const { document_id, signer_email, signer_name, signer_position, party_name, party_role, message: emailMessage, subject: emailSubject, expires_at: customExpiry, email_body } = body
+    
+    // Support both flat single-signer format and array format
+    let signers = body.signers
+    if (!signers?.length && signer_email) {
+      signers = [{ email: signer_email, name: signer_name || signer_email.split('@')[0], position: signer_position, party_name, party_role }]
+    }
+    
     if (!document_id || !signers?.length) {
       return new Response(JSON.stringify({ error: 'document_id and signers required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -33,7 +41,7 @@ serve(async (req) => {
     for (const signer of signers) {
       // Create token
       const token = crypto.randomUUID()
-      const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      const expires_at = customExpiry ? new Date(customExpiry).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
       // Insert signature request
       const { data: sr, error: srErr } = await supabase.from('signature_requests').insert({
