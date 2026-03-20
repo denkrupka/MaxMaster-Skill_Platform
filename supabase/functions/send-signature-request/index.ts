@@ -31,7 +31,7 @@ serve(async (req) => {
     }
 
     const { data: doc } = await supabase.from('documents')
-      .select('title, company_id')
+      .select('name, company_id, created_by')
       .eq('id', document_id).single()
 
     const results = []
@@ -47,6 +47,7 @@ serve(async (req) => {
       const { data: sr, error: srErr } = await supabase.from('signature_requests').insert({
         document_id,
         company_id: doc?.company_id,
+        created_by: doc?.created_by,
         signer_email: signer.email,
         signer_name: signer.name,
         signer_role: signer.role || 'signer',
@@ -79,7 +80,7 @@ serve(async (req) => {
           body: JSON.stringify({
             From: EMAIL_FROM,
             To: signer.email,
-            Subject: `Prośba o podpis: ${doc?.title || 'Dokument'}`,
+            Subject: `Prośba o podpis: ${doc?.name || 'Dokument'}`,
             HtmlBody: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
@@ -88,7 +89,7 @@ serve(async (req) => {
                 <div style="padding: 30px; background: #f8fafc;">
                   <h2 style="color: #1e293b;">Prośba o podpis dokumentu</h2>
                   <p style="color: #475569;">Cześć <strong>${signer.name}</strong>,</p>
-                  <p style="color: #475569;">Proszę o podpisanie dokumentu: <strong>${doc?.title || 'Dokument'}</strong></p>
+                  <p style="color: #475569;">Proszę o podpisanie dokumentu: <strong>${doc?.name || 'Dokument'}</strong></p>
                   <p style="margin: 24px 0;">
                     <a href="${signUrl}"
                        style="background:#1d4ed8;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">
@@ -99,7 +100,7 @@ serve(async (req) => {
                 </div>
               </div>
             `,
-            TextBody: `Proszę o podpis dokumentu "${doc?.title}". Link: ${signUrl}`,
+            TextBody: `Proszę o podpis dokumentu "${doc?.name}". Link: ${signUrl}`,
             MessageStream: 'outbound',
           }),
         })

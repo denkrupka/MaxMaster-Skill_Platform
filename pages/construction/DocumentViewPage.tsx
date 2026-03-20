@@ -353,63 +353,114 @@ const DocumentViewPage: React.FC = () => {
   const docTitle = doc?.name || doc?.document_templates?.name || 'Dokument'
   const activeComments = comments.filter(c => !c.resolved)
 
-  const handleDownloadPDF = async () => {
+  const handleDownloadPDF = () => {
     if (!doc) return
     const content = editor?.getHTML() || doc?.content || ''
-    const html = `<!DOCTYPE html>
-<html>
+    const title = doc?.title || 'dokument'
+    
+    const printWindow = window.open('', '_blank', 'width=800,height=900')
+    if (!printWindow) return
+    
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="pl">
 <head>
-<meta charset="utf-8">
-<style>
-  @page { size: A4; margin: 2cm; }
-  @media print { body { margin: 0; } }
-  body {
-    font-family: Arial, sans-serif;
-    font-size: 12pt;
-    line-height: 1.6;
-    color: #111;
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0 auto;
-    padding: 2cm;
-    box-sizing: border-box;
-  }
-  h1, h2, h3 { color: #111; }
-  p { margin: 0.5em 0; }
-</style>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 2.5cm 2cm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #000;
+      margin: 0;
+      padding: 0;
+    }
+    h1 { font-size: 16pt; font-weight: bold; margin: 0 0 12pt; }
+    h2 { font-size: 14pt; font-weight: bold; margin: 10pt 0 6pt; }
+    h3 { font-size: 12pt; font-weight: bold; margin: 8pt 0 4pt; }
+    p { margin: 0 0 8pt; }
+    ul, ol { margin: 4pt 0 8pt; padding-left: 20pt; }
+    li { margin: 2pt 0; }
+    table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
+    td, th { border: 1pt solid #000; padding: 4pt 6pt; font-size: 10pt; }
+    th { background: #f0f0f0; font-weight: bold; }
+    strong, b { font-weight: bold; }
+    em, i { font-style: italic; }
+    u { text-decoration: underline; }
+    @media print {
+      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    }
+  </style>
 </head>
-<body>${content}</body>
-</html>`
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = Object.assign(document.createElement('a'), { href: url, download: (doc?.title || 'dokument') + '.html' })
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+<body>
+${content}
+</body>
+</html>`)
+    
+    printWindow.document.close()
+    
+    setTimeout(() => {
+      printWindow.focus()
+      printWindow.print()
+    }, 500)
   }
 
-  const handleDownloadDOC = () => {
+  const handleDownloadDOC = async () => {
     if (!doc) return
     const content = editor?.getHTML() || doc?.content || ''
-    // Word XML з UTF-8 для польських символів
-    const wordXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    const title = doc?.title || 'dokument'
+    
+    try {
+      // Спробуємо html-docx-js (якщо є)
+      const htmlDocx = await import('html-docx-js/dist/html-docx').catch(() => null)
+      
+      if (htmlDocx?.default?.asBlob) {
+        // html-docx-js конвертує HTML → DOCX зберігаючи форматування
+        const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${content}</body></html>`
+        const blob = htmlDocx.default.asBlob(htmlContent)
+        const url = URL.createObjectURL(blob)
+        const a = Object.assign(document.createElement('a'), { href: url, download: title + '.docx' })
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } else {
+        // Fallback: Word XML з базовим форматуванням
+        const BOM = '\uFEFF'
+        // Конвертуємо HTML теги в Word XML теги
+        let wordContent = content
+          .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">$1</w:t></w:r>')
+          .replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">$1</w:t></w:r>')
+          .replace(/<u[^>]*>([\s\S]*?)<\/u>/gi, '<w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">$1</w:t></w:r>')
+          .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>$1</w:t></w:r></w:p>')
+          .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>$1</w:t></w:r></w:p>')
+          .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '<w:p><w:r><w:t xml:space="preserve">$1</w:t></w:r></w:p>')
+          .replace(/<br\s*\/?>/gi, '</w:t><w:br/><w:t>')
+          .replace(/<[^>]+>/g, '') // Remove remaining HTML tags
+        
+        const wordXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <?mso-application progid="Word.Document"?>
 <w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"
-  xmlns:wx="http://schemas.microsoft.com/office/word/2003/auxHint"
-  xmlns:o="urn:schemas-microsoft-com:office:office">
-<w:body>
-<w:p><w:r><w:t xml:space="preserve">${(content || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim()}</w:t></w:r></w:p>
-</w:body>
+  xmlns:wx="http://schemas.microsoft.com/office/word/2003/auxHint">
+<w:body>${wordContent || '<w:p><w:r><w:t> </w:t></w:r></w:p>'}</w:body>
 </w:wordDocument>`
-    const BOM = '\uFEFF'
-    const blob = new Blob([BOM + wordXml], { type: 'application/msword;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = Object.assign(document.createElement('a'), { href: url, download: (doc?.title || 'dokument') + '.doc' })
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+        
+        const blob = new Blob([BOM + wordXml], { type: 'application/msword;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = Object.assign(document.createElement('a'), { href: url, download: title + '.doc' })
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+    } catch (e) {
+      console.error('DOC download error:', e)
+    }
   }
 
   const handleGenerujAI = async () => {
