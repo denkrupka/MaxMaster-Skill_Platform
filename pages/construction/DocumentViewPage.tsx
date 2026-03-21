@@ -27,6 +27,8 @@ import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
 import FontFamily from '@tiptap/extension-font-family'
 import { supabase } from '../../lib/supabase'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 import VariablesPanel from '../../components/documents/VariablesPanel'
 import ProposalsPanel from '../../components/documents/ProposalsPanel'
 
@@ -66,6 +68,7 @@ const DocumentViewPage: React.FC = () => {
   const [showProposals, setShowProposals] = useState(false)
   const [variablesVersion, setVariablesVersion] = useState(0)
   const [portalLinkModal, setPortalLinkModal] = useState<string | null>(null)
+  const [portalLinkCopied, setPortalLinkCopied] = useState(false)
   const [showDiff, setShowDiff] = useState(false)
   const [diffHtml, setDiffHtml] = useState('')
   const [versions, setVersions] = useState<any[]>([])
@@ -373,61 +376,56 @@ const DocumentViewPage: React.FC = () => {
   const docTitle = doc?.name || doc?.document_templates?.name || 'Dokument'
   const activeComments = comments.filter(c => !c.resolved)
 
-  const handleDownloadPDF = () => {
+  const [pdfGenerating, setPdfGenerating] = useState(false)
+
+  const handleDownloadPDF = async () => {
     if (!doc) return
-    const content = editor?.getHTML() || doc?.content || ''
-    const title = doc?.title || 'dokument'
-    
-    const printWindow = window.open('', '_blank', 'width=800,height=900')
-    if (!printWindow) return
-    
-    printWindow.document.write(`<!DOCTYPE html>
-<html lang="pl">
-<head>
-  <meta charset="UTF-8">
-  <title>${title}</title>
-  <style>
-    @page {
-      size: A4;
-      margin: 2.5cm 2cm;
+    setPdfGenerating(true)
+    try {
+      const content = editor?.getHTML() || doc?.data?.content || ''
+      const title = doc?.name || 'dokument'
+
+      // Create off-screen container for rendering
+      const container = document.createElement('div')
+      container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;padding:40px 50px;font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.6;color:#000;background:#fff;'
+      container.innerHTML = content
+      document.body.appendChild(container)
+
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+      document.body.removeChild(container)
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const usableWidth = pageWidth - margin * 2
+      const imgWidth = usableWidth
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+      // Multi-page support
+      const usableHeight = pageHeight - margin * 2
+      let heightLeft = imgHeight
+      let position = margin
+
+      const imgData = canvas.toDataURL('image/png')
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight)
+      heightLeft -= usableHeight
+
+      while (heightLeft > 0) {
+        position = position - usableHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight)
+        heightLeft -= usableHeight
+      }
+
+      pdf.save(`${title}.pdf`)
+    } catch (err) {
+      console.error('PDF generation error:', err)
+      // Fallback: open print dialog
+      window.print()
+    } finally {
+      setPdfGenerating(false)
     }
-    * { box-sizing: border-box; }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 11pt;
-      line-height: 1.6;
-      color: #000;
-      margin: 0;
-      padding: 0;
-    }
-    h1 { font-size: 16pt; font-weight: bold; margin: 0 0 12pt; }
-    h2 { font-size: 14pt; font-weight: bold; margin: 10pt 0 6pt; }
-    h3 { font-size: 12pt; font-weight: bold; margin: 8pt 0 4pt; }
-    p { margin: 0 0 8pt; }
-    ul, ol { margin: 4pt 0 8pt; padding-left: 20pt; }
-    li { margin: 2pt 0; }
-    table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
-    td, th { border: 1pt solid #000; padding: 4pt 6pt; font-size: 10pt; }
-    th { background: #f0f0f0; font-weight: bold; }
-    strong, b { font-weight: bold; }
-    em, i { font-style: italic; }
-    u { text-decoration: underline; }
-    @media print {
-      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body>
-${content}
-</body>
-</html>`)
-    
-    printWindow.document.close()
-    
-    setTimeout(() => {
-      printWindow.focus()
-      printWindow.print()
-    }, 500)
   }
 
   const handleDownloadDOC = () => {
@@ -495,19 +493,32 @@ ${content}
     if (!generujPrompt.trim()) return
     setGenerujLoading(true)
     try {
-      const res = await fetch('https://diytvuczpciikzdhldny.supabase.co/functions/v1/analyze-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: generujPrompt, action: 'generate' })
+      const { data, error } = await supabase.functions.invoke('analyze-document', {
+        body: {
+          document_id: id,
+          action: 'generate',
+          content: generujPrompt,
+          context: {
+            title: doc?.name || generujPrompt.slice(0, 80),
+            parties: doc?.parties,
+            project_id: doc?.project_id,
+          }
+        }
       })
-      const data = await res.json()
-      if (data.result && editor) {
-        // Вставити згенерований текст в editor як HTML з форматуванням
-        const htmlContent = data.result
-          .split('\n\n')
-          .map((para: string) => para.trim() ? `<p>${para.replace(/\n/g, '<br/>')}</p>` : '')
-          .join('')
-        editor.commands.setContent(htmlContent || `<p>${data.result}</p>`)
+      if (!error && data?.result && editor) {
+        // Result is already HTML from EF — insert directly
+        const html = data.result
+        // If result doesn't look like HTML, wrap in paragraphs
+        const isHtml = /<[a-z][\s\S]*>/i.test(html)
+        if (isHtml) {
+          editor.commands.setContent(html)
+        } else {
+          const htmlContent = html
+            .split('\n\n')
+            .map((para: string) => para.trim() ? `<p>${para.replace(/\n/g, '<br/>')}</p>` : '')
+            .join('')
+          editor.commands.setContent(htmlContent || `<p>${html}</p>`)
+        }
         editor.commands.focus()
         setShowGenerujModal(false)
         setGenerujPrompt('')
@@ -896,13 +907,23 @@ ${content}
             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
               <span className="flex-1 text-xs text-gray-700 font-mono truncate">{portalLinkModal}</span>
               <button
-                onClick={() => { navigator.clipboard.writeText(portalLinkModal); }}
-                className="flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                onClick={() => {
+                  navigator.clipboard.writeText(portalLinkModal)
+                  setPortalLinkCopied(true)
+                  setTimeout(() => setPortalLinkCopied(false), 2000)
+                }}
+                className={`flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 text-white rounded-lg transition-colors ${portalLinkCopied ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
-                </svg>
-                Kopiuj
+                {portalLinkCopied ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                  </svg>
+                )}
+                {portalLinkCopied ? 'Skopiowano!' : 'Kopiuj'}
               </button>
             </div>
             <p className="text-xs text-gray-400 mt-3">Link wygasa po 30 dniach</p>
@@ -1022,59 +1043,22 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
     if (clean.length !== 10) return
     setNipLoading(true)
     try {
-      // Próba 1: rejestr.io (CORS-friendly)
-      const res = await fetch(`https://rejestr.io/api/v2/krs/company?nip=${clean}`, {
-        headers: { 'Accept': 'application/json' }
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data?.name || data?.firma) {
-          setForm(prev => ({
-            ...prev,
-            name: data.name || data.firma || prev.name,
-            address: data.address || data.adres || prev.address,
-            nip: clean,
-          }))
-          setNipLoading(false)
-          return
-        }
-      }
-    } catch {}
-    try {
-      // Próba 2: wl-api przez allorigins
-      const today = new Date().toISOString().split('T')[0]
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://wl-api.mf.gov.pl/api/search/nip/${clean}?date=${today}`)}`
-      const r = await fetch(proxyUrl)
-      if (r.ok) {
-        const raw = await r.json()
-        const d = typeof raw.contents === 'string' ? JSON.parse(raw.contents) : raw
-        const s = d?.result?.subject
-        if (s) {
-          setForm(prev => ({
-            ...prev,
-            name: s.name || prev.name,
-            address: s.workingAddress || s.residenceAddress || prev.address,
-            nip: clean,
-          }))
-          setNipLoading(false)
-          return
-        }
-      }
-    } catch {}
-    try {
-      // Próba 3: biznes.gov.pl
-      const r = await fetch(`https://api-ost.biznes.gov.pl/api/search/companies/nip/${clean}`)
-      const d = await r.json()
-      const co = d?.company || d?.result?.[0] || d
-      if (co?.name || co?.companyName) {
+      const { data, error } = await supabase.functions.invoke('search-gus', { body: { nip: clean } })
+      if (!error && data?.success && data?.data?.found) {
+        const co = data.data
+        const addr = [co.ulica, co.nrNieruchomosci, co.nrLokalu ? `lok. ${co.nrLokalu}` : '', co.kodPocztowy, co.miejscowosc].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
         setForm(prev => ({
           ...prev,
-          name: co.name || co.companyName || prev.name,
-          address: co.address?.street ? `${co.address.street} ${co.address.buildingNumber||''}, ${co.address.postalCode||''} ${co.address.city||''}`.trim() : prev.address,
+          name: co.nazwa || prev.name,
+          address: addr || prev.address,
           nip: clean,
         }))
+      } else if (data?.error) {
+        console.warn('GUS search:', data.error)
       }
-    } catch { /* API niedostępne */ }
+    } catch (err) {
+      console.error('GUS lookup error:', err)
+    }
     setNipLoading(false)
   }
 
@@ -1104,8 +1088,6 @@ const DocumentParty: React.FC<{ label: string; value: PartyData; onChange: (v: P
         </div>
         {[
           {k:'name',l:'Nazwa firmy',ph:'ABC Sp. z o.o.'},
-          {k:'phone',l:'Telefon',ph:'+48 600 000 000'},
-          {k:'email',l:'E-mail',ph:'biuro@firma.pl'},
         ].map(({k,l,ph}) => (
           <div key={k}>
             <label className="text-xs text-gray-500 mb-0.5 block">{l}</label>

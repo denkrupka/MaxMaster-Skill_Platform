@@ -278,18 +278,6 @@ const TemplateModal = ({
           <button onClick={save} disabled={saving}
             className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60 flex items-center gap-2">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-      {/* Projekt + Ważny do */}
-      <div className="grid grid-cols-2 gap-3">
-        <div><label className="block text-sm font-medium text-gray-700 mb-1">Projekt</label>
-        <select value={(formData as any).project_id||""} onChange={e=>(setFormData as any)(p=>({...p,project_id:e.target.value||null}))} className="border rounded-lg px-3 py-2 w-full text-sm"><option value="">-- Brak --</option></select></div>
-        <div><label className="block text-sm font-medium text-gray-700 mb-1">Ważny do</label>
-        <input type="date" value={(formData as any).expires_at?String((formData as any).expires_at).split("T")[0]:""} onChange={e=>(setFormData as any)(p=>({...p,expires_at:e.target.value||null}))} className="border rounded-lg px-3 py-2 w-full text-sm"/></div>
-      </div>
-      {/* Faktura */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Powiązana faktura</label>
-        <input type="text" value={(formData as any).invoice_id || ''} onChange={e => (setFormData as any)(p => ({...p, invoice_id: e.target.value || null}))} placeholder="ID faktury (opcjonalnie)" className="border rounded-lg px-3 py-2 w-full text-sm" />
-      </div>
             Zapisz
           </button>
         </div>
@@ -2143,7 +2131,7 @@ export const DMSPage: React.FC = () => {
                           <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{d.updated_at ? fmt(d.updated_at) : '—'}</td>
                           <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[120px]">{d.created_by_name || '—'}</td>
                           <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[140px]">
-                            {d.contractors_clients?.name || d.contractors_clients?.company_name || '—'}
+                            {d.contractors?.name || d.contractors?.company_name || '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status] || 'bg-gray-100 text-gray-600'}`}>
