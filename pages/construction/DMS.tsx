@@ -1822,7 +1822,10 @@ export const DMSPage: React.FC = () => {
       result = result.filter(d => d.name.toLowerCase().includes(q) || (d.number || '').toLowerCase().includes(q));
     }
     if (filterType !== 'all') {
-      result = result.filter(d => d.document_templates?.type === filterType);
+      result = result.filter(d => {
+        const tpl = templates.find(t => t.id === d.template_id);
+        return tpl?.type === filterType;
+      });
     }
     if (filterStatus !== 'all') {
       result = result.filter(d => d.status === filterStatus);
@@ -2131,7 +2134,7 @@ export const DMSPage: React.FC = () => {
                           <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{d.updated_at ? fmt(d.updated_at) : '—'}</td>
                           <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[120px]">{d.created_by_name || '—'}</td>
                           <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[140px]">
-                            {d.contractors_clients?.name || '—'}
+                            {contractors.find(c => c.id === d.contractor_id)?.name || '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status] || 'bg-gray-100 text-gray-600'}`}>

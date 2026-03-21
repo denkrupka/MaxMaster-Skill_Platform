@@ -170,7 +170,7 @@ export async function fetchDocuments(
 
   let query = supabase
     .from('documents')
-    .select('*, document_templates(name, type), contractors_clients(name)')
+    .select('*')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
 
