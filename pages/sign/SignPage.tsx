@@ -31,7 +31,9 @@ const SignPage: React.FC = () => {
   const [proposal, setProposal] = useState<any>(null)
   const [signatureName, setSignatureName] = useState('')
   const [companyBranding, setCompanyBranding] = useState<{ name?: string; logo_url?: string; color?: string } | null>(null)
-  const [signingMethod, setSigningMethod] = useState<'type' | 'draw' | 'upload'>('type')
+  const [signingMethod, setSigningMethod] = useState<'type' | 'draw' | 'upload' | 'pz'>('type')
+  const [pzLoading, setPzLoading] = useState(false)
+  const [pzError, setPzError] = useState('')
   const [drawSignatureData, setDrawSignatureData] = useState('')
   const [uploadSignatureData, setUploadSignatureData] = useState('')
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -119,7 +121,7 @@ const SignPage: React.FC = () => {
       }
 
       // Set signing method from signer data
-      const method = (data.request?.signing_method || data.request?.signers?.[0]?.signing_method || 'type') as 'type' | 'draw' | 'upload'
+      const method = (data.request?.signing_method || data.request?.signers?.[0]?.signing_method || 'type') as 'type' | 'draw' | 'upload' | 'pz'
       setSigningMethod(method)
 
       // Determine if signer has phone — require OTP if yes
@@ -167,6 +169,25 @@ const SignPage: React.FC = () => {
       setError('Błąd weryfikacji')
     }
     setLoading(false)
+  }
+
+  const handlePZSign = async () => {
+    setPzLoading(true)
+    setPzError('')
+    try {
+      const res = await efPost('pz-signing', { action: 'init', token: token! })
+      if (res.error === 'pz_endpoints_not_mapped') {
+        // Known CPA limitation — show info message instead of hard error
+        setPzError('Integracja Profil Zaufany jest aktywowana. Skontaktuj się z administratorem w celu weryfikacji endpointów CPA.')
+      } else if (res.error || !res.redirectUrl) {
+        setPzError(res.message || res.error || 'Błąd inicjalizacji Profil Zaufany')
+      } else {
+        window.location.href = res.redirectUrl
+      }
+    } catch {
+      setPzError('Błąd połączenia z serwisem Profil Zaufany')
+    }
+    setPzLoading(false)
   }
 
   const handleSign = async () => {
@@ -655,10 +676,11 @@ const SignPage: React.FC = () => {
                 { key: 'type' as const, label: 'Wpisz' },
                 { key: 'draw' as const, label: 'Narysuj' },
                 { key: 'upload' as const, label: 'Wgraj' },
+                { key: 'pz' as const, label: 'Profil Zaufany' },
               ]).map(m => (
                 <button
                   key={m.key}
-                  onClick={() => { setSigningMethod(m.key); setError('') }}
+                  onClick={() => { setSigningMethod(m.key); setError(''); setPzError('') }}
                   className={`flex-1 py-2 text-xs font-medium rounded-md transition-all ${
                     signingMethod === m.key
                       ? 'bg-white text-blue-600 shadow-sm'
@@ -714,6 +736,50 @@ const SignPage: React.FC = () => {
               </div>
             )}
 
+            {/* Profil Zaufany */}
+            {signingMethod === 'pz' && (
+              <div className="mb-3">
+                <div className="border border-blue-100 bg-blue-50 rounded-xl p-5 text-center space-y-3">
+                  <div className="flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-blue-700">
+                      <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clipRule="evenodd" />
+                    </svg>
+                    <span className="font-semibold text-blue-800 text-sm">Profil Zaufany</span>
+                  </div>
+                  <p className="text-sm text-blue-700">
+                    Zostaniesz przekierowany na stronę Profil Zaufany (pz.gov.pl) w celu potwierdzenia tożsamości i podpisania dokumentu.
+                  </p>
+                  <p className="text-xs text-blue-500">
+                    Bezpieczna autoryzacja przez państwowy serwis ePUAP / mObywatel
+                  </p>
+                  {pzError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-left">
+                      <p className="text-xs text-red-700">{pzError}</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={handlePZSign}
+                    disabled={pzLoading}
+                    className="w-full bg-blue-700 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {pzLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Inicjalizacja...
+                      </>
+                    ) : (
+                      <>
+                        Przejdź do Profil Zaufany
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Upload: file input */}
             {signingMethod === 'upload' && (
               <div className="mb-3">
@@ -742,22 +808,26 @@ const SignPage: React.FC = () => {
               </div>
             )}
 
-            <p className="text-xs text-gray-500 mb-4">
-              Klikajac "Podpisz dokument", potwierdzasz zapoznanie sie z trescia i wyrazasz zgode na podpisanie elektroniczne.
-            </p>
-            {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
-            <div className="flex gap-3">
-              <button
-                onClick={handleSign}
-                disabled={loading}
-                className="flex-1 bg-green-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Podpisywanie...' : 'Podpisz dokument'}
-              </button>
-              <button className="px-4 py-3 text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors text-sm">
-                Odrzuc
-              </button>
-            </div>
+            {signingMethod !== 'pz' && (
+              <>
+                <p className="text-xs text-gray-500 mb-4">
+                  Klikajac "Podpisz dokument", potwierdzasz zapoznanie sie z trescia i wyrazasz zgode na podpisanie elektroniczne.
+                </p>
+                {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSign}
+                    disabled={loading}
+                    className="flex-1 bg-green-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+                  >
+                    {loading ? 'Podpisywanie...' : 'Podpisz dokument'}
+                  </button>
+                  <button className="px-4 py-3 text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors text-sm">
+                    Odrzuc
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
