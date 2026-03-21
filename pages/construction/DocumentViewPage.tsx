@@ -226,8 +226,10 @@ const DocumentViewPage: React.FC = () => {
       setDoc(data)
       if (data?.parties) setParties(data.parties)
       let raw = ''
-      // Content is stored in data.data.content (jsonb field)
-      const docContent = data.data?.content
+      // Content priority: 1) JSONB data.data.content  2) TEXT content column  3) template
+      const jsonbContent = data.data?.content
+      const textContent = data.content
+      const docContent = jsonbContent || (typeof textContent === 'string' && textContent.trim() ? textContent : null)
       if (docContent) raw = typeof docContent === 'string' ? docContent : JSON.stringify(docContent)
       else if (data.document_templates?.content) {
         const secs = Array.isArray(data.document_templates?.content)
