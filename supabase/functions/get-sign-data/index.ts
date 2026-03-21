@@ -22,8 +22,17 @@ serve(async (req) => {
 
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-    // Token lookup: signature_tokens.token = the token UUID from URL
-    const { data: tokenData } = await supabase.from('signature_tokens').select('*').eq('token', token).maybeSingle()
+    // Token lookup: try token column first, then fall back to id column (backward compat)
+    let tokenData = null
+    const { data: byToken } = await supabase.from('signature_tokens').select('*').eq('token', token).maybeSingle()
+    if (byToken) {
+      tokenData = byToken
+    } else {
+      // Fallback: look up by id (old-style URLs used signature_tokens.id as the URL param)
+      const { data: byId } = await supabase.from('signature_tokens').select('*').eq('id', token).maybeSingle()
+      tokenData = byId
+    }
+
     if (!tokenData) return new Response(JSON.stringify({ error: 'Link jest nieważny lub wygasł' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
     // Get the signature request
