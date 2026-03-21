@@ -81,6 +81,7 @@ const DocumentViewPage: React.FC = () => {
   const [showGenerujModal, setShowGenerujModal] = useState(false)
   const [generujPrompt, setGenerujPrompt] = useState('')
   const [generujLoading, setGenerujLoading] = useState(false)
+  const [pdfGenerating, setPdfGenerating] = useState(false)
   const commentBoxRef = useRef<HTMLTextAreaElement>(null)
 
 
@@ -375,8 +376,6 @@ const DocumentViewPage: React.FC = () => {
 
   const docTitle = doc?.name || doc?.document_templates?.name || 'Dokument'
   const activeComments = comments.filter(c => !c.resolved)
-
-  const [pdfGenerating, setPdfGenerating] = useState(false)
 
   const handleDownloadPDF = async () => {
     if (!doc) return

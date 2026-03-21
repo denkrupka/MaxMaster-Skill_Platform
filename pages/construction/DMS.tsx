@@ -1092,7 +1092,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, userName, onClose, onToa
         ? renderTemplate(doc.document_templates as any, doc.data)
         : '';
     } catch { return ''; }
-  }, [doc.document_templates, doc.data]);
+  }, [(doc as any).document_templates, doc.data]);
 
   const handleSaveNotes = async () => {
     setSavingNotes(true);

@@ -82,9 +82,9 @@ const DocumentEditorPage: React.FC = () => {
     if (data.content) {
       rawContent = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
     } else if (data.document_templates?.content) {
-      const sections = Array.isArray(data.document_templates.content)
-        ? data.document_templates.content.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('\n')
-        : JSON.stringify(data.document_templates.content)
+      const sections = Array.isArray(data.document_templates?.content)
+        ? data.document_templates?.content.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('\n')
+        : JSON.stringify(data.document_templates?.content)
       rawContent = sections
     }
 
