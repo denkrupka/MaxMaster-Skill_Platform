@@ -6,6 +6,7 @@ import Underline from '@tiptap/extension-underline'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase'
+import { computeDiffPatches } from '../../utils/trackChanges'
 
 const SUPABASE_URL = 'https://diytvuczpciikzdhldny.supabase.co'
 
@@ -211,6 +212,9 @@ const SignPage: React.FC = () => {
       const signerNameVal = signData?.request?.signer_name || signatureName || 'Signer'
       const signerEmail = signData?.request?.signer_email || signData?.request?.recipient_email || ''
 
+      // Compute diff patches for track changes view
+      const patches = computeDiffPatches(originalContent, proposedContent, signerNameVal)
+
       const { error: insertErr } = await supabase.from('document_change_proposals').insert({
         document_id: signData?.request?.document_id || signData?.document?.id,
         request_id: signData?.token?.request_id || signData?.request?.id,
@@ -220,6 +224,7 @@ const SignPage: React.FC = () => {
         original_content: originalContent,
         proposed_content: proposedContent,
         diff_summary: diffSummary,
+        patches: patches,
         company_id: signData?.document?.company_id,
       })
 
