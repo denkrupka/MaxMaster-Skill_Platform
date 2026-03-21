@@ -442,6 +442,7 @@ export default function App() {
           <Route path="/offer/:token" element={<OfferLandingPage />} />
           <Route path="/offer-request/:token" element={<OfferRequestLandingPage />} />
           <Route path="/sign/:token" element={<SignPage />} />
+          <Route path="/sign/:token/certificate" element={<Suspense fallback={<div/>}><DocumentCertificatePage /></Suspense>} />
 
           {/* SuperAdmin Routes */}
           <Route path="/superadmin/dashboard" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminDashboard /></ProtectedRoute>} />

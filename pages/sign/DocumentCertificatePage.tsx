@@ -3,23 +3,56 @@ import { supabase } from '../../lib/supabase'
 import { useParams, useNavigate } from 'react-router-dom'
 
 const DocumentCertificatePage: React.FC = () => {
-  const { id } = useParams<{ id: string }>()
+  const { id, token } = useParams<{ id?: string; token?: string }>()
   const navigate = useNavigate()
   const [doc, setDoc] = useState<any>(null)
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!id) return
-    Promise.all([
-      supabase.from('documents').select('*').eq('id', id).single(),
-      supabase.from('signature_requests').select('*').eq('document_id', id).order('created_at')
-    ]).then(([{ data: d }, { data: r }]) => {
-      setDoc(d)
-      setRequests(r || [])
+    const loadData = async () => {
+      try {
+        let documentId = id
+
+        // If we have a token (from /sign/:token/certificate), resolve document ID from token
+        if (!documentId && token) {
+          const { data: tokenData } = await supabase
+            .from('signature_tokens')
+            .select('request_id')
+            .eq('token', token)
+            .single()
+
+          if (tokenData?.request_id) {
+            const { data: reqData } = await supabase
+              .from('signature_requests')
+              .select('document_id')
+              .eq('id', tokenData.request_id)
+              .single()
+
+            documentId = reqData?.document_id
+          }
+        }
+
+        if (!documentId) {
+          setLoading(false)
+          return
+        }
+
+        const [{ data: d }, { data: r }] = await Promise.all([
+          supabase.from('documents').select('*').eq('id', documentId).single(),
+          supabase.from('signature_requests').select('*').eq('document_id', documentId).order('created_at')
+        ])
+
+        setDoc(d)
+        setRequests(r || [])
+      } catch (err) {
+        console.error('Error loading certificate data:', err)
+      }
       setLoading(false)
-    })
-  }, [id])
+    }
+
+    if (id || token) loadData()
+  }, [id, token])
 
   const allSigned = requests.length > 0 && requests.every(r => r.status === 'signed')
   const signedCount = requests.filter(r => r.status === 'signed').length
