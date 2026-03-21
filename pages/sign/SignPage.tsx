@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -30,6 +30,12 @@ const SignPage: React.FC = () => {
   const [proposal, setProposal] = useState<any>(null)
   const [signatureName, setSignatureName] = useState('')
   const [companyBranding, setCompanyBranding] = useState<{ name?: string; logo_url?: string; color?: string } | null>(null)
+  const [signingMethod, setSigningMethod] = useState<'type' | 'draw' | 'upload'>('type')
+  const [drawSignatureData, setDrawSignatureData] = useState('')
+  const [uploadSignatureData, setUploadSignatureData] = useState('')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [lastPos, setLastPos] = useState({ x: 0, y: 0 })
 
   // TipTap editor for editing mode
   const editor = useEditor({
@@ -111,6 +117,10 @@ const SignPage: React.FC = () => {
         return
       }
 
+      // Set signing method from signer data
+      const method = (data.request?.signing_method || data.request?.signers?.[0]?.signing_method || 'type') as 'type' | 'draw' | 'upload'
+      setSigningMethod(method)
+
       // Determine if signer has phone — require OTP if yes
       const signerPhone = data.request?.signer_phone || data.request?.signers?.[0]?.phone
       if (signerPhone) {
@@ -159,10 +169,17 @@ const SignPage: React.FC = () => {
   }
 
   const handleSign = async () => {
-    if (!signatureName.trim()) { setError('Wpisz imie i nazwisko'); return }
+    if (signingMethod === 'type' && !signatureName.trim()) { setError('Wpisz imie i nazwisko'); return }
+    if (signingMethod === 'draw' && !drawSignatureData) { setError('Narysuj podpis na polu ponizej'); return }
+    if (signingMethod === 'upload' && !uploadSignatureData) { setError('Wgraj plik z podpisem'); return }
     setLoading(true); setError('')
     try {
-      const res = await efPost('process-signature', { token: token!, signed: true, phone, name: signatureName })
+      const signature = signingMethod === 'draw'
+        ? { type: 'draw' as const, dataUrl: drawSignatureData }
+        : signingMethod === 'upload'
+          ? { type: 'upload' as const, dataUrl: uploadSignatureData }
+          : { type: 'text' as const, value: signatureName }
+      const res = await efPost('process-signature', { token: token!, signed: true, phone, name: signatureName, signature })
       if (res.success || res.ok || !res.error) {
         setStep('signed')
       } else {
@@ -233,6 +250,69 @@ const SignPage: React.FC = () => {
     setDiffSummary('')
     setError('')
     setStep('document')
+  }
+
+  // --- Canvas drawing helpers ---
+  const getCanvasPos = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    if ('touches' in e) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY }
+    }
+    return { x: ((e as React.MouseEvent).clientX - rect.left) * scaleX, y: ((e as React.MouseEvent).clientY - rect.top) * scaleY }
+  }
+
+  const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault()
+    const canvas = canvasRef.current
+    if (!canvas) return
+    setIsDrawing(true)
+    setLastPos(getCanvasPos(e, canvas))
+  }
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault()
+    if (!isDrawing || !canvasRef.current) return
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const pos = getCanvasPos(e, canvas)
+    ctx.beginPath()
+    ctx.moveTo(lastPos.x, lastPos.y)
+    ctx.lineTo(pos.x, pos.y)
+    ctx.strokeStyle = '#1e293b'
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+    setLastPos(pos)
+  }
+
+  const endDraw = () => {
+    if (!isDrawing || !canvasRef.current) return
+    setIsDrawing(false)
+    setDrawSignatureData(canvasRef.current.toDataURL('image/png'))
+  }
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
+    setDrawSignatureData('')
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { setError('Plik jest zbyt duzy (max 5MB)'); return }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setUploadSignatureData(ev.target?.result as string)
+      setError('')
+    }
+    reader.readAsDataURL(file)
   }
 
   // --- Derived values ---
@@ -563,13 +643,100 @@ const SignPage: React.FC = () => {
               </svg>
               <h3 className="font-medium text-gray-800">Podpisz dokument</h3>
             </div>
-            <input
-              type="text"
-              value={signatureName}
-              onChange={e => setSignatureName(e.target.value)}
-              placeholder="Imie i nazwisko (podpis)"
-              className="w-full border rounded-xl px-4 py-3 text-sm mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            />
+
+            {/* Signing method tabs */}
+            <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1">
+              {([
+                { key: 'type' as const, label: 'Wpisz' },
+                { key: 'draw' as const, label: 'Narysuj' },
+                { key: 'upload' as const, label: 'Wgraj' },
+              ]).map(m => (
+                <button
+                  key={m.key}
+                  onClick={() => { setSigningMethod(m.key); setError('') }}
+                  className={`flex-1 py-2 text-xs font-medium rounded-md transition-all ${
+                    signingMethod === m.key
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Type: text input */}
+            {signingMethod === 'type' && (
+              <input
+                type="text"
+                value={signatureName}
+                onChange={e => setSignatureName(e.target.value)}
+                placeholder="Imie i nazwisko (podpis)"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            )}
+
+            {/* Draw: canvas */}
+            {signingMethod === 'draw' && (
+              <div className="mb-3">
+                <div className="relative border border-gray-200 rounded-xl overflow-hidden bg-white">
+                  <canvas
+                    ref={canvasRef}
+                    width={600}
+                    height={200}
+                    className="w-full cursor-crosshair"
+                    style={{ height: 160, touchAction: 'none' }}
+                    onMouseDown={startDraw}
+                    onMouseMove={draw}
+                    onMouseUp={endDraw}
+                    onMouseLeave={endDraw}
+                    onTouchStart={startDraw}
+                    onTouchMove={draw}
+                    onTouchEnd={endDraw}
+                  />
+                  {!drawSignatureData && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="text-gray-300 text-sm">Narysuj podpis tutaj</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={clearCanvas}
+                  className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Wyczysc
+                </button>
+              </div>
+            )}
+
+            {/* Upload: file input */}
+            {signingMethod === 'upload' && (
+              <div className="mb-3">
+                <label className="block w-full border border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  {uploadSignatureData ? (
+                    <div>
+                      <img src={uploadSignatureData} alt="Podpis" className="max-h-20 mx-auto mb-2" />
+                      <span className="text-xs text-gray-400">Kliknij, aby zmienic</span>
+                    </div>
+                  ) : (
+                    <div>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-gray-300 mx-auto mb-2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                      </svg>
+                      <span className="text-sm text-gray-500">Wgraj obraz podpisu</span>
+                      <span className="block text-xs text-gray-400 mt-1">PNG, JPG lub SVG (max 5MB)</span>
+                    </div>
+                  )}
+                </label>
+              </div>
+            )}
+
             <p className="text-xs text-gray-500 mb-4">
               Klikajac "Podpisz dokument", potwierdzasz zapoznanie sie z trescia i wyrazasz zgode na podpisanie elektroniczne.
             </p>
