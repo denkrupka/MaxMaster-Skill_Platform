@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-type SigningMethod = 'draw' | 'type' | 'upload' | 'pz' | 'kwalifikowany'
+type SigningMethod = 'email' | 'sms' | 'pz' | 'kaligraficzny'
 
 interface Signer {
   name: string
@@ -38,11 +38,11 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
         partyName: p1.name || 'Strona 1',
         partyRole: 'ZAMAWIAJĄCY',
         signers: p1.contact_person
-          ? [{ name: p1.contact_person || '', email: p1.email || '', phone: p1.phone || '', position: p1.contact_position || '', signing_method: 'type' as SigningMethod }]
-          : [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }]
+          ? [{ name: p1.contact_person || '', email: p1.email || '', phone: p1.phone || '', position: p1.contact_position || '', signing_method: 'email' as SigningMethod }]
+          : [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }]
       })
     } else {
-      result.push({ partyIndex: 0, partyName: 'Strona 1', partyRole: 'ZAMAWIAJĄCY', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] })
+      result.push({ partyIndex: 0, partyName: 'Strona 1', partyRole: 'ZAMAWIAJĄCY', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }] })
     }
     
     if (parties?.party2) {
@@ -52,11 +52,11 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
         partyName: p2.name || 'Strona 2',
         partyRole: 'WYKONAWCA',
         signers: p2.contact_person
-          ? [{ name: p2.contact_person || '', email: p2.email || '', phone: p2.phone || '', position: p2.contact_position || '', signing_method: 'type' as SigningMethod }]
-          : [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }]
+          ? [{ name: p2.contact_person || '', email: p2.email || '', phone: p2.phone || '', position: p2.contact_position || '', signing_method: 'email' as SigningMethod }]
+          : [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }]
       })
     } else {
-      result.push({ partyIndex: 1, partyName: 'Strona 2', partyRole: 'WYKONAWCA', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] })
+      result.push({ partyIndex: 1, partyName: 'Strona 2', partyRole: 'WYKONAWCA', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }] })
     }
     
     return result
@@ -103,7 +103,7 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
 
   const addSigner = (partyIdx: number) => {
     setPartySigners(prev => prev.map((p, i) => i === partyIdx
-      ? { ...p, signers: [...p.signers, { name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] }
+      ? { ...p, signers: [...p.signers, { name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }] }
       : p
     ))
   }
@@ -150,7 +150,7 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
             signer_phone: signer.phone || null,
             sms_enabled: signer.smsEnabled ?? false,
             signer_position: signer.position,
-            signing_method: signer.signing_method || 'type',
+            signing_method: signer.signing_method || 'email',
             party_name: signer.partyName,
             party_role: signer.partyRole,
             message,
@@ -253,46 +253,44 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
                     )}
                     <div>
                       <label className="text-[10px] text-gray-500 mb-0.5 block">Sposob podpisu</label>
-                      <div className="flex gap-1">
+                      <div className="grid grid-cols-2 gap-1.5">
                         {([
-                          { value: 'draw', label: 'Rysuj', icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
+                          { value: 'email', label: 'Podpis e-mail', sub: 'Link w e-mailu', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                             </svg>
                           )},
-                          { value: 'type', label: 'Wpisz', icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+                          { value: 'sms', label: 'Podpis SMS', sub: 'Kod SMS', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
                             </svg>
                           )},
-                          { value: 'upload', label: 'Wgraj', icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                            </svg>
-                          )},
-                          { value: 'pz', label: 'Profil Zaufany', icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                          { value: 'pz', label: 'Profil Zaufany', sub: 'login.gov.pl', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
                             </svg>
                           )},
-                          { value: 'kwalifikowany', label: 'Kwalifikowany', icon: (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                          { value: 'kaligraficzny', label: 'Podpis kaligraficzny', sub: 'Narysuj swoj podpis', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
                             </svg>
                           )},
-                        ] as { value: SigningMethod; label: string; icon: React.ReactNode }[]).map(opt => (
+                        ] as { value: SigningMethod; label: string; sub: string; icon: React.ReactNode }[]).map(opt => (
                           <button
                             key={opt.value}
                             type="button"
                             onClick={() => updateSigner(partyIdx, signerIdx, 'signing_method', opt.value)}
-                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-colors text-left ${
                               signer.signing_method === opt.value
-                                ? 'border-blue-600 bg-blue-50 text-blue-700 font-medium'
-                                : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                                ? 'border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-600'
+                                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                             }`}
                           >
-                            {opt.icon}
-                            {opt.label}
+                            <span className={`flex-shrink-0 ${signer.signing_method === opt.value ? 'text-blue-600' : 'text-gray-400'}`}>{opt.icon}</span>
+                            <span className="flex flex-col leading-tight">
+                              <span className={`${signer.signing_method === opt.value ? 'font-medium' : ''}`}>{opt.label}</span>
+                              <span className="text-[10px] text-gray-400">{opt.sub}</span>
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -315,8 +313,8 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
                       setPartySigners(prev => prev.map((p, idx) => ({
                         ...p,
                         signers: emails.slice(idx * Math.ceil(emails.length / prev.length), (idx + 1) * Math.ceil(emails.length / prev.length))
-                          .map(email => ({ name: '', email, phone: '', position: '', signing_method: 'type' as SigningMethod }))
-                      })).map(p => p.signers.length === 0 ? { ...p, signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] } : p))
+                          .map(email => ({ name: '', email, phone: '', position: '', signing_method: 'email' as SigningMethod }))
+                      })).map(p => p.signers.length === 0 ? { ...p, signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }] } : p))
                     }} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100">{t.name}</button>
                     <button onClick={() => removeTemplate(i)} className="text-gray-400 hover:text-red-500">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
