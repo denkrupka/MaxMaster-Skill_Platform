@@ -28,6 +28,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import FontFamily from '@tiptap/extension-font-family'
 import { supabase } from '../../lib/supabase'
 import VariablesPanel from '../../components/documents/VariablesPanel'
+import ProposalsPanel from '../../components/documents/ProposalsPanel'
 
 type Mode = 'preview' | 'edit' | 'sign'
 
@@ -54,6 +55,7 @@ const DocumentViewPage: React.FC = () => {
   const [showVariables, setShowVariables] = useState(false)
   const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
   const [showVersions, setShowVersions] = useState(false)
+  const [showProposals, setShowProposals] = useState(false)
   const [variablesVersion, setVariablesVersion] = useState(0)
   const [portalLinkModal, setPortalLinkModal] = useState<string | null>(null)
   const [showDiff, setShowDiff] = useState(false)
@@ -137,6 +139,7 @@ const DocumentViewPage: React.FC = () => {
     setShowParties(false)
     setShowVariables(false)
     setShowVersions(false)
+    setShowProposals(false)
   }
 
   const loadVersions = async () => {
@@ -532,6 +535,9 @@ ${content}
           <button onClick={() => { closeAllPanels(); setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVersions ? 'bg-purple-50 border-purple-300 text-purple-700' : 'hover:bg-gray-50'}`}>
             Historia wersji
           </button>
+          <button onClick={() => { closeAllPanels(); setShowProposals(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showProposals ? 'bg-orange-50 border-orange-300 text-orange-700' : 'hover:bg-gray-50'}`}>
+            Propozycje zmian
+          </button>
 
           <div className="w-px h-6 bg-gray-200 mx-1" />
 
@@ -712,7 +718,7 @@ ${content}
 
         {/* Comments sidebar */}
       {/* Mobile backdrop */}
-      {(showVariables || showComments || showParties || showVersions) && (
+      {(showVariables || showComments || showParties || showVersions || showProposals) && (
         <div className="fixed inset-0 bg-black/20 z-40 md:hidden" onClick={() => closeAllPanels()} />
       )}
         {showComments && (
@@ -806,6 +812,11 @@ ${content}
             onClose={() => setShowVariables(false)}
             onVariablesChange={() => setVariablesVersion(v => v + 1)}
           />
+        )}
+
+        {/* Propozycje zmian sidebar */}
+        {showProposals && id && (
+          <ProposalsPanel documentId={id} onClose={() => setShowProposals(false)} />
         )}
 
         {/* Historia wersji sidebar */}

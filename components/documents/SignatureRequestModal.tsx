@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react'
 
+type SigningMethod = 'draw' | 'type' | 'upload'
+
 interface Signer {
   name: string
   email: string
   phone: string
   position?: string
+  signing_method?: SigningMethod
 }
 
 interface PartySigner {
@@ -34,11 +37,11 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
         partyName: p1.name || 'Strona 1',
         partyRole: 'ZAMAWIAJĄCY',
         signers: p1.contact_person
-          ? [{ name: p1.contact_person || '', email: p1.email || '', phone: p1.phone || '', position: p1.contact_position || '' }]
-          : [{ name: '', email: '', phone: '', position: '' }]
+          ? [{ name: p1.contact_person || '', email: p1.email || '', phone: p1.phone || '', position: p1.contact_position || '', signing_method: 'type' as SigningMethod }]
+          : [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }]
       })
     } else {
-      result.push({ partyIndex: 0, partyName: 'Strona 1', partyRole: 'ZAMAWIAJĄCY', signers: [{ name: '', email: '', phone: '', position: '' }] })
+      result.push({ partyIndex: 0, partyName: 'Strona 1', partyRole: 'ZAMAWIAJĄCY', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] })
     }
     
     if (parties?.party2) {
@@ -48,11 +51,11 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
         partyName: p2.name || 'Strona 2',
         partyRole: 'WYKONAWCA',
         signers: p2.contact_person
-          ? [{ name: p2.contact_person || '', email: p2.email || '', phone: p2.phone || '', position: p2.contact_position || '' }]
-          : [{ name: '', email: '', phone: '', position: '' }]
+          ? [{ name: p2.contact_person || '', email: p2.email || '', phone: p2.phone || '', position: p2.contact_position || '', signing_method: 'type' as SigningMethod }]
+          : [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }]
       })
     } else {
-      result.push({ partyIndex: 1, partyName: 'Strona 2', partyRole: 'WYKONAWCA', signers: [{ name: '', email: '', phone: '', position: '' }] })
+      result.push({ partyIndex: 1, partyName: 'Strona 2', partyRole: 'WYKONAWCA', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] })
     }
     
     return result
@@ -99,7 +102,7 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
 
   const addSigner = (partyIdx: number) => {
     setPartySigners(prev => prev.map((p, i) => i === partyIdx
-      ? { ...p, signers: [...p.signers, { name: '', email: '', phone: '', position: '' }] }
+      ? { ...p, signers: [...p.signers, { name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] }
       : p
     ))
   }
@@ -136,7 +139,9 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
             document_id: documentId,
             signer_email: signer.email,
             signer_name: signer.name || signer.email.split('@')[0],
+            signer_phone: signer.phone || null,
             signer_position: signer.position,
+            signing_method: signer.signing_method || 'type',
             party_name: signer.partyName,
             party_role: signer.partyRole,
             message,
@@ -226,6 +231,42 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
                         }}
                       />
                     </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 mb-0.5 block">Sposob podpisu</label>
+                      <div className="flex gap-1">
+                        {([
+                          { value: 'draw', label: 'Rysuj', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
+                            </svg>
+                          )},
+                          { value: 'type', label: 'Wpisz', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+                            </svg>
+                          )},
+                          { value: 'upload', label: 'Wgraj', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                            </svg>
+                          )},
+                        ] as { value: SigningMethod; label: string; icon: React.ReactNode }[]).map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => updateSigner(partyIdx, signerIdx, 'signing_method', opt.value)}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
+                              signer.signing_method === opt.value
+                                ? 'border-blue-600 bg-blue-50 text-blue-700 font-medium'
+                                : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            {opt.icon}
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -244,8 +285,8 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
                       setPartySigners(prev => prev.map((p, idx) => ({
                         ...p,
                         signers: emails.slice(idx * Math.ceil(emails.length / prev.length), (idx + 1) * Math.ceil(emails.length / prev.length))
-                          .map(email => ({ name: '', email, phone: '', position: '' }))
-                      })).map(p => p.signers.length === 0 ? { ...p, signers: [{ name: '', email: '', phone: '', position: '' }] } : p))
+                          .map(email => ({ name: '', email, phone: '', position: '', signing_method: 'type' as SigningMethod }))
+                      })).map(p => p.signers.length === 0 ? { ...p, signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'type' as SigningMethod }] } : p))
                     }} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100">{t.name}</button>
                     <button onClick={() => removeTemplate(i)} className="text-gray-400 hover:text-red-500">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
