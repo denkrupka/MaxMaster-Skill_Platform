@@ -36,7 +36,7 @@ describe('documents P0 validation', () => {
       getDocumentWizardStep2Errors(
         [
           { key: 'manual_email', required: true, source: 'manual' },
-          { key: 'company_name', required: true, source: 'companies' },
+          { key: 'name', required: true, source: 'companies' },
         ],
         { manual_email: '   ' },
       ),

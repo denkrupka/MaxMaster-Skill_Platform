@@ -376,7 +376,7 @@ export const ContractorsPage: React.FC = () => {
           phone: inviteTarget.phone,
           first_name: inviteTarget.firstName,
           last_name: inviteTarget.lastName,
-          company_name: inviteTarget.companyName,
+          name: inviteTarget.companyName,
           role: 'Client',
           inviting_company_id: currentUser.company_id,
         }),

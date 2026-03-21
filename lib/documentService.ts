@@ -195,7 +195,7 @@ export async function fetchDocuments(
 export async function fetchDocument(id: string): Promise<DocumentRecord> {
   const { data, error } = await supabase
     .from('documents')
-    .select('*, document_templates(name, type, content, variables)')
+    .select('*')
     .eq('id', id)
     .single();
 

@@ -219,7 +219,7 @@ const DocumentViewPage: React.FC = () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const { data, error } = await supabase.from('documents').select('*, document_templates(name, type, content), contractors(name), projects(name)').eq('id', id!).single()
+      const { data, error } = await supabase.from('documents').select('*, contractors(name), projects(name)').eq('id', id!).single()
       if (error) { setLoadError(error.message); setLoading(false); return }
       if (!data) { setLoadError('Dokument nie został znaleziony'); setLoading(false); return }
       setDoc(data)

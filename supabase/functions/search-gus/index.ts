@@ -57,7 +57,7 @@ serve(async (req) => {
         JSON.stringify({
           success: false,
           error: `Firma o tym NIP jest już zarejestrowana na portalu MaxMaster. Skontaktuj się z administratorem firmy, aby uzyskać dostęp.`,
-          data: { found: false, already_registered: true, company_name: existingCompany.name }
+          data: { found: false, already_registered: true, name: existingCompany.name }
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

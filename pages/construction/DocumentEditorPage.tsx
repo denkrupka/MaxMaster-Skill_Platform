@@ -71,7 +71,7 @@ const DocumentEditorPage: React.FC = () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('documents')
-      .select('*, document_templates(name, type, content)')
+      .select('*')
       .eq('id', id!)
       .single()
     if (error || !data) { setLoading(false); return }

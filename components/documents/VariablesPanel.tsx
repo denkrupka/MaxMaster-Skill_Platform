@@ -44,7 +44,7 @@ function autoLabel(key: string): string {
     'city': 'Miasto',
     'zip_code': 'Kod pocztowy',
     'bank_account': 'Numer konta',
-    'company_name': 'Nazwa firmy',
+    'name': 'Nazwa firmy',
     'investor_name': 'Nazwa inwestora',
     'investor_address': 'Adres inwestora',
     'completion_date': 'Data zakończenia',

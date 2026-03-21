@@ -99,7 +99,7 @@ Pracownik: _____________________`,
     content: `UMOWA O ZACHOWANIU POUFNOŚCI (NDA)
 
 Zawarta w dniu {{contract_date}} pomiędzy:
-{{company_name}}, z siedzibą w {{company_city}},
+{{name}}, z siedzibą w {{company_city}},
 zwaną dalej Zleceniodawcą,
 
 a
@@ -127,7 +127,7 @@ Zleceniodawca: _____________________
 Zleceniobiorca: _____________________`,
     fields: [
       { id: 'contract_date', name: 'contract_date', label: 'Data zawarcia', type: 'date', required: true },
-      { id: 'company_name', name: 'company_name', label: 'Nazwa firmy', type: 'text', required: true, defaultValue: 'MaxMaster Sp. z o.o.' },
+      { id: 'name', name: 'name', label: 'Nazwa firmy', type: 'text', required: true, defaultValue: 'MaxMaster Sp. z o.o.' },
       { id: 'company_city', name: 'company_city', label: 'Miasto firmy', type: 'text', required: true },
       { id: 'employee_first_name', name: 'employee_first_name', label: 'Imię', type: 'text', required: true },
       { id: 'employee_last_name', name: 'employee_last_name', label: 'Nazwisko', type: 'text', required: true },

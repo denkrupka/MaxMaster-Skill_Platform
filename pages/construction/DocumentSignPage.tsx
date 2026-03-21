@@ -47,7 +47,7 @@ const DocumentSignPage: React.FC = () => {
     setLoading(true)
     const { data } = await supabase
       .from('documents')
-      .select('*, document_templates(name, type), contractors(*), projects(*, clients(*))')
+      .select('*, contractors(*), projects(*, clients(*))')
       .eq('id', id!)
       .single()
     if (data) {

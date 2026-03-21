@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     // Load signature request by token
     const { data: sigToken, error: tokenErr } = await supabase
       .from('signature_tokens')
-      .select('*, signature_requests(*, documents(id, name, number, data, template_id, document_templates(name, type, content)))')
+      .select('*, signature_requests(*, documents(id, name, number, data, template_id))')
       .eq('token', token)
       .single()
 
