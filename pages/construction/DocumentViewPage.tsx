@@ -220,13 +220,13 @@ const DocumentViewPage: React.FC = () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const { data, error } = await supabase.from('documents').select('*, contractors(name), projects(name)').eq('id', id!).single()
+      const { data, error } = await supabase.from('documents').select('*, contractors(name), projects(name), document_templates(content, name)').eq('id', id!).single()
       if (error) { setLoadError(error.message); setLoading(false); return }
       if (!data) { setLoadError('Dokument nie został znaleziony'); setLoading(false); return }
       setDoc(data)
       if (data?.parties) setParties(data.parties)
       let raw = ''
-      // Content priority: 1) JSONB data.data.content  2) TEXT content column  3) template
+      // Content priority: 1) JSONB data.data.content  2) TEXT content column  3) template (from join)  4) template (separate fetch)
       const jsonbContent = data.data?.content
       const textContent = data.content
       const docContent = jsonbContent || (typeof textContent === 'string' && textContent.trim() ? textContent : null)
@@ -236,6 +236,15 @@ const DocumentViewPage: React.FC = () => {
           ? data.document_templates?.content.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('\n')
           : String(data.document_templates?.content)
         raw = secs
+      } else if (data.template_id) {
+        // Fallback: fetch template content separately if join didn't return it
+        const { data: tmpl } = await supabase.from('document_templates').select('content').eq('id', data.template_id).single()
+        if (tmpl?.content) {
+          const secs = Array.isArray(tmpl.content)
+            ? tmpl.content.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('\n')
+            : String(tmpl.content)
+          raw = secs
+        }
       }
       if (raw) setDocContent(convertContentToHtml(raw))
       if (editor && raw) editor.commands.setContent(convertContentToHtml(raw))
