@@ -219,7 +219,7 @@ const DocumentViewPage: React.FC = () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const { data, error } = await supabase.from('documents').select('*, contractors(name), projects(name)').eq('id', id!).single()
+      const { data, error } = await supabase.from('documents').select('*, contractors_clients(name), projects(name)').eq('id', id!).single()
       if (error) { setLoadError(error.message); setLoading(false); return }
       if (!data) { setLoadError('Dokument nie został znaleziony'); setLoading(false); return }
       setDoc(data)
@@ -229,9 +229,9 @@ const DocumentViewPage: React.FC = () => {
       const docContent = data.data?.content
       if (docContent) raw = typeof docContent === 'string' ? docContent : JSON.stringify(docContent)
       else if (data.document_templates?.content) {
-        const secs = Array.isArray(data.document_templates.content)
-          ? data.document_templates.content.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('\n')
-          : String(data.document_templates.content)
+        const secs = Array.isArray(data.document_templates?.content)
+          ? data.document_templates?.content.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('\n')
+          : String(data.document_templates?.content)
         raw = secs
       }
       if (raw) setDocContent(convertContentToHtml(raw))
