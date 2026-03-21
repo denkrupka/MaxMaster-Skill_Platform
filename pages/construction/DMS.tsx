@@ -47,13 +47,27 @@ import type {
 const TYPE_LABELS: Record<DocumentTemplateType, string> = {
   contract: 'Umowa', protocol: 'Protokół', annex: 'Aneks', other: 'Inne',
 };
-const STATUS_LABELS: Record<DocumentStatus, string> = {
-  draft: 'Szkic', completed: 'Gotowy', archived: 'Zarchiwizowany',
+const STATUS_LABELS: Record<string, string> = {
+  draft: 'Szkic', completed: 'Zakończony', archived: 'Zarchiwizowany',
+  sent: 'Wysłany', signed: 'Podpisany', cancelled: 'Anulowany',
+  rejected: 'Odrzucony', pending: 'Oczekuje', active: 'Aktywny',
+  withdrawn: 'Wycofany', expired: 'Wygasły', client_signed: 'Podpisany',
+  viewed: 'Odczytano',
 };
-const STATUS_COLORS: Record<DocumentStatus, string> = {
+const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-yellow-100 text-yellow-800',
   completed: 'bg-green-100 text-green-800',
   archived: 'bg-slate-100 text-slate-500',
+  sent: 'bg-blue-100 text-blue-800',
+  signed: 'bg-emerald-100 text-emerald-800',
+  cancelled: 'bg-red-100 text-red-800',
+  rejected: 'bg-red-100 text-red-700',
+  pending: 'bg-amber-100 text-amber-800',
+  active: 'bg-green-100 text-green-700',
+  withdrawn: 'bg-gray-100 text-gray-600',
+  expired: 'bg-orange-100 text-orange-700',
+  client_signed: 'bg-emerald-100 text-emerald-800',
+  viewed: 'bg-indigo-100 text-indigo-700',
 };
 
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('pl-PL');
@@ -594,7 +608,7 @@ const DocumentView = ({ docId, onClose, onRefresh }: { docId: string; onClose: (
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <h2 className="text-lg font-semibold text-slate-800">{doc?.name ?? '...'}</h2>
-            {doc && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[doc.status]}`}>{STATUS_LABELS[doc.status]}</span>}
+            {doc && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[doc.status] || 'bg-gray-100 text-gray-600'}`}>{STATUS_LABELS[doc.status] || doc.status}</span>}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Zamknij" title="Zamknij"><X className="w-5 h-5" /></button>
         </div>
@@ -2132,8 +2146,8 @@ export const DMSPage: React.FC = () => {
                             {d.contractors_clients?.name || d.contractors_clients?.company_name || '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status]}`}>
-                              {STATUS_LABELS[d.status]}
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {STATUS_LABELS[d.status] || d.status}
                             </span>
                           </td>
                         </tr>
@@ -2283,8 +2297,9 @@ export const DMSPage: React.FC = () => {
                   if (data?.data) {
                     await supabase.from('documents').insert({
                       name: data.data.title || file.name,
-                      content: `<p>${data.data.full_text || ''}</p>`,
+                      data: { content: `<p>${data.data.full_text || ''}</p>` },
                       status: 'draft',
+                      company_id: companyId,
                       parties: { party1: data.data.company1, party2: data.data.company2 }
                     })
                     setShowOCR(false)
@@ -2316,7 +2331,7 @@ export const DMSPage: React.FC = () => {
                   try {
                     const { data: newDoc } = await supabase
                       .from('documents')
-                      .insert({ title: 'Nowy dokument', content: '<p></p>', status: 'draft', company_id: companyId })
+                      .insert({ name: 'Nowy dokument', data: { content: '<p></p>' }, status: 'draft', company_id: companyId })
                       .select()
                       .single()
                     if (newDoc?.id) navigate('/construction/dms/' + newDoc.id)
@@ -2347,18 +2362,99 @@ export const DMSPage: React.FC = () => {
               onChange={async (e) => {
                 const file = e.target.files?.[0]
                 if (!file) return
-                const reader = new FileReader()
-                reader.onload = async (ev) => {
-                  const raw = ((ev.target?.result as string) || '').slice(0, 50000)
-                  const { data } = await supabase.from('documents').insert({
-                    title: file.name.replace(/\.[^.]+$/, ''),
-                    content: '<p>' + raw.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>',
+                const ext = file.name.split('.').pop()?.toLowerCase() || ''
+                const docName = file.name.replace(/\.[^.]+$/, '')
+
+                const insertDoc = async (html: string) => {
+                  const { data: rec } = await supabase.from('documents').insert({
+                    name: docName,
+                    data: { content: html },
                     status: 'draft',
-                    company_id: companyId
+                    company_id: companyId,
                   }).select().single()
-                  if (data) { setShowNewDocModal(false); navigate('/construction/dms/' + data.id) }
+                  if (rec) { setShowNewDocModal(false); navigate('/construction/dms/' + rec.id) }
                 }
-                reader.readAsText(file)
+
+                if (ext === 'txt') {
+                  const reader = new FileReader()
+                  reader.onload = async (ev) => {
+                    const raw = ((ev.target?.result as string) || '').slice(0, 100000)
+                    const lines = raw.split(/\n/)
+                    const html = lines.map(l => `<p>${l.replace(/</g, '&lt;').replace(/>/g, '&gt;') || '&nbsp;'}</p>`).join('')
+                    await insertDoc(html)
+                  }
+                  reader.readAsText(file)
+                } else if (ext === 'docx' || ext === 'doc') {
+                  // DOCX: use mammoth.js from CDN
+                  const loadMammoth = (): Promise<any> => {
+                    if ((window as any).mammoth) return Promise.resolve((window as any).mammoth)
+                    return new Promise((resolve, reject) => {
+                      const s = document.createElement('script')
+                      s.src = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js'
+                      s.onload = () => resolve((window as any).mammoth)
+                      s.onerror = () => reject(new Error('Nie udało się załadować mammoth.js'))
+                      document.head.appendChild(s)
+                    })
+                  }
+                  try {
+                    const mammoth = await loadMammoth()
+                    const buf = await file.arrayBuffer()
+                    const result = await mammoth.convertToHtml({ arrayBuffer: buf })
+                    await insertDoc(result.value || '<p>Pusty dokument</p>')
+                  } catch (err) {
+                    console.error('DOCX import error:', err)
+                    // Fallback: read as text (won't be pretty but won't crash)
+                    const reader = new FileReader()
+                    reader.onload = async (ev) => {
+                      const raw = ((ev.target?.result as string) || '').slice(0, 50000)
+                      await insertDoc('<p>' + raw.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>')
+                    }
+                    reader.readAsText(file)
+                  }
+                } else if (ext === 'odt') {
+                  // ODT: basic XML extraction
+                  try {
+                    const JSZip = (window as any).JSZip || await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm' as any).then((m: any) => m.default)
+                    const zip = await JSZip.loadAsync(file)
+                    const contentXml = await zip.file('content.xml')?.async('string')
+                    if (contentXml) {
+                      const textParts = contentXml.match(/<text:p[^>]*>([\s\S]*?)<\/text:p>/gi) || []
+                      const html = textParts.map((p: string) => '<p>' + p.replace(/<[^>]+>/g, '') + '</p>').join('') || '<p>Pusty dokument</p>'
+                      await insertDoc(html)
+                    } else {
+                      await insertDoc('<p>Nie udało się odczytać pliku ODT</p>')
+                    }
+                  } catch (err) {
+                    console.error('ODT import error:', err)
+                    await insertDoc('<p>Błąd importu pliku ODT</p>')
+                  }
+                } else if (ext === 'pdf') {
+                  // PDF: upload to storage, create doc with link
+                  const filePath = `imports/${companyId}/${Date.now()}_${file.name}`
+                  const { error: upErr } = await supabase.storage.from('documents').upload(filePath, file)
+                  if (!upErr) {
+                    const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath)
+                    await supabase.from('documents').insert({
+                      name: docName,
+                      data: { content: `<p><em>Zaimportowany PDF:</em> <a href="${urlData.publicUrl}" target="_blank">${file.name}</a></p>` },
+                      status: 'draft',
+                      company_id: companyId,
+                      pdf_path: urlData.publicUrl,
+                    }).select().single().then(({ data: rec }) => {
+                      if (rec) { setShowNewDocModal(false); navigate('/construction/dms/' + rec.id) }
+                    })
+                  } else {
+                    console.error('PDF upload error:', upErr)
+                  }
+                } else {
+                  // Fallback: read as text
+                  const reader = new FileReader()
+                  reader.onload = async (ev) => {
+                    const raw = ((ev.target?.result as string) || '').slice(0, 50000)
+                    await insertDoc('<p>' + raw.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>')
+                  }
+                  reader.readAsText(file)
+                }
               }}
             />
           </div>

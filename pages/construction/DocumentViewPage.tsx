@@ -32,6 +32,14 @@ import ProposalsPanel from '../../components/documents/ProposalsPanel'
 
 type Mode = 'preview' | 'edit' | 'sign'
 
+const DOC_STATUS_LABELS: Record<string, string> = {
+  draft: 'Szkic', sent: 'Wysłany', signed: 'Podpisany',
+  completed: 'Zakończony', cancelled: 'Anulowany', rejected: 'Odrzucony',
+  pending: 'Oczekuje', active: 'Aktywny', withdrawn: 'Wycofany',
+  expired: 'Wygasły', client_signed: 'Podpisany', viewed: 'Odczytano',
+  archived: 'Zarchiwizowany',
+}
+
 const DocumentViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -214,7 +222,9 @@ const DocumentViewPage: React.FC = () => {
       setDoc(data)
       if (data?.parties) setParties(data.parties)
       let raw = ''
-      if (data.content) raw = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
+      // Content is stored in data.data.content (jsonb field)
+      const docContent = data.data?.content
+      if (docContent) raw = typeof docContent === 'string' ? docContent : JSON.stringify(docContent)
       else if (data.document_templates?.content) {
         const secs = Array.isArray(data.document_templates.content)
           ? data.document_templates.content.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('\n')
@@ -246,7 +256,9 @@ const DocumentViewPage: React.FC = () => {
     if (!editor || !id) return
     setSaving(true)
     const html = editor.getHTML()
-    await supabase.from('documents').update({ content: html, updated_at: new Date().toISOString() }).eq('id', id)
+    // Merge new content into existing data jsonb (content column doesn't exist on documents table)
+    const existingData = doc?.data && typeof doc.data === 'object' ? doc.data : {}
+    await supabase.from('documents').update({ data: { ...existingData, content: html }, updated_at: new Date().toISOString() }).eq('id', id)
 
     // Save version snapshot for history
     await supabase.functions.invoke('log-document-event', {
@@ -515,7 +527,7 @@ ${content}
           <button onClick={() => navigate('/construction/dms')} className="text-gray-500 hover:text-gray-800 p-2 rounded text-sm flex-shrink-0">← Powrót</button>
           <div className="w-px h-5 bg-gray-200 flex-shrink-0" />
           <h1 className="text-sm font-semibold text-gray-900 truncate max-w-[200px]">{docTitle}</h1>
-          {doc?.status && <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${doc.status === 'completed' ? 'bg-green-100 text-green-700' : doc.status === 'draft' ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-700'}`}>{doc.status}</span>}
+          {doc?.status && <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${doc.status === 'completed' ? 'bg-green-100 text-green-700' : doc.status === 'draft' ? 'bg-gray-100 text-gray-600' : doc.status === 'cancelled' || doc.status === 'rejected' ? 'bg-red-100 text-red-700' : doc.status === 'signed' || doc.status === 'client_signed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{DOC_STATUS_LABELS[doc.status] || doc.status}</span>}
 
           {/* Center: tabs */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 flex-shrink-0 ml-auto">
