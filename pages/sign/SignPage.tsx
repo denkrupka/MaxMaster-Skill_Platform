@@ -84,7 +84,7 @@ const SignPage: React.FC = () => {
     try {
       const data = await efPost('get-sign-data', { token: token! })
       if (data?.error || !data?.request) {
-        setError(data?.error || 'Nie udalo sie zaladowac dokumentu')
+        setError(data?.error || 'Nie udało się załadować dokumentu')
         setStep('expired')
         return
       }
@@ -130,7 +130,7 @@ const SignPage: React.FC = () => {
         setStep('document')
       }
     } catch {
-      setError('Blad polaczenia z serwerem')
+      setError('Błąd połączenia z serwerem')
       setStep('expired')
     }
   }
@@ -144,10 +144,10 @@ const SignPage: React.FC = () => {
       if (res.ok || res.success) {
         setStep('otp')
       } else {
-        setError(res.error || 'Blad wysylania SMS')
+        setError(res.error || 'Błąd wysyłania SMS')
       }
     } catch {
-      setError('Blad polaczenia')
+      setError('Błąd połączenia')
     }
     setLoading(false)
   }
@@ -163,14 +163,14 @@ const SignPage: React.FC = () => {
         setError(res.error || 'Nieprawidlowy kod')
       }
     } catch {
-      setError('Blad weryfikacji')
+      setError('Błąd weryfikacji')
     }
     setLoading(false)
   }
 
   const handleSign = async () => {
-    if (signingMethod === 'type' && !signatureName.trim()) { setError('Wpisz imie i nazwisko'); return }
-    if (signingMethod === 'draw' && !drawSignatureData) { setError('Narysuj podpis na polu ponizej'); return }
+    if (signingMethod === 'type' && !signatureName.trim()) { setError('Wpisz imię i nazwisko'); return }
+    if (signingMethod === 'draw' && !drawSignatureData) { setError('Narysuj podpis na polu poniżej'); return }
     if (signingMethod === 'upload' && !uploadSignatureData) { setError('Wgraj plik z podpisem'); return }
     setLoading(true); setError('')
     try {
@@ -183,10 +183,10 @@ const SignPage: React.FC = () => {
       if (res.success || res.ok || !res.error) {
         setStep('signed')
       } else {
-        setError(res.error || 'Blad podpisywania')
+        setError(res.error || 'Błąd podpisywania')
       }
     } catch {
-      setError('Blad podpisywania dokumentu')
+      setError('Błąd podpisywania dokumentu')
     }
     setLoading(false)
   }
@@ -224,7 +224,7 @@ const SignPage: React.FC = () => {
       })
 
       if (insertErr) {
-        setError('Blad zapisu propozycji: ' + insertErr.message)
+        setError('Błąd zapisu propozycji: ' + insertErr.message)
       } else {
         // Reload proposal
         const { data: proposals } = await supabase
@@ -237,7 +237,7 @@ const SignPage: React.FC = () => {
         setStep('proposal_sent')
       }
     } catch {
-      setError('Blad wysylania propozycji')
+      setError('Błąd wysyłania propozycji')
     }
     setLoading(false)
   }
@@ -510,7 +510,7 @@ const SignPage: React.FC = () => {
                 disabled={loading || !phone.trim()}
                 className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
               >
-                {loading ? 'Wysylanie...' : 'Wyslij kod SMS'}
+                {loading ? 'Wysyłanie...' : 'Wyślij kod SMS'}
               </button>
             </>
           )}
@@ -518,7 +518,7 @@ const SignPage: React.FC = () => {
           {step === 'otp' && (
             <>
               <h2 className="text-lg font-semibold text-gray-900 mb-1">Wprowadz kod</h2>
-              <p className="text-sm text-gray-500 mb-4">Wyslalismy 6-cyfrowy kod na <strong>{phone}</strong>.</p>
+              <p className="text-sm text-gray-500 mb-4">Wysłaliśmy 6-cyfrowy kod na <strong>{phone}</strong>.</p>
               <input
                 type="text"
                 value={otpCode}
@@ -540,7 +540,7 @@ const SignPage: React.FC = () => {
                 onClick={() => { setStep('phone'); setOtpCode(''); setError('') }}
                 className="w-full text-sm text-gray-400 hover:text-gray-600"
               >
-                Zmien numer
+                Zmień numer
               </button>
             </>
           )}
@@ -561,7 +561,7 @@ const SignPage: React.FC = () => {
             <div>
               <h2 className="text-lg font-bold text-gray-900 mb-1">{docTitle}</h2>
               {docNumber && <p className="text-sm text-gray-500">Nr: {docNumber}</p>}
-              {signerDisplay && <p className="text-xs text-gray-500 mt-1">Podpisujacy: {signerDisplay}</p>}
+              {signerDisplay && <p className="text-xs text-gray-500 mt-1">Podpisujący: {signerDisplay}</p>}
             </div>
             {step === 'document' && (
               <button
@@ -592,7 +592,7 @@ const SignPage: React.FC = () => {
           <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
             <div
               className="prose prose-sm max-w-none text-gray-700 leading-relaxed max-h-[60vh] overflow-y-auto"
-              dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400 text-center py-8">Brak tresci dokumentu</p>' }}
+              dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400 text-center py-8">Brak treści dokumentu</p>' }}
             />
           </div>
         )}
@@ -621,7 +621,7 @@ const SignPage: React.FC = () => {
                   disabled={loading}
                   className="flex-1 bg-amber-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors"
                 >
-                  {loading ? 'Wysylanie...' : 'Wyslij propozycje zmian'}
+                  {loading ? 'Wysyłanie...' : 'Wyślij propozycję zmian'}
                 </button>
                 <button
                   onClick={cancelEditing}
@@ -704,7 +704,7 @@ const SignPage: React.FC = () => {
                   onClick={clearCanvas}
                   className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  Wyczysc
+                  Wyczyść
                 </button>
               </div>
             )}
