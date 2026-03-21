@@ -175,14 +175,25 @@ const SignPage: React.FC = () => {
     setPzLoading(true)
     setPzError('')
     try {
-      const res = await efPost('pz-signing', { action: 'init', token: token! })
+      const documentContent = getDocContent(signData?.document)
+      const documentName =
+        signData?.document?.name ||
+        signData?.document?.title ||
+        signData?.request?.document_name ||
+        'Dokument MaxMaster'
+      const res = await efPost('pz-signing', {
+        action: 'init',
+        token: token!,
+        documentContent,
+        documentName,
+      })
       if (res.error === 'pz_endpoints_not_mapped') {
         // Known CPA limitation — show info message instead of hard error
         setPzError('Integracja Profil Zaufany jest aktywowana. Skontaktuj się z administratorem w celu weryfikacji endpointów CPA.')
-      } else if (res.error || !res.redirectUrl) {
+      } else if (res.error || (!res.signingUrl && !res.redirectUrl)) {
         setPzError(res.message || res.error || 'Błąd inicjalizacji Profil Zaufany')
       } else {
-        window.location.href = res.redirectUrl
+        window.location.href = res.signingUrl || res.redirectUrl
       }
     } catch {
       setPzError('Błąd połączenia z serwisem Profil Zaufany')
