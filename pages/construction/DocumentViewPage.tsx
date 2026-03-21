@@ -505,106 +505,101 @@ ${content}
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Top Bar */}
       <div className="bg-white border-b shadow-sm sticky top-0 z-20">
-        <div className="max-w-screen-xl mx-auto px-4 py-2 flex items-center gap-2 flex-wrap overflow-x-auto">
-          <button onClick={() => navigate('/construction/dms')} className="text-gray-500 hover:text-gray-800 p-2 rounded text-sm">← Powrót</button>
-          <div className="w-px h-5 bg-gray-200" />
-          <h1 className="text-sm font-semibold text-gray-900 truncate max-w-sm">{docTitle}</h1>
-          {doc?.status && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${doc.status === 'completed' ? 'bg-green-100 text-green-700' : doc.status === 'draft' ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-700'}`}>{doc.status}</span>}
-          <div className="flex-1" />
+        <div className="max-w-screen-xl mx-auto px-4 py-2 flex items-center gap-2 overflow-x-auto">
+          {/* Left: back + title + status */}
+          <button onClick={() => navigate('/construction/dms')} className="text-gray-500 hover:text-gray-800 p-2 rounded text-sm flex-shrink-0">← Powrót</button>
+          <div className="w-px h-5 bg-gray-200 flex-shrink-0" />
+          <h1 className="text-sm font-semibold text-gray-900 truncate max-w-[200px]">{docTitle}</h1>
+          {doc?.status && <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${doc.status === 'completed' ? 'bg-green-100 text-green-700' : doc.status === 'draft' ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-700'}`}>{doc.status}</span>}
 
-          {/* Mode buttons */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-            <button onClick={() => setMode('preview')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'preview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Podgląd</button>
-            <button onClick={() => setMode('edit')} disabled={doc?.status === 'client_signed' || doc?.status === 'completed' || doc?.status === 'sent'} className={`px-3 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'edit' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>Edytuj</button>
+          {/* Center: tabs */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 flex-shrink-0 ml-auto">
+            <button onClick={() => setMode('preview')} className={`px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap ${mode === 'preview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Podgląd</button>
+            <button onClick={() => setMode('edit')} disabled={doc?.status === 'client_signed' || doc?.status === 'completed' || doc?.status === 'sent'} className={`px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${mode === 'edit' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>Edytuj</button>
+            <button onClick={() => { closeAllPanels(); setShowComments(v => !v) }} className={`px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1 ${showComments ? 'bg-white shadow text-yellow-700' : 'text-gray-500 hover:text-gray-700'}`}>
+              Komentarze {activeComments.length > 0 && <span className="bg-yellow-400 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">{activeComments.length}</span>}
+            </button>
+            <button onClick={() => { closeAllPanels(); setShowParties(v => !v) }} className={`px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap ${showParties ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>
+              Dane stron
+            </button>
+            <button onClick={() => { closeAllPanels(); setShowVariables(v => !v) }} className={`px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1 ${showVariables ? 'bg-white shadow text-green-700' : 'text-gray-500 hover:text-gray-700'}`}>
+              Zmienne
+            </button>
+            <button onClick={() => { closeAllPanels(); setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap ${showVersions ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}>
+              Historia wersji
+            </button>
+            <button onClick={() => { closeAllPanels(); setShowProposals(v => !v) }} className={`px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap ${showProposals ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}>
+              Propozycje zmian
+            </button>
           </div>
 
-          {/* Action buttons */}
-          <button onClick={() => { closeAllPanels(); setShowComments(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showComments ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'hover:bg-gray-50'}`}>
-            Komentarze {activeComments.length > 0 && <span className="bg-yellow-400 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">{activeComments.length}</span>}
-          </button>
+          {/* Right: action buttons + AI */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+                  setDownloadMenuPos({ top: rect.bottom + 4, left: rect.left })
+                  setShowDownloadMenu(!showDownloadMenu)
+                }}
+                className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1.5 whitespace-nowrap"
+              >
+                Pobierz
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+            </div>
 
-          <button onClick={() => { closeAllPanels(); setShowParties(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showParties ? 'bg-blue-50 border-blue-300 text-blue-700' : 'hover:bg-gray-50'}`}>
-            Dane stron
-          </button>
-          <button onClick={() => { closeAllPanels(); setShowVariables(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVariables ? 'bg-green-50 border-green-300 text-green-700' : 'hover:bg-gray-50'}`}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
-            </svg>
-            Zmienne
-          </button>
-          <button onClick={() => { closeAllPanels(); setShowVersions(v => !v); if (!showVersions) loadVersions() }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showVersions ? 'bg-purple-50 border-purple-300 text-purple-700' : 'hover:bg-gray-50'}`}>
-            Historia wersji
-          </button>
-          <button onClick={() => { closeAllPanels(); setShowProposals(v => !v) }} className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${showProposals ? 'bg-orange-50 border-orange-300 text-orange-700' : 'hover:bg-gray-50'}`}>
-            Propozycje zmian
-          </button>
-
-          <div className="w-px h-6 bg-gray-200 mx-1" />
-
-          {/* AI dropdown */}
-          <div className="relative">
-            <button onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect()
-              setAiMenuPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 230) })
-              setShowAI(v => !v)
-            }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors font-medium">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347-.347.347a3.5 3.5 0 01-4.95 0l-.347-.347-.347-.347z" /></svg>
-              AI
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            <button onClick={generatePortalLink} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1 whitespace-nowrap">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 1 1.242 7.244" />
+              </svg>
+              Link
             </button>
-            {showAI && (
-              <div className="fixed bg-white border rounded-xl shadow-2xl z-[9999] w-56 py-1" style={{ top: aiMenuPos.top, left: aiMenuPos.left }}>
-                <button onClick={() => { setShowAI(false); setShowGenerujModal(true) }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 font-medium text-purple-700">Generuj dokument</button>
-                <div className="border-t border-gray-100 my-1" />
-                <button onClick={() => { setShowAI(false); handleAI('overview') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Analizuj dokument</button>
-                <button onClick={() => { setShowAI(false); handleAI('risk') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
-                <button onClick={() => { setShowAI(false); handleAI('clauses') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>
-                <button onClick={() => { setShowAI(false); handleAI('summary') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Streszczenie</button>
-              </div>
+
+            <button onClick={() => navigate(`/construction/dms/${id}/sign`)} className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap">
+              Podpis
+            </button>
+
+            {doc?.status === 'client_signed' && (
+              <button onClick={async () => {
+                await supabase.functions.invoke('process-signature', { body: { document_id: id, signed_by: 'owner', notify_all: true } })
+                loadDocument()
+              }} className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium animate-pulse whitespace-nowrap">
+                Podpisz jako właściciel
+              </button>
+            )}
+
+            <div className="w-px h-5 bg-gray-200" />
+
+            {/* AI dropdown */}
+            <div className="relative">
+              <button onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setAiMenuPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 230) })
+                setShowAI(v => !v)
+              }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors font-medium whitespace-nowrap">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347-.347.347a3.5 3.5 0 01-4.95 0l-.347-.347-.347-.347z" /></svg>
+                AI
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {showAI && (
+                <div className="fixed bg-white border rounded-xl shadow-2xl z-[9999] w-56 py-1" style={{ top: aiMenuPos.top, left: aiMenuPos.left }}>
+                  <button onClick={() => { setShowAI(false); setShowGenerujModal(true) }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 font-medium text-purple-700">Generuj dokument</button>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button onClick={() => { setShowAI(false); handleAI('overview') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Analizuj dokument</button>
+                  <button onClick={() => { setShowAI(false); handleAI('risk') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Wykryj krytyczne ryzyka</button>
+                  <button onClick={() => { setShowAI(false); handleAI('clauses') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Kluczowe klauzule</button>
+                  <button onClick={() => { setShowAI(false); handleAI('summary') }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Streszczenie</button>
+                </div>
+              )}
+            </div>
+
+            {mode === 'edit' && (
+              <button onClick={handleSave} disabled={saving} className={`px-3 py-1.5 text-xs rounded-lg font-medium whitespace-nowrap ${saved ? 'bg-green-600 text-white' : 'bg-gray-800 text-white hover:bg-gray-700'} disabled:opacity-50`}>
+                {saving ? '...' : saved ? 'Zapisano!' : 'Zapisz'}
+              </button>
             )}
           </div>
-
-          <div className="w-px h-6 bg-gray-200 mx-1" />
-
-          <div className="relative">
-            <button
-              onClick={(e) => {
-                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
-                setDownloadMenuPos({ top: rect.bottom + 4, left: rect.left })
-                setShowDownloadMenu(!showDownloadMenu)
-              }}
-              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
-            >
-              Pobierz
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </button>
-          </div>
-          <div className="w-px h-6 bg-gray-200 mx-1" />
-
-          <button onClick={generatePortalLink} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-50 flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 1 1.242 7.244" />
-            </svg>
-            Link
-          </button>
-
-          {doc?.status === 'client_signed' && (
-            <button onClick={async () => {
-              await supabase.functions.invoke('process-signature', { body: { document_id: id, signed_by: 'owner', notify_all: true } })
-              loadDocument()
-            }} className="px-4 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium animate-pulse">
-              Podpisz jako właściciel
-            </button>
-          )}
-          <button onClick={() => navigate(`/construction/dms/${id}/sign`)} className="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-            Podpis
-          </button>
-
-          {mode === 'edit' && (
-            <button onClick={handleSave} disabled={saving} className={`px-3 py-1.5 text-xs rounded-lg font-medium ${saved ? 'bg-green-600 text-white' : 'bg-gray-800 text-white hover:bg-gray-700'} disabled:opacity-50`}>
-              {saving ? '...' : saved ? 'Zapisano!' : 'Zapisz'}
-            </button>
-          )}
         </div>
 
         {/* Edit toolbar (only in edit mode) */}
