@@ -431,14 +431,14 @@ const DocumentWizard = ({
                 <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={contractorId} onChange={e => setContractorId(e.target.value)}>
                   <option value="">-- brak --</option>
-                  {Array.isArray(contractors) && contractors.map(c => <option key={c.id} value={c.id}>{c.name ?? c.company_name ?? c.id}</option>)}
+                  {Array.isArray(contractors) && contractors.map(c => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
                 </select>
                 {contractorId && (() => {
                   const c = contractors.find(x => x.id === contractorId);
                   return c ? (
                     <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-slate-600 space-y-0.5">
                       <p className="font-medium text-blue-700">Dane kontrahenta</p>
-                      {c.company_name && <p>Firma: {c.company_name}</p>}
+                      {c.name && <p>Firma: {c.name}</p>}
                       {c.nip && <p>NIP: {c.nip}</p>}
                       {c.address && <p>Adres: {c.address}</p>}
                     </div>
@@ -491,7 +491,7 @@ const DocumentWizard = ({
                   <p><span className="font-medium text-slate-700">Szablon:</span> {tpl.name}</p>
                   {contractorId && (() => {
                     const c = contractors.find(x => x.id === contractorId);
-                    return c ? <p><span className="font-medium text-slate-700">Kontrahent:</span> {c.name ?? c.company_name}</p> : null;
+                    return c ? <p><span className="font-medium text-slate-700">Kontrahent:</span> {c.name}</p> : null;
                   })()}
                 </div>
               )}
@@ -1790,7 +1790,7 @@ export const DMSPage: React.FC = () => {
 
   useEffect(() => {
     if (!companyId) return;
-    supabase.from('contractors_clients').select('id,name,company_name').eq('company_id', companyId)
+    supabase.from('contractors_clients').select('id,name').eq('company_id', companyId)
       .then(({ data }) => { if (data) setContractors(data); })
       .catch(() => setError('Nie udało się załadować kontrahentów'));
     supabase.from('projects').select('id,name').eq('company_id', companyId)
@@ -2131,7 +2131,7 @@ export const DMSPage: React.FC = () => {
                           <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{d.updated_at ? fmt(d.updated_at) : '—'}</td>
                           <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[120px]">{d.created_by_name || '—'}</td>
                           <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[140px]">
-                            {d.contractors?.name || d.contractors?.company_name || '—'}
+                            {d.contractors_clients?.name || '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status] || 'bg-gray-100 text-gray-600'}`}>
