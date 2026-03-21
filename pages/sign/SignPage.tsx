@@ -408,8 +408,8 @@ const SignPage: React.FC = () => {
           </svg>
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Dokument podpisany</h2>
-        <p className="text-gray-500 mb-2">Dokument <strong>{docTitle}</strong> zostal pomyslnie podpisany.</p>
-        <p className="text-xs text-gray-400 mb-4">Kopia zostanie wyslana na Twoj e-mail.</p>
+        <p className="text-gray-500 mb-2">Dokument <strong>{docTitle}</strong> został pomyślnie podpisany.</p>
+        <p className="text-xs text-gray-400 mb-4">Kopia zostanie wysłana na Twój e-mail.</p>
         <button
           onClick={() => {
             const base = window.location.origin + window.location.pathname;

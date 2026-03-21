@@ -108,14 +108,14 @@ serve(async (req) => {
         signerEmail,
         `Potwierdzenie podpisu: ${doc?.name || 'Dokument'}`,
         `<p>Dzien dobry ${signerName},</p>
-         <p>Dokument <strong>${doc?.name || 'Dokument'}</strong> zostal pomyslnie podpisany.</p>
+         <p>Dokument <strong>${doc?.name || 'Dokument'}</strong> został pomyślnie podpisany.</p>
          <p>Data podpisu: ${new Date().toLocaleDateString('pl-PL')}</p>
          <p style="color:#6b7280;font-size:12px;">MaxMaster</p>`
       )
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Dokument podpisany pomyslnie', signed_at: new Date().toISOString() }),
+      JSON.stringify({ success: true, message: 'Dokument podpisany pomyślnie', signed_at: new Date().toISOString() }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (e) {

@@ -344,8 +344,8 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
           <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm">
             Anuluj
           </button>
-          <button onClick={handleSend} disabled={sending} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {sending ? 'Wysyłam...' : 'Podpis'}
+          <button onClick={handleSend} disabled={sending || partySigners.every(p => p.signers.every(s => !s.email?.trim()))} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            {sending ? 'Wysyłam...' : `Wyślij do ${partySigners.reduce((n, p) => n + p.signers.filter(s => s.email?.trim()).length, 0)} osób`}
           </button>
         </div>
       </div>

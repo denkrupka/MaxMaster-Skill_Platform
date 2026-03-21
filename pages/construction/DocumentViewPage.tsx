@@ -107,6 +107,8 @@ const DocumentViewPage: React.FC = () => {
   })
 
   // Replace {{variable}} with stored values for preview, or highlight unfilled
+  // Hide red highlighting for completed/signed documents
+  const isDocCompleted = doc?.status === 'completed' || doc?.status === 'client_signed' || doc?.status === 'signed'
   const renderPreviewContent = useCallback((html: string): string => {
     if (!html) return ''
     const storedVars: Record<string, string> = JSON.parse(localStorage.getItem('doc_variables') || '{}')
@@ -115,9 +117,12 @@ const DocumentViewPage: React.FC = () => {
       if (value && value.trim()) {
         return `<span style="color:inherit;font-weight:inherit;text-decoration:underline;text-decoration-color:#3b82f6">${value}</span>`
       }
+      if (isDocCompleted) {
+        return `<span style="color:#374151">${value || match}</span>`
+      }
       return `<span style="background:#fee2e2;color:#dc2626;border-radius:3px;padding:1px 4px;font-size:0.875em" title="Zmienna niezapełniona: ${key}">${match}</span>`
     })
-  }, [])
+  }, [isDocCompleted])
 
   useEffect(() => {
     if (editor) editor.setEditable(mode === 'edit')
