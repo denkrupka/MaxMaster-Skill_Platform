@@ -1,139 +1,309 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import { TextStyle } from '@tiptap/extension-text-style'
+import Color from '@tiptap/extension-color'
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase'
 
-type Step = 'phone' | 'otp' | 'document' | 'signed' | 'expired'
+const SUPABASE_URL = 'https://diytvuczpciikzdhldny.supabase.co'
+
+type Step = 'loading' | 'phone' | 'otp' | 'document' | 'editing' | 'proposal_sent' | 'signed' | 'expired'
+
+interface SignData {
+  token: any
+  request: any
+  document: any
+  company?: any
+}
 
 const SignPage: React.FC = () => {
   const { token } = useParams<{ token: string }>()
-  const [companyBranding, setCompanyBranding] = useState<{name?: string; logo_url?: string; color?: string} | null>(null)
-  const [showPreview, setShowPreview] = useState(true)
-  const [step, setStep] = useState<Step>('phone')
+  const [step, setStep] = useState<Step>('loading')
+  const [signData, setSignData] = useState<SignData | null>(null)
   const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState('')
-  const [doc, setDoc] = useState<any>(null)
-  const [signerName, setSignerName] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
   const [error, setError] = useState('')
-  const [suggestMode, setSuggestMode] = useState(false)
-  const [suggestions, setSuggestions] = useState<Array<{original:string;suggested:string;comment:string}>>([])
-  const [selectedForSuggest, setSelectedForSuggest] = useState('')
-  const [suggestText, setSuggestText] = useState('')
-  const [suggestComment, setSuggestComment] = useState('')
-  const [showSuggestBox, setShowSuggestBox] = useState(false)
-  const [suggestionsSent, setSuggestionsSent] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [diffSummary, setDiffSummary] = useState('')
+  const [proposal, setProposal] = useState<any>(null)
+  const [signatureName, setSignatureName] = useState('')
+  const [companyBranding, setCompanyBranding] = useState<{ name?: string; logo_url?: string; color?: string } | null>(null)
 
-  useEffect(() => { if (token) validateToken() }, [token])
+  // TipTap editor for editing mode
+  const editor = useEditor({
+    extensions: [StarterKit, Underline, TextStyle, Color],
+    editable: false,
+    content: '',
+  })
 
-  const validateToken = async () => {
-    try {
-      const res = await fetch('https://diytvuczpciikzdhldny.supabase.co/functions/v1/get-sign-data', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ token })
-      })
-      const data = await res.json()
-      if (!res.ok || data?.error) { setStep('expired'); return }
-      setDoc(data.document)
-      setSignerName(data.request?.signer_name || '')
-      if (data.request?.signer_phone) setPhone(data.request.signer_phone)
-      // Company branding from document's company_id (fetched separately if needed)
-      if (data.company) setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
-    } catch (e) {
-      setStep('expired')
-    }
-  }
-
-  const handleSendOtp = async () => {
-    if (!phone.trim()) return
-    setLoading(true); setError('')
-    const cleanPhone = phone.replace(/\s/g, '')
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
-    await supabase.from('signature_tokens')
-      .update({ metadata: { otp: code, otp_phone: cleanPhone, otp_expires: Date.now() + 600000 } })
-      .eq('token', token!)
-    const { error: smsErr } = await supabase.functions.invoke('send-sms', {
-      body: { to: cleanPhone, message: `MaxMaster: Kod weryfikacyjny: ${code}. Wazny 10 minut.` }
+  const efPost = useCallback(async (fn: string, body: Record<string, unknown>) => {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
     })
-    if (smsErr) { setError('Blad wysylania SMS.'); setLoading(false); return }
-    setStep('otp'); setLoading(false)
-  }
+    return res.json()
+  }, [])
 
-  const handleVerifyOtp = async () => {
-    if (otp.length !== 6) return
-    setLoading(true); setError('')
-    const { data } = await supabase.from('signature_tokens').select('metadata').eq('token', token!).single()
-    const meta = (data?.metadata as any)
-    if (!meta?.otp || meta.otp !== otp) { setError('Nieprawidlowy kod.'); setLoading(false); return }
-    if (meta.otp_expires < Date.now()) { setError('Kod wygasl. Wyslij nowy.'); setLoading(false); return }
-    setStep('document'); setLoading(false)
-  }
+  useEffect(() => {
+    if (!token) { setStep('expired'); setError('Brak tokenu w linku'); return }
+    loadSignData()
+  }, [token])
 
-  const handleSign = async () => {
-    setLoading(true)
-    const { error: signErr } = await supabase.functions.invoke('process-signature', { body: { token, signed: true, phone } })
-    if (signErr) { setError('Blad podpisywania.'); setLoading(false); return }
-    setStep('signed'); setLoading(false)
-  }
-
-  const docContent = (() => {
+  const getDocContent = (doc: any): string => {
     if (!doc) return ''
-    // EF returns document with 'data' field (from documents table), not 'content'
     const raw = doc.data || doc.content
     if (raw) {
       if (typeof raw === 'string') return raw
-      // If data is an object with sections array
-      if (Array.isArray(raw)) return raw.map((s: any) => `<h2>${s.title||''}</h2><p>${s.body||''}</p>`).join('')
-      if (typeof raw === 'object' && raw.sections) return raw.sections.map((s: any) => `<h2>${s.title||''}</h2><p>${s.body||''}</p>`).join('')
+      if (Array.isArray(raw)) return raw.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('')
+      if (typeof raw === 'object' && raw.sections) return raw.sections.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('')
       if (typeof raw === 'object' && raw.html) return raw.html
       return JSON.stringify(raw)
     }
     if (doc.document_templates?.content) {
       const c = doc.document_templates.content
-      return Array.isArray(c) ? c.map((s: any) => `<h2>${s.title||''}</h2><p>${s.body||''}</p>`).join('') : String(c)
+      return Array.isArray(c) ? c.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('') : String(c)
     }
     return ''
-  })()
+  }
 
-  const docTitle = doc?.name || doc?.document_templates?.name || 'Dokument'
+  const loadSignData = async () => {
+    setStep('loading')
+    try {
+      const data = await efPost('get-sign-data', { token: token! })
+      if (data?.error || !data?.request) {
+        setError(data?.error || 'Nie udalo sie zaladowac dokumentu')
+        setStep('expired')
+        return
+      }
+      setSignData(data)
 
-  // Preview screen before signing
-  if (showPreview && doc) {
+      if (data.company) {
+        setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
+      }
+
+      if (data.request?.signer_name) setSignatureName(data.request.signer_name)
+      if (data.request?.signer_phone) setPhone(data.request.signer_phone)
+
+      // Check if already signed
+      if (data.token?.used_at) {
+        setStep('signed')
+        return
+      }
+
+      // Check if proposal exists
+      const { data: proposals } = await supabase
+        .from('document_change_proposals')
+        .select('*')
+        .eq('token', token!)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (proposals && proposals.length > 0) {
+        setProposal(proposals[0])
+        setStep('proposal_sent')
+        return
+      }
+
+      // Determine if signer has phone — require OTP if yes
+      const signerPhone = data.request?.signer_phone || data.request?.signers?.[0]?.phone
+      if (signerPhone) {
+        setPhone(signerPhone)
+        setStep('phone')
+      } else {
+        setStep('document')
+      }
+    } catch {
+      setError('Blad polaczenia z serwerem')
+      setStep('expired')
+    }
+  }
+
+  const sendOtp = async () => {
+    const cleanPhone = phone.replace(/\s/g, '').trim()
+    if (!cleanPhone) { setError('Wpisz numer telefonu'); return }
+    setLoading(true); setError('')
+    try {
+      const res = await efPost('send-sign-otp', { token: token!, phone: cleanPhone })
+      if (res.ok || res.success) {
+        setStep('otp')
+      } else {
+        setError(res.error || 'Blad wysylania SMS')
+      }
+    } catch {
+      setError('Blad polaczenia')
+    }
+    setLoading(false)
+  }
+
+  const verifyOtp = async () => {
+    if (otpCode.length !== 6) { setError('Wpisz 6-cyfrowy kod'); return }
+    setLoading(true); setError('')
+    try {
+      const res = await efPost('verify-sign-otp', { token: token!, phone: phone.replace(/\s/g, ''), code: otpCode.trim() })
+      if (res.verified || res.ok) {
+        setStep('document')
+      } else {
+        setError(res.error || 'Nieprawidlowy kod')
+      }
+    } catch {
+      setError('Blad weryfikacji')
+    }
+    setLoading(false)
+  }
+
+  const handleSign = async () => {
+    if (!signatureName.trim()) { setError('Wpisz imie i nazwisko'); return }
+    setLoading(true); setError('')
+    try {
+      const res = await efPost('process-signature', { token: token!, signed: true, phone, name: signatureName })
+      if (res.success || res.ok || !res.error) {
+        setStep('signed')
+      } else {
+        setError(res.error || 'Blad podpisywania')
+      }
+    } catch {
+      setError('Blad podpisywania dokumentu')
+    }
+    setLoading(false)
+  }
+
+  const enterEditingMode = () => {
+    const content = getDocContent(signData?.document)
+    if (editor) {
+      editor.commands.setContent(content)
+      editor.setEditable(true)
+    }
+    setStep('editing')
+  }
+
+  const submitProposal = async () => {
+    if (!editor) return
+    const proposedContent = editor.getHTML()
+    if (!diffSummary.trim()) { setError('Opisz proponowane zmiany'); return }
+
+    setLoading(true); setError('')
+    try {
+      const originalContent = getDocContent(signData?.document)
+      const signerNameVal = signData?.request?.signer_name || signatureName || 'Signer'
+      const signerEmail = signData?.request?.signer_email || signData?.request?.recipient_email || ''
+
+      const { error: insertErr } = await supabase.from('document_change_proposals').insert({
+        document_id: signData?.request?.document_id || signData?.document?.id,
+        request_id: signData?.token?.request_id || signData?.request?.id,
+        token: token!,
+        proposed_by_name: signerNameVal,
+        proposed_by_email: signerEmail,
+        original_content: originalContent,
+        proposed_content: proposedContent,
+        diff_summary: diffSummary,
+        company_id: signData?.document?.company_id,
+      })
+
+      if (insertErr) {
+        setError('Blad zapisu propozycji: ' + insertErr.message)
+      } else {
+        // Reload proposal
+        const { data: proposals } = await supabase
+          .from('document_change_proposals')
+          .select('*')
+          .eq('token', token!)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        if (proposals?.[0]) setProposal(proposals[0])
+        setStep('proposal_sent')
+      }
+    } catch {
+      setError('Blad wysylania propozycji')
+    }
+    setLoading(false)
+  }
+
+  const cancelEditing = () => {
+    if (editor) {
+      editor.setEditable(false)
+      editor.commands.setContent('')
+    }
+    setDiffSummary('')
+    setError('')
+    setStep('document')
+  }
+
+  // --- Derived values ---
+  const docTitle = signData?.document?.name || signData?.document?.document_templates?.name || 'Dokument'
+  const docNumber = signData?.request?.document_number || signData?.document?.number || ''
+  const docContent = getDocContent(signData?.document)
+  const signerDisplay = signData?.request?.signer_name || signData?.request?.recipient_name || ''
+
+  // --- Company logo component ---
+  const CompanyLogo = () => {
+    if (!companyBranding) return null
     return (
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
-        <div className="max-w-2xl mx-auto">
-          {companyBranding && (
-            <div className="flex items-center gap-3 mb-6">
-              {companyBranding.logo_url ? (
-                <img src={companyBranding.logo_url} alt={companyBranding.name || 'Logo'} className="w-10 h-10 rounded-lg object-contain" />
-              ) : (
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: companyBranding.color || '#2563eb' }}>
-                  <span className="text-white text-sm font-bold">{(companyBranding.name || 'MM').slice(0, 2).toUpperCase()}</span>
-                </div>
-              )}
-              <span className="font-semibold text-gray-900">{companyBranding.name || 'MaxMaster'}</span>
-            </div>
-          )}
-          <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
-            <h2 className="text-lg font-bold text-gray-900 mb-1">{docTitle}</h2>
-            <p className="text-sm text-gray-500 mb-4">Przejrzyj dokument przed podpisaniem</p>
-            <div className="border rounded-xl p-4 max-h-96 overflow-y-auto bg-gray-50 text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400">Brak treści dokumentu</p>' }}
-            />
+      <div className="flex items-center gap-3 mb-4">
+        {companyBranding.logo_url ? (
+          <img src={companyBranding.logo_url} alt={companyBranding.name || 'Logo'} className="w-10 h-10 rounded-lg object-contain" />
+        ) : (
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: companyBranding.color || '#2563eb' }}>
+            <span className="text-white text-sm font-bold">{(companyBranding.name || 'MM').slice(0, 2).toUpperCase()}</span>
           </div>
-          <button onClick={() => setShowPreview(false)} className="w-full bg-blue-600 text-white rounded-2xl py-4 font-semibold shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-            Przejdź do podpisania
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
-          </button>
-        </div>
+        )}
+        <span className="font-semibold text-gray-900">{companyBranding.name || 'MaxMaster'}</span>
       </div>
     )
   }
 
+  // --- Step indicator ---
+  const StepIndicator = () => {
+    const steps = [
+      { num: 1, label: 'Telefon', key: 'phone' },
+      { num: 2, label: 'Weryfikacja', key: 'otp' },
+      { num: 3, label: 'Podpis', key: 'document' },
+    ]
+    const stepIdx = step === 'phone' ? 0 : step === 'otp' ? 1 : 2
+    return (
+      <div className="flex items-center gap-0 mb-2">
+        {steps.map((s, i) => {
+          const isDone = i < stepIdx
+          const isActive = i === stepIdx
+          return (
+            <React.Fragment key={s.key}>
+              <div className="flex flex-col items-center">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                  isDone ? 'bg-blue-600 text-white' : isActive ? 'bg-blue-600 text-white ring-2 ring-blue-200' : 'bg-gray-100 text-gray-400'
+                }`}>
+                  {isDone ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-3.5 h-3.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  ) : s.num}
+                </div>
+                <span className={`text-[10px] mt-1 font-medium ${isActive ? 'text-blue-600' : isDone ? 'text-blue-400' : 'text-gray-400'}`}>{s.label}</span>
+              </div>
+              {i < 2 && <div className={`flex-1 h-0.5 mx-1 mb-4 transition-colors ${isDone ? 'bg-blue-600' : 'bg-gray-200'}`} />}
+            </React.Fragment>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // --- LOADING ---
+  if (step === 'loading') return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center gap-3">
+        <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+        <span className="text-gray-500 text-sm">Ladowanie dokumentu...</span>
+      </div>
+    </div>
+  )
+
+  // --- EXPIRED / ERROR ---
   if (step === 'expired') return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 max-w-md w-full text-center">
@@ -142,20 +312,22 @@ const SignPage: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
           </svg>
         </div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Nie można załadować dokumentu</h2>
-        <p className="text-sm text-gray-500 mb-6">Link do podpisu jest nieprawidłowy lub wygasł. Skontaktuj się z nadawcą dokumentu.</p>
-        <p className="text-xs text-gray-400 font-mono bg-gray-50 rounded-lg px-3 py-2">Token nie został znaleziony lub jest nieaktywny</p>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">Nie mozna zaladowac dokumentu</h2>
+        <p className="text-sm text-gray-500 mb-6">{error || 'Link do podpisu jest nieprawidlowy lub wygasl. Skontaktuj sie z nadawca dokumentu.'}</p>
       </div>
     </div>
   )
 
+  // --- SIGNED ---
   if (step === 'signed') return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Dokument podpisany!</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Dokument podpisany</h2>
         <p className="text-gray-500 mb-2">Dokument <strong>{docTitle}</strong> zostal pomyslnie podpisany.</p>
         <p className="text-xs text-gray-400 mb-4">Kopia zostanie wyslana na Twoj e-mail.</p>
         <button
@@ -168,143 +340,256 @@ const SignPage: React.FC = () => {
     </div>
   )
 
-  return (
+  // --- PROPOSAL SENT ---
+  if (step === 'proposal_sent') return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-sm border p-8 max-w-md w-full">
+        <CompanyLogo />
+        <h2 className="text-lg font-bold text-gray-900 mb-1">{docTitle}</h2>
+        {docNumber && <p className="text-sm text-gray-500 mb-4">Nr: {docNumber}</p>}
+
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <p className="font-semibold text-amber-800 mb-1">Propozycja zmian wyslana</p>
+          <p className="text-sm text-amber-700">Oczekuj na odpowiedz od wystawcy dokumentu.</p>
+        </div>
+
+        {proposal?.status === 'approved' && (
+          <div className="mb-4">
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-green-800 font-medium">Zmiany zostaly zaakceptowane. Mozesz podpisac dokument.</p>
+            </div>
+            <input
+              type="text"
+              value={signatureName}
+              onChange={e => setSignatureName(e.target.value)}
+              placeholder="Imie i nazwisko"
+              className="w-full border rounded-xl px-4 py-3 text-sm mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+            {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+            <button
+              onClick={handleSign}
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Podpisywanie...' : 'Podpisz dokument'}
+            </button>
+          </div>
+        )}
+
+        {proposal?.status === 'rejected' && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+            <p className="text-sm text-red-800 font-medium">Zmiany zostaly odrzucone.</p>
+            {proposal?.review_notes && <p className="text-sm text-red-700 mt-1">Powod: {proposal.review_notes}</p>}
+          </div>
+        )}
+
+        {(!proposal?.status || proposal?.status === 'pending') && (
+          <p className="text-sm text-gray-500">Status: Oczekuje na recenzje...</p>
+        )}
+
+        {proposal?.diff_summary && (
+          <div className="mt-4 bg-gray-50 rounded-xl p-3">
+            <p className="text-xs font-medium text-gray-600 mb-1">Opis zmian:</p>
+            <p className="text-xs text-gray-500">{proposal.diff_summary}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  // --- PHONE / OTP / DOCUMENT / EDITING ---
+  if (step === 'phone' || step === 'otp') return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-md">
         <div className="px-6 pt-6 pb-4 border-b">
-          <div className="flex items-center gap-3 mb-3">
-            {companyBranding?.logo_url ? (
-              <img src={companyBranding.logo_url} alt={companyBranding.name || 'Logo'} className="w-8 h-8 rounded-lg object-contain" />
-            ) : (
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: companyBranding?.color || '#2563eb' }}>
-                <span className="text-white text-xs font-bold">{(companyBranding?.name || 'MM').slice(0, 2).toUpperCase()}</span>
-              </div>
-            )}
-            <span className="font-semibold text-gray-900">{companyBranding?.name || 'MaxMaster'}</span>
-          </div>
-          <p className="text-sm text-gray-500 mb-4">{signerName ? `Dzien dobry, ${signerName}! ` : ''}Przeslano Ci dokument do podpisu.</p>
-          {/* Step progress */}
-          <div className="flex items-center gap-0">
-            {[
-              { num: 1, label: 'Telefon', key: 'phone' },
-              { num: 2, label: 'Weryfikacja', key: 'otp' },
-              { num: 3, label: 'Podpis', key: 'document' },
-            ].map((s, i) => {
-              const stepIdx = { phone: 0, otp: 1, document: 2 }[step as string] ?? 0;
-              const isDone = i < stepIdx;
-              const isActive = i === stepIdx;
-              return (
-                <React.Fragment key={s.key}>
-                  <div className="flex flex-col items-center">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isDone ? 'bg-blue-600 text-white' : isActive ? 'bg-blue-600 text-white ring-2 ring-blue-200' : 'bg-gray-100 text-gray-400'}`}>
-                      {isDone ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
-                      ) : s.num}
-                    </div>
-                    <span className={`text-[10px] mt-1 font-medium ${isActive ? 'text-blue-600' : isDone ? 'text-blue-400' : 'text-gray-400'}`}>{s.label}</span>
-                  </div>
-                  {i < 2 && <div className={`flex-1 h-0.5 mx-1 mb-4 transition-colors ${isDone ? 'bg-blue-600' : 'bg-gray-200'}`} />}
-                </React.Fragment>
-              );
-            })}
-          </div>
+          <CompanyLogo />
+          <p className="text-sm text-gray-500 mb-4">
+            {signerDisplay ? `Dzien dobry, ${signerDisplay}! ` : ''}Przeslano Ci dokument do podpisu.
+          </p>
+          <StepIndicator />
         </div>
         <div className="p-6">
-          {step === 'phone' && <>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Weryfikacja tozsamosci</h2>
-            <p className="text-sm text-gray-500 mb-4">Podaj numer telefonu, aby otrzymac kod SMS.</p>
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+48 600 000 000"
-              className="w-full border rounded-xl px-4 py-3 text-sm mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              onKeyDown={e => e.key === 'Enter' && handleSendOtp()} />
-            {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
-            <button onClick={handleSendOtp} disabled={loading || !phone.trim()} className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-              {loading ? 'Wysylanie...' : 'Wyslij kod SMS'}
-            </button>
-          </>}
-
-          {step === 'otp' && <>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Wprowadz kod</h2>
-            <p className="text-sm text-gray-500 mb-4">Wyslalismy 6-cyfrowy kod na <strong>{phone}</strong>.</p>
-            <input type="text" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g,'').slice(0,6))}
-              placeholder="000000" maxLength={6}
-              className="w-full border rounded-xl px-4 py-3 text-2xl text-center font-mono tracking-widest mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              onKeyDown={e => e.key === 'Enter' && otp.length === 6 && handleVerifyOtp()} />
-            {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
-            <button onClick={handleVerifyOtp} disabled={loading || otp.length !== 6} className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 mb-2">
-              {loading ? 'Weryfikuje...' : 'Weryfikuj'}
-            </button>
-            <button onClick={() => { setStep('phone'); setOtp(''); setError('') }} className="w-full text-sm text-gray-400 hover:text-gray-600">Zmien numer</button>
-          </>}
-
-          {step === 'document' && <>
-            <div className="mb-3 flex items-center justify-between">
-              <div><h2 className="font-semibold text-gray-900">{docTitle}</h2><p className="text-xs text-gray-500">Przeczytaj dokument przed podpisaniem</p></div>
-              <button onClick={() => setSuggestMode(v => !v)} className={`text-xs px-2 py-1 rounded-lg border ${suggestMode ? 'bg-blue-50 border-blue-300 text-blue-700' : 'text-gray-500 border-gray-200'}`}>
-                {suggestMode ? 'Tryb sugestii ON' : 'Tryb sugestii'}
+          {step === 'phone' && (
+            <>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Weryfikacja tozsamosci</h2>
+              <p className="text-sm text-gray-500 mb-4">Podaj numer telefonu, aby otrzymac kod SMS.</p>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="+48 600 000 000"
+                className="w-full border rounded-xl px-4 py-3 text-sm mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                onKeyDown={e => e.key === 'Enter' && sendOtp()}
+              />
+              {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+              <button
+                onClick={sendOtp}
+                disabled={loading || !phone.trim()}
+                className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Wysylanie...' : 'Wyslij kod SMS'}
               </button>
-            </div>
-            <div className="border rounded-xl max-h-96 overflow-y-auto mb-3"
-              onMouseUp={() => {
-                if (!suggestMode) return
-                const sel = window.getSelection()?.toString().trim()
-                if (sel && sel.length > 0) { setSelectedForSuggest(sel); setShowSuggestBox(true) }
-              }}
-            >
-              <div className="prose prose-sm max-w-none p-4" dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400 text-center py-8">Tresc dokumentu niedostepna</p>' }} />
-            </div>
-            {showSuggestBox && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-3">
-                <p className="text-xs text-gray-500 mb-1">Wybrany tekst: <em>"{selectedForSuggest.slice(0,60)}"</em></p>
-                <input value={suggestText} onChange={e => setSuggestText(e.target.value)} placeholder="Proponowana zmiana..." className="w-full border rounded px-2 py-1.5 text-xs mb-1" />
-                <input value={suggestComment} onChange={e => setSuggestComment(e.target.value)} placeholder="Komentarz (opcjonalnie)..." className="w-full border rounded px-2 py-1.5 text-xs mb-2" />
-                <div className="flex gap-2">
-                  <button onClick={() => {
-                    if (!suggestText.trim()) return
-                    setSuggestions(p => [...p, {original: selectedForSuggest, suggested: suggestText, comment: suggestComment}])
-                    setSuggestText(''); setSuggestComment(''); setSelectedForSuggest(''); setShowSuggestBox(false)
-                  }} className="bg-yellow-500 text-white px-3 py-1 rounded text-xs">Dodaj sugestię</button>
-                  <button onClick={() => setShowSuggestBox(false)} className="px-3 py-1 rounded text-xs border">Anuluj</button>
-                </div>
-              </div>
-            )}
-            {suggestions.length > 0 && (
-              <div className="bg-gray-50 rounded-xl p-3 mb-3">
-                <p className="text-xs font-medium text-gray-700 mb-2">Twoje sugestie ({suggestions.length}):</p>
-                {suggestions.map((s,i) => (
-                  <div key={i} className="text-xs bg-white border rounded p-2 mb-1">
-                    <span className="text-red-500 line-through">{s.original.slice(0,40)}</span>
-                    <span className="mx-1 text-gray-400">→</span>
-                    <span className="text-green-600">{s.suggested.slice(0,40)}</span>
-                    {s.comment && <span className="text-gray-400 ml-1">({s.comment})</span>}
-                  </div>
-                ))}
-                {!suggestionsSent ? (
-                  <button onClick={async () => {
-                    await supabase.from('document_comments').insert(
-                      suggestions.map(s => ({ document_id: doc?.id || null, author_name: signerName || phone, content: `SUGESTIA: zmień "${s.original.slice(0,50)}" na "${s.suggested}"${s.comment ? '. Komentarz: '+s.comment : ''}`, field_key: 'suggestion', created_at: new Date().toISOString() }))
-                    )
-                    setSuggestionsSent(true)
-                  }} className="mt-2 w-full text-xs bg-blue-600 text-white py-1.5 rounded-lg hover:bg-blue-700">
-                    Wyślij sugestie do weryfikacji
-                  </button>
-                ) : (
-                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
-                    Sugestie wysłane do weryfikacji
-                  </p>
-                )}
-              </div>
-            )}
-            {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
-            <p className="text-xs text-gray-500 mb-3">Klikajac "Podpisz" potwierdzasz zapoznanie sie z trescia i wyrazasz zgode na podpisanie elektroniczne.</p>
-            <button onClick={handleSign} disabled={loading} className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50">
-              {loading ? 'Podpisuje...' : 'Podpisz dokument'}
-            </button>
-          </>}
+            </>
+          )}
+
+          {step === 'otp' && (
+            <>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Wprowadz kod</h2>
+              <p className="text-sm text-gray-500 mb-4">Wyslalismy 6-cyfrowy kod na <strong>{phone}</strong>.</p>
+              <input
+                type="text"
+                value={otpCode}
+                onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                maxLength={6}
+                className="w-full border rounded-xl px-4 py-3 text-2xl text-center font-mono tracking-widest mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                onKeyDown={e => e.key === 'Enter' && otpCode.length === 6 && verifyOtp()}
+              />
+              {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+              <button
+                onClick={verifyOtp}
+                disabled={loading || otpCode.length !== 6}
+                className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 mb-2"
+              >
+                {loading ? 'Weryfikacja...' : 'Weryfikuj'}
+              </button>
+              <button
+                onClick={() => { setStep('phone'); setOtpCode(''); setError('') }}
+                className="w-full text-sm text-gray-400 hover:text-gray-600"
+              >
+                Zmien numer
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
   )
+
+  // --- DOCUMENT VIEW + EDITING ---
+  if (step === 'document' || step === 'editing') return (
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-2xl mx-auto">
+        <CompanyLogo />
+
+        {/* Document header */}
+        <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 mb-1">{docTitle}</h2>
+              {docNumber && <p className="text-sm text-gray-500">Nr: {docNumber}</p>}
+              {signerDisplay && <p className="text-xs text-gray-500 mt-1">Podpisujacy: {signerDisplay}</p>}
+            </div>
+            {step === 'document' && (
+              <button
+                onClick={enterEditingMode}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors whitespace-nowrap"
+              >
+                Zaproponuj zmiany
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Editing mode banner */}
+        {step === 'editing' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center justify-between">
+            <p className="text-sm text-amber-800">Tryb edycji — wprowadz proponowane zmiany w tekscie ponizej</p>
+            <button
+              onClick={cancelEditing}
+              className="text-xs text-amber-700 hover:text-amber-900 underline ml-3 whitespace-nowrap"
+            >
+              Anuluj
+            </button>
+          </div>
+        )}
+
+        {/* Document content */}
+        {step === 'document' && (
+          <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
+            <div
+              className="prose prose-sm max-w-none text-gray-700 leading-relaxed max-h-[60vh] overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400 text-center py-8">Brak tresci dokumentu</p>' }}
+            />
+          </div>
+        )}
+
+        {/* TipTap editor */}
+        {step === 'editing' && editor && (
+          <>
+            <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
+              <div className="prose prose-sm max-w-none min-h-[300px] max-h-[60vh] overflow-y-auto [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[280px]">
+                <EditorContent editor={editor} />
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Opisz proponowane zmiany</label>
+              <textarea
+                value={diffSummary}
+                onChange={e => setDiffSummary(e.target.value)}
+                placeholder="Np. Zmieniono termin realizacji z 30 na 45 dni..."
+                rows={3}
+                className="w-full border rounded-xl px-4 py-3 text-sm resize-y focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={submitProposal}
+                  disabled={loading}
+                  className="flex-1 bg-amber-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                >
+                  {loading ? 'Wysylanie...' : 'Wyslij propozycje zmian'}
+                </button>
+                <button
+                  onClick={cancelEditing}
+                  className="px-4 py-3 text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors text-sm"
+                >
+                  Anuluj
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Sign section (only in document view mode) */}
+        {step === 'document' && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm border">
+            <div className="flex items-center gap-3 mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+              </svg>
+              <h3 className="font-medium text-gray-800">Podpisz dokument</h3>
+            </div>
+            <input
+              type="text"
+              value={signatureName}
+              onChange={e => setSignatureName(e.target.value)}
+              placeholder="Imie i nazwisko (podpis)"
+              className="w-full border rounded-xl px-4 py-3 text-sm mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+            <p className="text-xs text-gray-500 mb-4">
+              Klikajac "Podpisz dokument", potwierdzasz zapoznanie sie z trescia i wyrazasz zgode na podpisanie elektroniczne.
+            </p>
+            {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={handleSign}
+                disabled={loading}
+                className="flex-1 bg-green-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {loading ? 'Podpisywanie...' : 'Podpisz dokument'}
+              </button>
+              <button className="px-4 py-3 text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors text-sm">
+                Odrzuc
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  return null
 }
 
 export default SignPage

@@ -441,7 +441,7 @@ export default function App() {
           <Route path="/register" element={<CompanyRegisterPage />} />
           <Route path="/offer/:token" element={<OfferLandingPage />} />
           <Route path="/offer-request/:token" element={<OfferRequestLandingPage />} />
-          <Route path="/sign/:token" element={<SigningRoute />} />
+          <Route path="/sign/:token" element={<SignPage />} />
 
           {/* SuperAdmin Routes */}
           <Route path="/superadmin/dashboard" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminDashboard /></ProtectedRoute>} />
