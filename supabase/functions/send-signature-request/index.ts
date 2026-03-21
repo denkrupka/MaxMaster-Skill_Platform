@@ -16,12 +16,12 @@ serve(async (req) => {
     )
 
     const body = await req.json()
-    const { document_id, signer_email, signer_name, signer_position, party_name, party_role, message: emailMessage, subject: emailSubject, expires_at: customExpiry, email_body } = body
+    const { document_id, signer_email, signer_name, signer_position, signer_phone, sms_enabled, party_name, party_role, message: emailMessage, subject: emailSubject, expires_at: customExpiry, email_body, signing_method } = body
     
     // Support both flat single-signer format and array format
     let signers = body.signers
     if (!signers?.length && signer_email) {
-      signers = [{ email: signer_email, name: signer_name || signer_email.split('@')[0], position: signer_position, party_name, party_role }]
+      signers = [{ email: signer_email, name: signer_name || signer_email.split('@')[0], position: signer_position, phone: signer_phone, sms_enabled: sms_enabled ?? false, signing_method, party_name, party_role }]
     }
     
     if (!document_id || !signers?.length) {
@@ -112,8 +112,8 @@ serve(async (req) => {
         } else {
           results.push({ email: signer.email, sent: true, messageId: emailResult.MessageID })
 
-          // SMS notification if phone provided
-          if (signer.phone) {
+          // SMS notification only if explicitly enabled via checkbox
+          if (signer.phone && signer.sms_enabled) {
             try {
               await supabase.functions.invoke('send-sms', {
                 body: {

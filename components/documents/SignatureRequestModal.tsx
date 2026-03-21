@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-type SigningMethod = 'draw' | 'type' | 'upload'
+type SigningMethod = 'draw' | 'type' | 'upload' | 'pz' | 'kwalifikowany'
 
 interface Signer {
   name: string
@@ -8,6 +8,7 @@ interface Signer {
   phone: string
   position?: string
   signing_method?: SigningMethod
+  smsEnabled?: boolean
 }
 
 interface PartySigner {
@@ -121,6 +122,13 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
     ))
   }
 
+  const toggleSmsEnabled = (partyIdx: number, signerIdx: number) => {
+    setPartySigners(prev => prev.map((p, i) => i === partyIdx
+      ? { ...p, signers: p.signers.map((s, j) => j === signerIdx ? { ...s, smsEnabled: !s.smsEnabled } : s) }
+      : p
+    ))
+  }
+
   const handleSend = async () => {
     const allSigners = partySigners.flatMap(p =>
       p.signers
@@ -140,6 +148,7 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
             signer_email: signer.email,
             signer_name: signer.name || signer.email.split('@')[0],
             signer_phone: signer.phone || null,
+            sms_enabled: signer.smsEnabled ?? false,
             signer_position: signer.position,
             signing_method: signer.signing_method || 'type',
             party_name: signer.partyName,
@@ -231,6 +240,17 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
                         }}
                       />
                     </div>
+                    {signer.phone && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={signer.smsEnabled ?? false}
+                          onChange={() => toggleSmsEnabled(partyIdx, signerIdx)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-gray-600">Wyślij SMS z powiadomieniem</span>
+                      </label>
+                    )}
                     <div>
                       <label className="text-[10px] text-gray-500 mb-0.5 block">Sposob podpisu</label>
                       <div className="flex gap-1">
@@ -248,6 +268,16 @@ const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, o
                           { value: 'upload', label: 'Wgraj', icon: (
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                            </svg>
+                          )},
+                          { value: 'pz', label: 'Profil Zaufany', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                            </svg>
+                          )},
+                          { value: 'kwalifikowany', label: 'Kwalifikowany', icon: (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                             </svg>
                           )},
                         ] as { value: SigningMethod; label: string; icon: React.ReactNode }[]).map(opt => (

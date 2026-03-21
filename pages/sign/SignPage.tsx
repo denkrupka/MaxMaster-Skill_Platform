@@ -32,6 +32,7 @@ const SignPage: React.FC = () => {
   const [signatureName, setSignatureName] = useState('')
   const [companyBranding, setCompanyBranding] = useState<{ name?: string; logo_url?: string; color?: string } | null>(null)
   const [signingMethod, setSigningMethod] = useState<'type' | 'draw' | 'upload' | 'pz'>('type')
+  const [allowedMethods, setAllowedMethods] = useState<('type' | 'draw' | 'upload' | 'pz')[]>(['type', 'draw', 'upload', 'pz'])
   const [pzLoading, setPzLoading] = useState(false)
   const [pzError, setPzError] = useState('')
   const [drawSignatureData, setDrawSignatureData] = useState('')
@@ -65,15 +66,37 @@ const SignPage: React.FC = () => {
     loadSignData()
   }, [token])
 
+  const [templateContent, setTemplateContent] = useState<string | null>(null)
+
+  const renderTemplateWithData = (template: string, data: Record<string, any>): string => {
+    if (!template || !data) return template || ''
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+      const val = data[key]
+      if (val === undefined || val === null) return `{{${key}}}`
+      return String(val)
+    })
+  }
+
   const getDocContent = (doc: any): string => {
     if (!doc) return ''
+
+    // If we have a fetched template content + data object, render with substitution
+    if (templateContent && doc.data && typeof doc.data === 'object' && !Array.isArray(doc.data) && !doc.data.html && !doc.data.sections) {
+      return renderTemplateWithData(templateContent, doc.data)
+    }
+
     const raw = doc.data || doc.content
     if (raw) {
       if (typeof raw === 'string') return raw
       if (Array.isArray(raw)) return raw.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('')
       if (typeof raw === 'object' && raw.sections) return raw.sections.map((s: any) => `<h2>${s.title || ''}</h2><p>${s.body || ''}</p>`).join('')
       if (typeof raw === 'object' && raw.html) return raw.html
-      return JSON.stringify(raw)
+      // If data is an object but no template loaded yet, show placeholder
+      if (typeof raw === 'object' && doc.template_id) return '<p class="text-gray-400 text-center py-8">Ładowanie szablonu...</p>'
+      // Last resort: try to render key-value pairs readably
+      if (typeof raw === 'object') {
+        return Object.entries(raw).map(([k, v]) => `<p><strong>${k}:</strong> ${v}</p>`).join('')
+      }
     }
     if (doc.document_templates?.content) {
       const c = doc.document_templates.content
@@ -95,6 +118,24 @@ const SignPage: React.FC = () => {
 
       if (data.company) {
         setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
+      }
+
+      // Fetch template content if document has template_id and data is JSONB object
+      const docData = data.document?.data
+      const templateId = data.document?.template_id
+      if (templateId && docData && typeof docData === 'object' && !Array.isArray(docData) && !docData.html && !docData.sections) {
+        try {
+          const tplRes = await fetch(`${SUPABASE_URL}/rest/v1/document_templates?id=eq.${templateId}&select=content`, {
+            headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+          })
+          const tplRows = await tplRes.json()
+          if (tplRows?.[0]?.content) {
+            const tplContent = tplRows[0].content
+            setTemplateContent(typeof tplContent === 'string' ? tplContent : JSON.stringify(tplContent))
+          }
+        } catch (e) {
+          console.warn('Failed to fetch template:', e)
+        }
       }
 
       if (data.request?.signer_name) setSignatureName(data.request.signer_name)
@@ -123,6 +164,15 @@ const SignPage: React.FC = () => {
       // Set signing method from signer data
       const method = (data.request?.signing_method || data.request?.signers?.[0]?.signing_method || 'type') as 'type' | 'draw' | 'upload' | 'pz'
       setSigningMethod(method)
+
+      // Set allowed methods — if a specific method was chosen, only show that one
+      const reqAllowed = data.request?.allowed_methods || data.request?.allowedMethods
+      if (reqAllowed && Array.isArray(reqAllowed) && reqAllowed.length > 0) {
+        setAllowedMethods(reqAllowed as ('type' | 'draw' | 'upload' | 'pz')[])
+      } else if (method && method !== 'type') {
+        // If a specific non-default method was set, show only that method
+        setAllowedMethods([method])
+      }
 
       // Determine if signer has phone — require OTP if yes
       const signerPhone = data.request?.signer_phone || data.request?.signers?.[0]?.phone
@@ -681,14 +731,15 @@ const SignPage: React.FC = () => {
               <h3 className="font-medium text-gray-800">Podpisz dokument</h3>
             </div>
 
-            {/* Signing method tabs */}
+            {/* Signing method tabs — only show allowed methods */}
+            {allowedMethods.length > 1 && (
             <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1">
               {([
                 { key: 'type' as const, label: 'Wpisz' },
                 { key: 'draw' as const, label: 'Narysuj' },
                 { key: 'upload' as const, label: 'Wgraj' },
                 { key: 'pz' as const, label: 'Profil Zaufany' },
-              ]).map(m => (
+              ]).filter(m => allowedMethods.includes(m.key)).map(m => (
                 <button
                   key={m.key}
                   onClick={() => { setSigningMethod(m.key); setError(''); setPzError('') }}
@@ -702,6 +753,7 @@ const SignPage: React.FC = () => {
                 </button>
               ))}
             </div>
+            )}
 
             {/* Type: text input */}
             {signingMethod === 'type' && (
