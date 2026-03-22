@@ -41,11 +41,26 @@ serve(async (req) => {
     // Get the document via request.document_id
     let document = null
     if (request?.document_id) {
-      const { data: doc } = await supabase.from('documents').select('id, name, number, status, company_id, data, pdf_path, signing_mode, parties, created_at').eq('id', request.document_id).maybeSingle()
+      const { data: doc } = await supabase.from('documents').select('id, name, number, status, company_id, data, pdf_path, signing_mode, parties, created_at, template_id').eq('id', request.document_id).maybeSingle()
       document = doc
     }
 
-    return new Response(JSON.stringify({ token: tokenData, request, document }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    // Render template content if document has template_id
+    let rendered_content: string | null = null
+    if (document?.template_id) {
+      const { data: tmpl } = await supabase.from('document_templates').select('content').eq('id', document.template_id).maybeSingle()
+      if (tmpl?.content) {
+        rendered_content = tmpl.content
+        const docData = document.data || {}
+        for (const [key, val] of Object.entries(docData)) {
+          rendered_content = rendered_content!.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(val ?? ''))
+        }
+        // Clean up any remaining unreplaced placeholders
+        rendered_content = rendered_content!.replace(/\{\{[^}]+\}\}/g, '')
+      }
+    }
+
+    return new Response(JSON.stringify({ token: tokenData, request, document, rendered_content }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }

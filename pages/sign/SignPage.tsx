@@ -117,11 +117,16 @@ const SignPage: React.FC = () => {
       }
       setSignData(data)
 
+      // Use server-side rendered content if available (from get-sign-data EF)
+      if (data.rendered_content) {
+        setRenderedContent(data.rendered_content)
+      }
+
       if (data.company) {
         setCompanyBranding({ name: data.company.name, logo_url: data.company.logo_url, color: data.company.color })
       }
 
-      // Fetch template content if document has template_id and data is JSONB object
+      // Fetch template content if document has template_id and data is JSONB object (client-side fallback)
       const docData = data.document?.data
       const templateId = data.document?.template_id
       if (templateId && docData && typeof docData === 'object' && !Array.isArray(docData) && !docData.html && !docData.sections) {
