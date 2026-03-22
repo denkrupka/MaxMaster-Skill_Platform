@@ -124,8 +124,10 @@ const DocumentViewPage: React.FC = () => {
   const renderPreviewContent = useCallback((html: string): string => {
     if (!html) return ''
     const storedVars: Record<string, string> = JSON.parse(localStorage.getItem('doc_variables') || '{}')
+    const docData: Record<string, any> = (doc?.data && typeof doc.data === 'object') ? doc.data as Record<string, any> : {}
     return html.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
-      const value = storedVars[key.trim()]
+      const k = key.trim()
+      const value = storedVars[k] || (docData[k] != null ? String(docData[k]) : '')
       if (value && value.trim()) {
         return `<span style="color:inherit;font-weight:inherit;text-decoration:underline;text-decoration-color:#3b82f6">${value}</span>`
       }
@@ -134,7 +136,7 @@ const DocumentViewPage: React.FC = () => {
       }
       return `<span style="background:#fee2e2;color:#dc2626;border-radius:3px;padding:1px 4px;font-size:0.875em" title="Zmienna niezapełniona: ${key}">${match}</span>`
     })
-  }, [isDocCompleted])
+  }, [isDocCompleted, doc])
 
   useEffect(() => {
     if (editor) editor.setEditable(mode === 'edit')
