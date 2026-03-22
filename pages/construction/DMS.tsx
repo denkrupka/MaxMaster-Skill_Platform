@@ -2336,7 +2336,7 @@ export const DMSPage: React.FC = () => {
                   try {
                     const { data: newDoc } = await supabase
                       .from('documents')
-                      .insert({ name: 'Nowy dokument', data: { content: '<p></p>' }, status: 'draft', company_id: companyId })
+                      .insert({ name: 'Nowy dokument', data: { content: '<p></p>' }, status: 'draft', company_id: companyId, template_id: null })
                       .select()
                       .single()
                     if (newDoc?.id) navigate('/construction/dms/' + newDoc.id)
@@ -2369,6 +2369,8 @@ export const DMSPage: React.FC = () => {
                 if (!file) return
                 const ext = file.name.split('.').pop()?.toLowerCase() || ''
                 const docName = file.name.replace(/\.[^.]+$/, '')
+                const sanitizeStorageKey = (fn: string): string =>
+                  fn.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x00-\x7F]/g, '_').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._\-]/g, '_').substring(0, 100)
 
                 const insertDoc = async (html: string) => {
                   const { data: rec } = await supabase.from('documents').insert({
@@ -2376,6 +2378,7 @@ export const DMSPage: React.FC = () => {
                     data: { content: html },
                     status: 'draft',
                     company_id: companyId,
+                    template_id: null,
                   }).select().single()
                   if (rec) { setShowNewDocModal(false); navigate('/construction/dms/' + rec.id) }
                 }
@@ -2435,7 +2438,7 @@ export const DMSPage: React.FC = () => {
                   }
                 } else if (ext === 'pdf') {
                   // PDF: upload to storage, create doc with link
-                  const filePath = `imports/${companyId}/${Date.now()}_${file.name}`
+                  const filePath = `imports/${companyId}/${Date.now()}_${sanitizeStorageKey(file.name)}`
                   const { error: upErr } = await supabase.storage.from('documents').upload(filePath, file)
                   if (!upErr) {
                     const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath)
@@ -2444,6 +2447,7 @@ export const DMSPage: React.FC = () => {
                       data: { content: `<p><em>Zaimportowany PDF:</em> <a href="${urlData.publicUrl}" target="_blank">${file.name}</a></p>` },
                       status: 'draft',
                       company_id: companyId,
+                      template_id: null,
                       pdf_path: urlData.publicUrl,
                     }).select().single().then(({ data: rec }) => {
                       if (rec) { setShowNewDocModal(false); navigate('/construction/dms/' + rec.id) }
