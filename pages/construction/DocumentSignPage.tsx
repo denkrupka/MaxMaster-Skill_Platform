@@ -160,24 +160,21 @@ const DocumentSignPage: React.FC = () => {
           <h2 className="font-semibold text-gray-900 mb-4">Metoda podpisu</h2>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { key: 'email', label: 'Podpis e-mail', desc: 'Link w e-mailu', available: true },
-              { key: 'sms', label: 'Podpis SMS', desc: 'Kod SMS', available: true },
-              { key: 'zaufany', label: 'Profil Zaufany', desc: 'Wkrótce', available: false },
-              { key: 'qes', label: 'Podpis kwalifikowany', desc: 'Wkrótce', available: false },
+              { key: 'email', label: 'Podpis e-mail', desc: 'Link w e-mailu' },
+              { key: 'sms', label: 'Podpis SMS', desc: 'Kod SMS' },
+              { key: 'zaufany', label: 'Profil Zaufany', desc: 'login.gov.pl' },
+              { key: 'kaligraficzny', label: 'Podpis kaligraficzny', desc: 'Narysuj swój podpis' },
             ].map(m => (
               <button
                 key={m.key}
-                disabled={!m.available}
-                onClick={() => m.available && setSignMethod(prev => ({ ...prev, [m.key]: !prev[m.key as 'email'|'sms'] }))}
+                onClick={() => setSignMethod(prev => ({ ...prev, [m.key]: !prev[m.key as keyof typeof prev] }))}
                 className={`p-3 rounded-lg border-2 text-left transition-all ${
-                  !m.available ? 'opacity-40 cursor-not-allowed bg-gray-50 border-gray-200' :
-                  signMethod[m.key as 'email'|'sms'] ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  signMethod[m.key as keyof typeof signMethod] ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-900">{m.label}</span>
-                  {m.available && <div className={`w-4 h-4 rounded-full border-2 ${signMethod[m.key as 'email'|'sms'] ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}`} />}
-                  {!m.available && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Wkrótce</span>}
+                  <div className={`w-4 h-4 rounded-full border-2 ${signMethod[m.key as keyof typeof signMethod] ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}`} />
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">{m.desc}</p>
               </button>

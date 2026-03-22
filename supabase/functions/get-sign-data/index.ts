@@ -50,13 +50,39 @@ serve(async (req) => {
     if (document?.template_id) {
       const { data: tmpl } = await supabase.from('document_templates').select('content').eq('id', document.template_id).maybeSingle()
       if (tmpl?.content) {
-        rendered_content = tmpl.content
-        const docData = document.data || {}
-        for (const [key, val] of Object.entries(docData)) {
-          rendered_content = rendered_content!.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(val ?? ''))
+        const rawContent = tmpl.content
+        // Handle different content formats
+        if (typeof rawContent === 'string') {
+          try {
+            const parsed = JSON.parse(rawContent)
+            if (parsed.sections && Array.isArray(parsed.sections)) {
+              rendered_content = parsed.sections.map((s: any) =>
+                `<h3 style="font-weight:600;margin:1em 0 0.5em">${s.title || ''}</h3><p style="margin:0 0 1em;line-height:1.6">${s.content || s.body || ''}</p>`
+              ).join('')
+            } else {
+              rendered_content = rawContent
+            }
+          } catch {
+            rendered_content = rawContent // already HTML string
+          }
+        } else if (rawContent && typeof rawContent === 'object') {
+          const obj = rawContent as any
+          if (obj.sections && Array.isArray(obj.sections)) {
+            rendered_content = obj.sections.map((s: any) =>
+              `<h3 style="font-weight:600;margin:1em 0 0.5em">${s.title || ''}</h3><p style="margin:0 0 1em;line-height:1.6">${s.content || s.body || ''}</p>`
+            ).join('')
+          } else {
+            rendered_content = JSON.stringify(rawContent)
+          }
         }
-        // Clean up any remaining unreplaced placeholders
-        rendered_content = rendered_content!.replace(/\{\{[^}]+\}\}/g, '')
+        // Substitute {{variables}} from document data
+        if (rendered_content) {
+          const docData = document.data || {}
+          for (const [key, val] of Object.entries(docData)) {
+            rendered_content = rendered_content!.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(val ?? ''))
+          }
+          rendered_content = rendered_content!.replace(/\{\{[^}]+\}\}/g, '')
+        }
       }
     }
 
