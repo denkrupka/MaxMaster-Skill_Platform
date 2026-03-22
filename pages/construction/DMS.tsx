@@ -1757,6 +1757,8 @@ export const DMSPage: React.FC = () => {
 
   // Shared
   const [contractors, setContractors] = useState<any[]>([]);
+  const [contractorsRaw, setContractorsRaw] = useState<any[]>([]);
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showNewDocModal, setShowNewDocModal] = useState(false)
@@ -1793,9 +1795,21 @@ export const DMSPage: React.FC = () => {
     supabase.from('contractors_clients').select('id,name').eq('company_id', companyId)
       .then(({ data }) => { if (data) setContractors(data); })
       .catch(() => setError('Nie udało się załadować kontrahentów'));
+    supabase.from('contractors').select('id,name').eq('company_id', companyId)
+      .then(({ data }) => { if (data) setContractorsRaw(data); })
+      .catch(() => {});
     supabase.from('projects').select('id,name').eq('company_id', companyId)
       .then(({ data }) => { if (data) setProjects(data); })
       .catch(() => setError('Nie udało się załadować projektów'));
+    supabase.from('users').select('id,first_name,last_name').eq('company_id', companyId)
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<string, string> = {};
+          data.forEach((u: any) => { map[u.id] = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.id; });
+          setUsersMap(map);
+        }
+      })
+      .catch(() => {});
   }, [companyId]);
 
   const deleteTpl = async (id: string) => {
@@ -2132,9 +2146,9 @@ export const DMSPage: React.FC = () => {
                           </td>
                           <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{fmt(d.created_at)}</td>
                           <td className="px-4 py-3 hidden sm:table-cell text-slate-500 text-xs">{d.updated_at ? fmt(d.updated_at) : '—'}</td>
-                          <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[120px]">{d.created_by_name || '—'}</td>
+                          <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[120px]">{(d.created_by && usersMap[d.created_by]) || '—'}</td>
                           <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[140px]">
-                            {contractors.find(c => c.id === d.contractor_id)?.name || '—'}
+                            {contractors.find(c => c.id === d.contractor_id)?.name || contractorsRaw.find(c => c.id === d.contractor_id)?.name || '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[d.status] || 'bg-gray-100 text-gray-600'}`}>
