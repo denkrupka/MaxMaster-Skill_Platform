@@ -31,6 +31,15 @@ async function getCpaToken(): Promise<string> {
   return data.access_token;
 }
 
+function xmlEscape(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 function buildSoap(params: {
   docBase64: string;
   successUrl: string;
@@ -45,9 +54,9 @@ function buildSoap(params: {
   <soapenv:Body>
     <sig:addDocumentToSigning>
       <doc>${params.docBase64}</doc>
-      <successURL>${params.successUrl}</successURL>
-      <failureURL>${params.failureUrl}</failureURL>
-      <additionalInfo>${params.description}</additionalInfo>
+      <successURL>${xmlEscape(params.successUrl)}</successURL>
+      <failureURL>${xmlEscape(params.failureUrl)}</failureURL>
+      <additionalInfo>${xmlEscape(params.description)}</additionalInfo>
     </sig:addDocumentToSigning>
   </soapenv:Body>
 </soapenv:Envelope>`;
