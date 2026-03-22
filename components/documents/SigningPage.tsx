@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, AlertCircle, FileText, User, Calendar, Shield } from 'lucide-react';
 import { declineSignatureRequest, markSignatureRequestViewed, signDocument, verifySignatureRequest } from '../../lib/documentService';
+import { supabase } from '../../lib/supabase';
 
 interface SigningPageProps {
   token: string;
@@ -32,10 +33,56 @@ export const SigningPage: React.FC<SigningPageProps> = ({ token }) => {
   const [declining, setDeclining] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [showDeclineForm, setShowDeclineForm] = useState(false);
+  const [documentHtml, setDocumentHtml] = useState<string>('');
+  const [contentLoading, setContentLoading] = useState(false);
 
   useEffect(() => {
     loadRequest();
   }, [token]);
+
+  const loadDocumentContent = async (doc: any): Promise<string> => {
+    // If content is already an HTML string
+    if (typeof doc?.data?.content === 'string' && doc.data.content.trim().startsWith('<')) {
+      return doc.data.content;
+    }
+
+    // If document has template_id, fetch template and substitute variables
+    if (doc?.template_id) {
+      try {
+        const { data: tmpl } = await supabase
+          .from('document_templates')
+          .select('content')
+          .eq('id', doc.template_id)
+          .single();
+
+        if (tmpl?.content) {
+          const variables = doc?.data || {};
+          let html = typeof tmpl.content === 'string' ? tmpl.content : JSON.stringify(tmpl.content);
+          html = html.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => {
+            return String(variables[key] ?? `{{${key}}}`);
+          });
+          return html;
+        }
+      } catch {
+        // Template fetch failed, fall through to fallback
+      }
+    }
+
+    // Fallback: render key-value pairs as formatted table
+    if (doc?.data && typeof doc.data === 'object') {
+      const vars = doc.data;
+      const skipKeys = ['content'];
+      const rows = Object.entries(vars)
+        .filter(([k]) => !skipKeys.includes(k))
+        .map(([k, v]) =>
+          `<tr><td style="padding:6px 16px 6px 0;color:#64748b;font-size:13px;font-weight:500;white-space:nowrap">${String(k).replace(/_/g, ' ')}</td><td style="padding:6px 0;font-size:13px;color:#1e293b">${String(v ?? '')}</td></tr>`
+        )
+        .join('');
+      return `<table style="border-collapse:collapse;width:100%">${rows}</table>`;
+    }
+
+    return '<p style="color:#94a3b8;text-align:center;padding:2rem 0">Brak treści dokumentu</p>';
+  };
 
   const loadRequest = async () => {
     try {
@@ -67,6 +114,19 @@ export const SigningPage: React.FC<SigningPageProps> = ({ token }) => {
       if (data.status === 'pending') {
         await markSignatureRequestViewed(data.id);
         setRequest({ ...data, status: 'opened' });
+      }
+
+      // Load and render document content with template substitution
+      if (data.documents) {
+        setContentLoading(true);
+        try {
+          const html = await loadDocumentContent(data.documents);
+          setDocumentHtml(html);
+        } catch {
+          setDocumentHtml('<p style="color:#ef4444">Nie udało się załadować treści dokumentu</p>');
+        } finally {
+          setContentLoading(false);
+        }
       }
     } catch (err: any) {
       setError('Nie udało się załadować dokumentu do podpisu');
@@ -191,10 +251,18 @@ export const SigningPage: React.FC<SigningPageProps> = ({ token }) => {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-4">
           <h2 className="text-sm font-medium text-slate-700 mb-4">Podgląd dokumentu</h2>
           <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-600 max-h-96 overflow-y-auto">
-            {/* Render document content here */}
-            <p className="text-center text-slate-400 py-8">
-              Podgląd treści dokumentu...
-            </p>
+            {contentLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                <span className="ml-2 text-slate-400">Ładowanie treści...</span>
+              </div>
+            ) : documentHtml ? (
+              <div dangerouslySetInnerHTML={{ __html: documentHtml }} />
+            ) : (
+              <p className="text-center text-slate-400 py-8">
+                Brak treści dokumentu
+              </p>
+            )}
           </div>
         </div>
 
