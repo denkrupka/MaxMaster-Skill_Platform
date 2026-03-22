@@ -114,7 +114,7 @@ serve(async (req) => {
           results.push({ email: signer.email, sent: true, messageId: emailResult.MessageID })
 
           // SMS notification only if explicitly enabled via checkbox
-          if (signer.phone && signer.sms_enabled) {
+          if (signer.phone && (signer.sms_enabled === true || signer.send_sms === true)) {
             try {
               await supabase.functions.invoke('send-sms', {
                 body: {

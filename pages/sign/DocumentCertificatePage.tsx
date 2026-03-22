@@ -45,9 +45,11 @@ function formatDate(iso?: string | null): string {
 
 // ── Signing mode label ─────────────────────────────────────────────
 function getModeLabel(mode?: string | null): string {
-  if (mode === 'sequential') return 'Sekwencyjny'
-  if (mode === 'parallel') return 'Równoległy'
-  return mode || '—'
+  if (!mode) return '—'
+  const m = mode.toLowerCase()
+  if (m === 'sequential') return 'Sekwencyjny'
+  if (m === 'parallel') return 'Równoległy'
+  return mode
 }
 
 // ── Method badge color ──────────────────────────────────────────────
@@ -238,7 +240,7 @@ const DocumentCertificatePage: React.FC = () => {
             </div>
             <div>
               <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wider mb-1">Tryb podpisu</p>
-              <p className="text-sm text-slate-700 capitalize">{doc.signing_mode || '—'}</p>
+              <p className="text-sm text-slate-700 capitalize">{getModeLabel(doc.signing_mode)}</p>
             </div>
             <div>
               <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wider mb-1">Liczba sygnatariuszy</p>
@@ -263,7 +265,8 @@ const DocumentCertificatePage: React.FC = () => {
                 return (
                   <div
                     key={r.id}
-                    className={`relative py-4 ${i < requests.length - 1 ? 'border-b border-slate-100' : ''}`}
+                    data-signer-row
+                    className={`relative py-4 print:block ${i < requests.length - 1 ? 'border-b border-slate-100' : ''}`}
                   >
                     <div className="flex items-start gap-4">
                       {/* Avatar circle */}
@@ -366,8 +369,11 @@ const DocumentCertificatePage: React.FC = () => {
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          body { background: white !important; }
+          body { background: white !important; margin: 0 !important; padding: 0 !important; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .animate-pulse { animation: none !important; }
+          /* Ensure signer rows are always visible in print */
+          [data-signer-row] { display: block !important; break-inside: avoid; }
         }
       `}</style>
     </div>
