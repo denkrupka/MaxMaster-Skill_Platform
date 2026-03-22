@@ -55,6 +55,7 @@ serve(async (req) => {
         status: 'pending',
         token,
         expires_at,
+        ...(signing_method ? { signature_method: signing_method } : {}),
       }).select().single()
 
       if (srErr) { results.push({ email: signer.email, error: srErr.message }); continue }

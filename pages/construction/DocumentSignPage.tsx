@@ -32,7 +32,7 @@ const DocumentSignPage: React.FC = () => {
   const [signers, setSigners] = useState<Signer[]>([])
   const [emailBody, setEmailBody] = useState('')
   const [smsText, setSmsText] = useState('')
-  const [signMethod, setSignMethod] = useState<{ email: boolean; sms: boolean }>({ email: true, sms: false })
+  const [signMethod, setSignMethod] = useState<{ email: boolean; sms: boolean; zaufany: boolean; kaligraficzny: boolean }>({ email: true, sms: false, zaufany: false, kaligraficzny: false })
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [user, setUser] = useState<any>(null)
@@ -104,6 +104,10 @@ const DocumentSignPage: React.FC = () => {
     for (const signer of signers) {
       if (!signer.email && !signer.phone) continue
       try {
+        // Determine signature_method from selected sign methods
+        const selectedMethods = Object.entries(signMethod).filter(([_, v]) => v).map(([k]) => k)
+        const signature_method = selectedMethods.length === 1 ? selectedMethods[0] : selectedMethods.join(',')
+
         await supabase.functions.invoke('send-signature-request', {
           body: {
             document_id: id,
@@ -116,6 +120,7 @@ const DocumentSignPage: React.FC = () => {
             }],
             email_body: emailBody,
             sms_text: smsText,
+            signing_method: signature_method,
           }
         })
         setSigners(prev => prev.map(s => s.id === signer.id ? { ...s, status: 'sent' } : s))

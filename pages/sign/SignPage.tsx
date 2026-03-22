@@ -175,17 +175,27 @@ const SignPage: React.FC = () => {
         return
       }
 
-      // Set signing method from signer data
-      const method = (data.request?.signing_method || data.request?.signers?.[0]?.signing_method || 'type') as 'type' | 'draw' | 'upload' | 'pz'
-      setSigningMethod(method)
+      // Set signing method and allowed tabs from signature_method stored in DB
+      const sigMethod = data.request?.signature_method as string | null // e.g. 'email', 'sms', 'zaufany', 'kaligraficzny', or comma-separated like 'email,sms'
+      const methods = sigMethod ? sigMethod.split(',').map((m: string) => m.trim()) : []
 
-      // Set allowed methods — if a specific method was chosen, only show that one
-      const reqAllowed = data.request?.allowed_methods || data.request?.allowedMethods
-      if (reqAllowed && Array.isArray(reqAllowed) && reqAllowed.length > 0) {
-        setAllowedMethods(reqAllowed as ('type' | 'draw' | 'upload' | 'pz')[])
-      } else if (method && method !== 'type') {
-        // If a specific non-default method was set, show only that method
-        setAllowedMethods([method])
+      // Map DB method names to SignPage tab keys
+      const mapMethodToTabs = (m: string): ('type' | 'draw' | 'upload' | 'pz')[] => {
+        if (m === 'zaufany' || m === 'pz') return ['pz']
+        if (m === 'kaligraficzny') return ['draw']
+        if (m === 'email' || m === 'sms') return ['type', 'draw', 'upload']
+        return ['type', 'draw', 'upload', 'pz'] // unknown → show all
+      }
+
+      if (methods.length > 0) {
+        // Merge all allowed tabs from all selected methods, deduplicated
+        const allTabs = [...new Set(methods.flatMap(mapMethodToTabs))] as ('type' | 'draw' | 'upload' | 'pz')[]
+        setAllowedMethods(allTabs)
+        setSigningMethod(allTabs[0]) // auto-select first allowed tab
+      } else {
+        // No method specified — show all tabs (backwards compat)
+        setAllowedMethods(['type', 'draw', 'upload', 'pz'])
+        setSigningMethod('type')
       }
 
       // Determine if signer has phone — require OTP if yes
