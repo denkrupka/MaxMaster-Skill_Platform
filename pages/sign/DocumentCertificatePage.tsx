@@ -43,6 +43,13 @@ function formatDate(iso?: string | null): string {
   })
 }
 
+// ── Signing mode label ─────────────────────────────────────────────
+function getModeLabel(mode?: string | null): string {
+  if (mode === 'sequential') return 'Sekwencyjny'
+  if (mode === 'parallel') return 'Równoległy'
+  return mode || '—'
+}
+
 // ── Method badge color ──────────────────────────────────────────────
 function getMethodBadgeStyle(method?: string | null) {
   switch (method) {
@@ -250,7 +257,7 @@ const DocumentCertificatePage: React.FC = () => {
               {requests.map((r, i) => {
                 const tokenRow = tokens[r.id]
                 const isSigned = r.status === 'signed'
-                const signingMethod = r.signature_method || tokenRow?.metadata?.signing_method || null
+                const signingMethod = tokenRow?.metadata?.signing_method || (r.signature_method && !r.signature_method.includes(',') ? r.signature_method : null)
                 const signedTime = r.signed_at || tokenRow?.used_at
 
                 return (

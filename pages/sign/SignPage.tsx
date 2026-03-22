@@ -286,7 +286,13 @@ const SignPage: React.FC = () => {
         : signingMethod === 'upload'
           ? { type: 'upload' as const, dataUrl: uploadSignatureData }
           : { type: 'text' as const, value: signatureName }
-      const res = await efPost('process-signature', { token: token!, signed: true, phone, name: signatureName, signature })
+      // Resolve actual signing method name for certificate
+      const resolvedMethod = signingMethod === 'draw' || signingMethod === 'upload'
+        ? 'kaligraficzny'
+        : signingMethod === 'pz'
+          ? 'pz'
+          : (signData?.request?.signature_method === 'sms' ? 'sms' : 'email')
+      const res = await efPost('process-signature', { token: token!, signed: true, phone, name: signatureName, signature, signing_method: resolvedMethod })
       if (res.success || res.ok || !res.error) {
         setStep('signed')
       } else {

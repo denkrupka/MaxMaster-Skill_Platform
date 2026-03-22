@@ -6,9 +6,29 @@ const cors = {
 };
 
 const PZ_CLIENT_ID = Deno.env.get("PZ_CLIENT_ID") || "zzAxz3ZlYfP_FfBxgR0vgvQltUMa";
+const PZ_CLIENT_SECRET = Deno.env.get("PZ_CLIENT_SECRET") || "xXJSvgIhUp9XpwsfBzFK7NnQrQYa";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PZ_AUTHORIZE = "https://login.gov.pl/idp/profile/oidc/authorize";
+
+// Dynamic CPA token fetch via client_credentials grant
+async function getCpaToken(): Promise<string> {
+  const credentials = btoa(`${PZ_CLIENT_ID}:${PZ_CLIENT_SECRET}`);
+  const tokenResp = await fetch("https://api-cpa.gov.pl/token", {
+    method: "POST",
+    headers: {
+      "Authorization": `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials",
+  });
+  if (!tokenResp.ok) {
+    const err = await tokenResp.text();
+    throw new Error(`CPA token fetch failed: ${tokenResp.status} ${err}`);
+  }
+  const data = await tokenResp.json();
+  return data.access_token;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });

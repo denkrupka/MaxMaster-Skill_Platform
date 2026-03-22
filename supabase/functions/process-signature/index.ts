@@ -11,7 +11,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json()
-    const { token, name, signature } = body
+    const { token, name, signature, signing_method } = body
 
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     const POSTMARK_KEY = Deno.env.get('POSTMARK_API_KEY') || Deno.env.get('POSTMARK_SERVER_TOKEN')
@@ -78,7 +78,7 @@ serve(async (req) => {
       ip_address: ip,
       user_agent: ua,
       signature_data: signature || null,
-      metadata: { signed_name: signerName }
+      metadata: { signed_name: signerName, ...(signing_method ? { signing_method } : {}) }
     }).eq('token', token)
 
     // Update request status
