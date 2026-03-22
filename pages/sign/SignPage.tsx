@@ -30,6 +30,7 @@ const SignPage: React.FC = () => {
   const [diffSummary, setDiffSummary] = useState('')
   const [proposal, setProposal] = useState<any>(null)
   const [signatureName, setSignatureName] = useState('')
+  const [renderedContent, setRenderedContent] = useState<string>('')
   const [companyBranding, setCompanyBranding] = useState<{ name?: string; logo_url?: string; color?: string } | null>(null)
   const [signingMethod, setSigningMethod] = useState<'type' | 'draw' | 'upload' | 'pz'>('type')
   const [allowedMethods, setAllowedMethods] = useState<('type' | 'draw' | 'upload' | 'pz')[]>(['type', 'draw', 'upload', 'pz'])
@@ -131,7 +132,15 @@ const SignPage: React.FC = () => {
           const tplRows = await tplRes.json()
           if (tplRows?.[0]?.content) {
             const tplContent = tplRows[0].content
-            setTemplateContent(typeof tplContent === 'string' ? tplContent : JSON.stringify(tplContent))
+            const tplStr = typeof tplContent === 'string' ? tplContent : JSON.stringify(tplContent)
+            setTemplateContent(tplStr)
+            // Pre-render template with variables for immediate display
+            const vars = docData || {}
+            let html = tplStr.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => {
+              const val = (vars as Record<string, any>)[key]
+              return val !== undefined && val !== null ? String(val) : `{{${key}}}`
+            })
+            setRenderedContent(html)
           }
         } catch (e) {
           console.warn('Failed to fetch template:', e)
@@ -677,10 +686,19 @@ const SignPage: React.FC = () => {
         {/* Document content */}
         {step === 'document' && (
           <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm border">
-            <div
-              className="prose prose-sm max-w-none text-gray-700 leading-relaxed max-h-[60vh] overflow-y-auto"
-              dangerouslySetInnerHTML={{ __html: docContent || '<p class="text-gray-400 text-center py-8">Brak treści dokumentu</p>' }}
-            />
+            {renderedContent ? (
+              <div
+                className="prose prose-sm max-w-none text-gray-700 leading-relaxed max-h-[60vh] overflow-y-auto"
+                dangerouslySetInnerHTML={{ __html: renderedContent }}
+              />
+            ) : docContent ? (
+              <div
+                className="prose prose-sm max-w-none text-gray-700 leading-relaxed max-h-[60vh] overflow-y-auto"
+                dangerouslySetInnerHTML={{ __html: docContent }}
+              />
+            ) : (
+              <div className="text-gray-400 text-center py-8">Ładowanie treści...</div>
+            )}
           </div>
         )}
 
