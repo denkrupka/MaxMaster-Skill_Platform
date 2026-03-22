@@ -24,38 +24,39 @@ interface Props {
   documentId: string
   onSent?: () => void
   supabase: any
-  parties?: { party1?: any; party2?: any }
+  parties?: any[] | { party1?: any; party2?: any }
 }
 
 const SignatureRequestModal: React.FC<Props> = ({ isOpen, onClose, documentId, onSent, supabase, parties }) => {
   const buildDefaultParties = (): PartySigner[] => {
     const result: PartySigner[] = []
-    
-    if (parties?.party1) {
-      const p1 = parties.party1
-      result.push({
-        partyIndex: 0,
-        partyName: p1.name || 'Strona 1',
-        partyRole: 'ZAMAWIAJĄCY',
-        signers: p1.contact_person
-          ? [{ name: p1.contact_person || '', email: p1.email || '', phone: p1.phone || '', position: p1.contact_position || '', signing_method: 'email' as SigningMethod }]
-          : [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }]
-      })
+
+    // Normalize parties to array format
+    let partyArr: any[] = []
+    if (Array.isArray(parties)) {
+      partyArr = parties
+    } else if (parties) {
+      if (parties.party1) partyArr.push(parties.party1)
+      else partyArr.push({})
+      if (parties.party2) partyArr.push(parties.party2)
+      else partyArr.push({})
     } else {
-      result.push({ partyIndex: 0, partyName: 'Strona 1', partyRole: 'ZAMAWIAJĄCY', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }] })
+      partyArr = [{}, {}]
     }
-    
-    if (parties?.party2) {
-      const p2 = parties.party2
+
+    partyArr.forEach((p, idx) => {
       result.push({
-        partyIndex: 1,
-        partyName: p2.name || 'Strona 2',
-        partyRole: 'WYKONAWCA',
-        signers: p2.contact_person
-          ? [{ name: p2.contact_person || '', email: p2.email || '', phone: p2.phone || '', position: p2.contact_position || '', signing_method: 'email' as SigningMethod }]
+        partyIndex: idx,
+        partyName: p.name || `Strona ${idx + 1}`,
+        partyRole: idx === 0 ? 'ZAMAWIAJĄCY' : idx === 1 ? 'WYKONAWCA' : `STRONA ${idx + 1}`,
+        signers: p.contact_person
+          ? [{ name: p.contact_person || '', email: p.email || '', phone: p.phone || '', position: p.contact_position || '', signing_method: 'email' as SigningMethod }]
           : [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }]
       })
-    } else {
+    })
+
+    if (result.length === 0) {
+      result.push({ partyIndex: 0, partyName: 'Strona 1', partyRole: 'ZAMAWIAJĄCY', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }] })
       result.push({ partyIndex: 1, partyName: 'Strona 2', partyRole: 'WYKONAWCA', signers: [{ name: '', email: '', phone: '', position: '', signing_method: 'email' as SigningMethod }] })
     }
     

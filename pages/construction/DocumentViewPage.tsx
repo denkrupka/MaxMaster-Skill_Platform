@@ -28,6 +28,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import FontFamily from '@tiptap/extension-font-family'
 import { supabase } from '../../lib/supabase'
 import jsPDF from 'jspdf'
+import HTMLtoDOCX from 'html-to-docx'
 import html2canvas from 'html2canvas'
 import VariablesPanel from '../../components/documents/VariablesPanel'
 import ProposalsPanel from '../../components/documents/ProposalsPanel'
@@ -63,7 +64,7 @@ const DocumentViewPage: React.FC = () => {
   const [aiPrompt, setAiPrompt] = useState('')
   const [showParties, setShowParties] = useState(false)
   const [showVariables, setShowVariables] = useState(false)
-  const [parties, setParties] = useState<{party1: any, party2: any}>({ party1: {}, party2: {} })
+  const [parties, setParties] = useState<any[]>([{}, {}])
   const [showVersions, setShowVersions] = useState(false)
   const [showProposals, setShowProposals] = useState(false)
   const [variablesVersion, setVariablesVersion] = useState(0)
@@ -112,10 +113,22 @@ const DocumentViewPage: React.FC = () => {
   }, [id])
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, FontSize, Color, Highlight.configure({ multicolor: true }), TextAlign.configure({ types: ['heading', 'paragraph'] }), FontFamily.configure({ types: ['textStyle'] })],
+    extensions: [StarterKit.configure({ hardBreak: { keepMarks: true } }), Underline, FontSize, Color, Highlight.configure({ multicolor: true }), TextAlign.configure({ types: ['heading', 'paragraph'] }), FontFamily.configure({ types: ['textStyle'] })],
     content: '',
     editable: mode === 'edit',
-    editorProps: { attributes: { class: 'prose prose-lg max-w-none focus:outline-none p-8 min-h-[500px]' } },
+    editorProps: {
+      attributes: { class: 'prose prose-lg max-w-none focus:outline-none p-8 min-h-[500px]' },
+      transformPastedHTML(html: string) {
+        return html
+          .replace(/<!--\[if.*?\]>.*?<!\[endif\]-->/gis, '')
+          .replace(/<o:p[^>]*>.*?<\/o:p>/gis, '')
+          .replace(/class="[^"]*Mso[^"]*"/gi, '')
+          .replace(/style="[^"]*mso-[^"]*"/gi, (match) => {
+            const styles = match.replace(/mso-[^;";]+;?/g, '');
+            return styles === 'style=""' ? '' : styles;
+          });
+      },
+    },
   })
 
   // Replace {{variable}} with stored values for preview, or highlight unfilled
@@ -226,7 +239,21 @@ const DocumentViewPage: React.FC = () => {
       if (error) { setLoadError(error.message); setLoading(false); return }
       if (!data) { setLoadError('Dokument nie został znaleziony'); setLoading(false); return }
       setDoc(data)
-      if (data?.parties) setParties(data.parties)
+      if (data?.parties) {
+        // Support both old {party1, party2} format and new array format
+        if (Array.isArray(data.parties)) {
+          setParties(data.parties)
+        } else {
+          const arr: any[] = []
+          if (data.parties.party1) arr.push(data.parties.party1)
+          else arr.push({})
+          if (data.parties.party2) arr.push(data.parties.party2)
+          else arr.push({})
+          // Include any additional parties (party3, party4, etc.)
+          Object.keys(data.parties).filter(k => k !== 'party1' && k !== 'party2' && k.startsWith('party')).sort().forEach(k => arr.push(data.parties[k]))
+          setParties(arr)
+        }
+      }
       let raw = ''
       // Content priority: 1) JSONB data.data.content  2) TEXT content column  3) template (from join)  4) template (separate fetch)
       const jsonbContent = data.data?.content
@@ -256,8 +283,9 @@ const DocumentViewPage: React.FC = () => {
     setLoading(false)
   }
 
-  const saveParties = async (newParties?: typeof parties) => {
+  const saveParties = async (newParties?: any[]) => {
     const toSave = newParties || parties
+    // Save as array format
     await supabase.from('documents').update({ parties: toSave }).eq('id', id!)
   }
 
@@ -325,10 +353,22 @@ const DocumentViewPage: React.FC = () => {
     style.id = 'print-dms-style'
     style.innerHTML = `
       @media print {
+        @page { size: A4; margin: 2cm 2.5cm; }
         body > * { display: none !important; }
-        #dms-print-area { display: block !important; }
-        #dms-print-area { position: fixed; top: 0; left: 0; width: 100%; }
-        .no-print { display: none !important; }
+        #dms-print-area { display: block !important; position: static !important; width: 100% !important; }
+        .no-print, .toolbar, nav, header, .sidebar { display: none !important; }
+        #dms-print-area p,
+        #dms-print-area li,
+        #dms-print-area h1,
+        #dms-print-area h2,
+        #dms-print-area h3 {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        #dms-print-area .document-content {
+          width: 100%;
+          max-width: none;
+        }
       }
     `
     document.head.appendChild(style)
@@ -337,7 +377,7 @@ const DocumentViewPage: React.FC = () => {
     printArea.id = 'dms-print-area'
     printArea.style.display = 'none'
     printArea.innerHTML = `
-      <div style="font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto;">
+      <div class="document-content" style="font-family: Arial, sans-serif; padding: 0; max-width: 100%; margin: 0 auto;">
         <h1 style="font-size: 20px; margin-bottom: 8px;">${doc?.name || 'Dokument'}</h1>
         <p style="color: #6b7280; font-size: 12px; margin-bottom: 24px;">Data: ${new Date(doc?.created_at || '').toLocaleDateString('pl-PL')} | Autor: ${doc?.author_name || ''}</p>
         <hr style="margin-bottom: 24px;" />
@@ -440,37 +480,12 @@ const DocumentViewPage: React.FC = () => {
     }
   }
 
-  const handleDownloadDOC = () => {
+  const handleDownloadDOC = async () => {
     if (!doc) return
     const content = editor?.getHTML() || doc?.content || ''
-    const title = doc?.title || 'dokument'
-    
-    // Word MHTML format — зберігає HTML форматування у .doc файлі
-    const BOM = '\uFEFF'
-    const mhtmlDoc = `MIME-Version: 1.0
-Content-Type: multipart/related; boundary="----=_NextPart_001"
+    const title = doc?.title || doc?.name || 'dokument'
 
-------=_NextPart_001
-Content-Type: text/html; charset="utf-8"
-Content-Transfer-Encoding: quoted-printable
-
-<!DOCTYPE html>
-<html xmlns:o=3D"urn:schemas-microsoft-com:office:office"
-  xmlns:w=3D"urn:schemas-microsoft-com:office:word"
-  xmlns=3D"http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset=3D"UTF-8">
-<!--[if gte mso 9]>
-<xml>
-<w:WordDocument>
-<w:View>Print</w:View>
-<w:Zoom>100</w:Zoom>
-<w:DoNotOptimizeForBrowser/>
-</w:WordDocument>
-</xml>
-<![endif]-->
-<style>
-@page { size: A4; margin: 2.5cm 2cm; }
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.6; color: #000; }
 h1 { font-size: 16pt; font-weight: bold; margin: 0 0 12pt; }
 h2 { font-size: 14pt; font-weight: bold; margin: 10pt 0 6pt; }
@@ -484,21 +499,36 @@ th { background: #f0f0f0; font-weight: bold; }
 strong, b { font-weight: bold; }
 em, i { font-style: italic; }
 u { text-decoration: underline; }
-</style>
-</head>
-<body>
-${content}
-</body>
-</html>
-------=_NextPart_001--`
-    
-    const blob = new Blob([BOM + mhtmlDoc], { type: 'application/msword;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = Object.assign(document.createElement('a'), { href: url, download: title + '.doc' })
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+</style></head><body>${content}</body></html>`
+
+    try {
+      const buffer = await HTMLtoDOCX(htmlContent, null, {
+        table: { row: { cantSplit: true } },
+        footer: true,
+        pageNumber: true,
+      })
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      })
+      const url = URL.createObjectURL(blob)
+      const a = Object.assign(document.createElement('a'), { href: url, download: title + '.docx' })
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('DOCX generation error:', err)
+      // Fallback to MHTML .doc
+      const BOM = '\uFEFF'
+      const mhtmlDoc = `MIME-Version: 1.0\nContent-Type: multipart/related; boundary="----=_NextPart_001"\n\n------=_NextPart_001\nContent-Type: text/html; charset="utf-8"\nContent-Transfer-Encoding: quoted-printable\n\n${htmlContent}\n------=_NextPart_001--`
+      const blob = new Blob([BOM + mhtmlDoc], { type: 'application/msword;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = Object.assign(document.createElement('a'), { href: url, download: title + '.doc' })
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
   }
 
   const handleGenerujAI = async () => {
@@ -709,9 +739,9 @@ ${content}
               {/* Paragraph */}
               <button
                 onPointerDown={e => e.preventDefault()} onTouchStart={e => e.preventDefault()}
-                onClick={() => editor.chain().focus().insertContent('§ ').run()}
+                onClick={() => editor.chain().focus().insertContent('¶ ').run()}
                 className={`px-2 py-1 rounded text-xs font-medium transition-colors ${false ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-                title="Wstaw § (paragraf)"
+                title="Wstaw ¶ (pilcrow)"
               >
                 ¶
               </button>
@@ -832,8 +862,17 @@ ${content}
                 <button onClick={() => setShowParties(false)} className="text-xs text-gray-400">×</button>
               </div>
               <div className="p-4 max-h-[70vh] overflow-y-auto space-y-4">
-                <DocumentParty label="Strona 1 (Zamawiający)" value={parties.party1} onChange={v => setParties(p => ({...p, party1: v}))} onSave={() => saveParties({...parties, party1: parties.party1})} />
-                <DocumentParty label="Strona 2 (Wykonawca)" value={parties.party2} onChange={v => setParties(p => ({...p, party2: v}))} onSave={() => saveParties({...parties, party2: parties.party2})} />
+                {parties.map((party, idx) => (
+                  <div key={idx} className="relative">
+                    {parties.length > 1 && (
+                      <button onClick={() => { const next = parties.filter((_, i) => i !== idx); setParties(next); saveParties(next) }} className="absolute -top-1 -right-1 w-5 h-5 bg-red-100 text-red-500 rounded-full text-xs flex items-center justify-center hover:bg-red-200 z-10" title="Usuń stronę">×</button>
+                    )}
+                    <DocumentParty label={`Strona ${idx + 1}`} value={party} onChange={v => setParties(p => p.map((x, i) => i === idx ? v : x))} onSave={() => saveParties()} />
+                  </div>
+                ))}
+                <button onClick={() => setParties(p => [...p, {}])} className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors">
+                  + Dodaj stronę
+                </button>
               </div>
             </div>
           </div>

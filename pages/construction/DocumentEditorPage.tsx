@@ -44,7 +44,7 @@ const DocumentEditorPage: React.FC = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ hardBreak: { keepMarks: true } }),
       Underline,
       TextStyle,
       Color,
@@ -57,6 +57,16 @@ const DocumentEditorPage: React.FC = () => {
       attributes: {
         class: 'prose prose-lg max-w-none focus:outline-none min-h-[600px] p-8',
         style: 'font-size: 16px; line-height: 1.7;',
+      },
+      transformPastedHTML(html: string) {
+        return html
+          .replace(/<!--\[if.*?\]>.*?<!\[endif\]-->/gis, '')
+          .replace(/<o:p[^>]*>.*?<\/o:p>/gis, '')
+          .replace(/class="[^"]*Mso[^"]*"/gi, '')
+          .replace(/style="[^"]*mso-[^"]*"/gi, (match) => {
+            const styles = match.replace(/mso-[^;";]+;?/g, '');
+            return styles === 'style=""' ? '' : styles;
+          });
       },
     },
   })

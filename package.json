@@ -26,6 +26,7 @@
     "cheerio": "^1.2.0",
     "dxf-parser": "^1.1.2",
     "exceljs": "^4.4.0",
+    "html-to-docx": "^1.8.0",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.555.0",

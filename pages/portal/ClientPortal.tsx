@@ -17,8 +17,47 @@ const ClientPortal: React.FC = () => {
     try {
       const { data, error: rpcError } = await supabase.rpc('get_portal_data', { portal_token: token })
 
-      if (rpcError || !data || data.error) {
-        console.error('Portal RPC error:', rpcError || data?.error)
+      if (rpcError) {
+        console.error('Portal RPC error:', rpcError)
+        // If RPC fails, try direct token lookup as fallback
+        const { data: tokenData, error: tokenErr } = await supabase
+          .from('client_portal_tokens')
+          .select('*, projects(*), companies(*)')
+          .eq('token', token)
+          .eq('active', true)
+          .single()
+
+        if (tokenErr || !tokenData) {
+          console.error('Direct token lookup also failed:', tokenErr)
+          setError('Link jest nieważny lub wygasł')
+          setLoading(false)
+          return
+        }
+
+        // Check expiration
+        if (tokenData.expires_at && new Date(tokenData.expires_at) < new Date()) {
+          setError('Link jest nieważny lub wygasł')
+          setLoading(false)
+          return
+        }
+
+        setProject(tokenData.projects)
+        setCompany(tokenData.companies)
+        // Load documents for the project
+        if (tokenData.project_id) {
+          const { data: docs } = await supabase
+            .from('documents')
+            .select('id, name, status, created_at')
+            .eq('project_id', tokenData.project_id)
+            .in('status', ['sent', 'client_signed', 'completed'])
+          setDocuments(docs || [])
+        }
+        setLoading(false)
+        return
+      }
+
+      if (!data || data.error) {
+        console.error('Portal data error:', data?.error)
         setError('Link jest nieważny lub wygasł')
         setLoading(false)
         return
