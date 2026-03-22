@@ -130,8 +130,7 @@ serve(async (req) => {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${cpaToken}`,
-          "Content-Type": "text/xml; charset=UTF-8",
-          "SOAPAction": "addDocumentToSigning",
+          "Content-Type": "application/xml",
         },
         body: soapBody,
       });
