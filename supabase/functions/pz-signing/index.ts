@@ -11,8 +11,7 @@ const PZ_CLIENT_SECRET = Deno.env.get("PZ_CLIENT_SECRET") || "xXJSvgIhUp9XpwsfBz
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "https://diytvuczpciikzdhldny.supabase.co";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CPA_SOAP_URL = "https://api-cpa.gov.pl/mc-profil-zaufany/1.0/TpSigning/addDocumentToSigning";
-const CPA_GET_SIGNED_URL = "https://api-cpa.gov.pl/mc-profil-zaufany/1.0/TpSigning/getSignedDocument";
-const CALLBACK_URL = `${SUPABASE_URL}/functions/v1/pz-callback`;
+const CALLBACK_BASE = `${SUPABASE_URL}/functions/v1/pz-callback`;
 
 async function getCpaToken(): Promise<string> {
   const credentials = btoa(`${PZ_CLIENT_ID}:${PZ_CLIENT_SECRET}`);
@@ -32,40 +31,30 @@ async function getCpaToken(): Promise<string> {
   return data.access_token;
 }
 
-function buildAddDocumentSoap(params: {
-  documentTitle: string;
-  documentContent: string; // base64 encoded
-  callbackUrl: string;
-  signingId: string;
+function buildSoap(params: {
+  docBase64: string;
+  successUrl: string;
+  failureUrl: string;
+  description: string;
 }): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:tps="http://www.obywatel.gov.pl/ws/tpsigning">
+<soapenv:Envelope
+  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+  xmlns:sig="http://signing.ws.comarch.gov">
+  <soapenv:Header/>
   <soapenv:Body>
-    <tps:addDocumentToSigning>
-      <tps:systemId>MAXMASTER</tps:systemId>
-      <tps:documentTitle>${params.documentTitle}</tps:documentTitle>
-      <tps:documentContent>${params.documentContent}</tps:documentContent>
-      <tps:callbackUrl>${params.callbackUrl}?state=${params.signingId}</tps:callbackUrl>
-    </tps:addDocumentToSigning>
-  </soapenv:Body>
-</soapenv:Envelope>`;
-}
-
-function buildGetSignedDocumentSoap(signingId: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:tps="http://www.obywatel.gov.pl/ws/tpsigning">
-  <soapenv:Body>
-    <tps:getSignedDocument>
-      <tps:signingId>${signingId}</tps:signingId>
-    </tps:getSignedDocument>
+    <sig:addDocumentToSigning>
+      <doc>${params.docBase64}</doc>
+      <successURL>${params.successUrl}</successURL>
+      <failureURL>${params.failureUrl}</failureURL>
+      <additionalInfo>${params.description}</additionalInfo>
+    </sig:addDocumentToSigning>
   </soapenv:Body>
 </soapenv:Envelope>`;
 }
 
 function extractXmlValue(xml: string, tag: string): string | null {
-  const regex = new RegExp(`<(?:[^:]+:)?${tag}[^>]*>([\\s\\S]*?)<\/(?:[^:]+:)?${tag}>`, 'i');
+  const regex = new RegExp(`<(?:[^:>]+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:[^:>]+:)?${tag}>`, 'i');
   const match = xml.match(regex);
   return match ? match[1].trim() : null;
 }
@@ -75,13 +64,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, token, documentId, signingId } = body;
+    const { action, token } = body;
 
     if (action === "init") {
-      // Step 1: Get document content
       const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-      
-      // Get token row to find document
+
+      // Get token → request → document
       const { data: tokenRow } = await supabase
         .from("signature_tokens")
         .select("id, request_id")
@@ -96,48 +84,48 @@ serve(async (req) => {
 
       const { data: sigRequest } = await supabase
         .from("signature_requests")
-        .select("document_id, company_id")
+        .select("document_id")
         .eq("id", tokenRow.request_id)
         .single();
 
       const { data: doc } = await supabase
         .from("documents")
-        .select("name, content, type")
+        .select("name, content")
         .eq("id", sigRequest?.document_id)
         .single();
 
-      // Build document content — use text content encoded as base64
+      // Build document text
       let docText = doc?.name || "Dokument";
-      if (doc?.content) {
-        if (typeof doc.content === "string") {
-          docText = doc.content;
-        } else if (doc.content?.sections) {
-          // TipTap sections format
-          docText = doc.content.sections
+      const content = doc?.content;
+      if (content) {
+        if (typeof content === "string") {
+          docText = content;
+        } else if (content.sections) {
+          docText = content.sections
             .map((s: { title?: string; content?: string }) => `${s.title || ""}\n${s.content || ""}`)
             .join("\n\n");
         } else {
-          docText = JSON.stringify(doc.content);
+          docText = JSON.stringify(content);
         }
       }
 
-      // base64 encode the document
       const docBase64 = btoa(unescape(encodeURIComponent(docText)));
-      const docTitle = doc?.name || "Dokument MaxMaster";
+      const successUrl = `${CALLBACK_BASE}?state=${encodeURIComponent(token)}&result=success`;
+      const failureUrl = `${CALLBACK_BASE}?state=${encodeURIComponent(token)}&result=failure`;
 
-      // Step 2: Get CPA Bearer token
+      // Get CPA token
       const cpaToken = await getCpaToken();
-      console.log("Got CPA token:", cpaToken.substring(0, 20) + "...");
+      console.log("[pz-signing] Got CPA token");
 
-      // Step 3: Call SOAP addDocumentToSigning
-      const soapBody = buildAddDocumentSoap({
-        documentTitle: docTitle,
-        documentContent: docBase64,
-        callbackUrl: CALLBACK_URL,
-        signingId: token, // Use our signature token as state
+      // Build and send SOAP
+      const soapBody = buildSoap({
+        docBase64,
+        successUrl,
+        failureUrl,
+        description: doc?.name || "Dokument MaxMaster do podpisania",
       });
 
-      console.log("Calling CPA SOAP:", CPA_SOAP_URL);
+      console.log("[pz-signing] Calling CPA SOAP addDocumentToSigning");
       const soapResp = await fetch(CPA_SOAP_URL, {
         method: "POST",
         headers: {
@@ -148,71 +136,46 @@ serve(async (req) => {
         body: soapBody,
       });
 
-      const soapRespText = await soapResp.text();
-      console.log("SOAP response status:", soapResp.status);
-      console.log("SOAP response (first 500):", soapRespText.substring(0, 500));
+      const soapText = await soapResp.text();
+      console.log("[pz-signing] CPA response status:", soapResp.status);
+      console.log("[pz-signing] CPA response:", soapText.substring(0, 800));
 
       if (!soapResp.ok) {
-        return new Response(JSON.stringify({ 
-          error: "CPA SOAP error", 
+        return new Response(JSON.stringify({
+          error: "CPA SOAP error",
           status: soapResp.status,
-          details: soapRespText.substring(0, 500) 
+          details: soapText.substring(0, 800),
         }), {
           status: 500, headers: { ...cors, "Content-Type": "application/json" },
         });
       }
 
-      // Extract signing URL from SOAP response
-      const signingUrl = extractXmlValue(soapRespText, "addDocumentToSigningReturn") ||
-                         extractXmlValue(soapRespText, "return") ||
-                         extractXmlValue(soapRespText, "signingUrl");
+      // Extract signing URL — field name from response may vary
+      const signingUrl =
+        extractXmlValue(soapText, "addDocumentToSigningReturn") ||
+        extractXmlValue(soapText, "return") ||
+        extractXmlValue(soapText, "signingUrl") ||
+        extractXmlValue(soapText, "url");
 
       if (!signingUrl) {
-        console.error("No signing URL in response:", soapRespText);
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           error: "No signing URL in SOAP response",
-          soapResponse: soapRespText.substring(0, 1000)
+          soapResponse: soapText.substring(0, 1000),
         }), {
           status: 500, headers: { ...cors, "Content-Type": "application/json" },
         });
       }
 
-      // Step 4: Store signing info in token metadata
+      // Store in token metadata
       await supabase.from("signature_tokens").update({
-        metadata: { 
+        metadata: {
           pz_initiated_at: new Date().toISOString(),
           pz_signing_url: signingUrl,
-          signing_method: "pz"
-        }
+          signing_method: "pz",
+        },
       }).eq("id", tokenRow.id);
 
       return new Response(JSON.stringify({ success: true, signingUrl }), {
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
-    }
-
-    if (action === "get_signed") {
-      // Called after callback to retrieve the signed document
-      const cpaToken = await getCpaToken();
-      const soapBody = buildGetSignedDocumentSoap(signingId || token);
-      
-      const soapResp = await fetch(CPA_GET_SIGNED_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${cpaToken}`,
-          "Content-Type": "text/xml; charset=UTF-8",
-          "SOAPAction": "getSignedDocument",
-        },
-        body: soapBody,
-      });
-
-      const soapRespText = await soapResp.text();
-      console.log("getSignedDocument response:", soapRespText.substring(0, 500));
-
-      return new Response(JSON.stringify({ 
-        success: soapResp.ok, 
-        response: soapRespText.substring(0, 2000) 
-      }), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
     }
@@ -222,7 +185,7 @@ serve(async (req) => {
     });
 
   } catch (e) {
-    console.error("pz-signing error:", e);
+    console.error("[pz-signing] Error:", e);
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 500, headers: { ...cors, "Content-Type": "application/json" },
     });
