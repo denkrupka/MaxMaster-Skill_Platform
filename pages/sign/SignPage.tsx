@@ -32,8 +32,8 @@ const SignPage: React.FC = () => {
   const [signatureName, setSignatureName] = useState('')
   const [renderedContent, setRenderedContent] = useState<string>('')
   const [companyBranding, setCompanyBranding] = useState<{ name?: string; logo_url?: string; color?: string } | null>(null)
-  const [signingMethod, setSigningMethod] = useState<'type' | 'draw' | 'upload' | 'pz'>('type')
-  const [allowedMethods, setAllowedMethods] = useState<('type' | 'draw' | 'upload' | 'pz')[]>(['type', 'draw', 'upload', 'pz'])
+  const [signingMethod, setSigningMethod] = useState<'type' | 'draw' | 'upload' | 'pz' | 'sms'>('type')
+  const [allowedMethods, setAllowedMethods] = useState<('type' | 'draw' | 'upload' | 'pz' | 'sms')[]>(['type', 'draw', 'upload', 'pz'])
   const [pzLoading, setPzLoading] = useState(false)
   const [pzError, setPzError] = useState('')
   const [drawSignatureData, setDrawSignatureData] = useState('')
@@ -180,16 +180,17 @@ const SignPage: React.FC = () => {
       const methods = sigMethod ? sigMethod.split(',').map((m: string) => m.trim()) : []
 
       // Map DB method names to SignPage tab keys
-      const mapMethodToTabs = (m: string): ('type' | 'draw' | 'upload' | 'pz')[] => {
+      const mapMethodToTabs = (m: string): ('type' | 'draw' | 'upload' | 'pz' | 'sms')[] => {
         if (m === 'zaufany' || m === 'pz') return ['pz']
         if (m === 'kaligraficzny') return ['draw']
-        if (m === 'email' || m === 'sms') return ['type', 'draw', 'upload']
+        if (m === 'sms') return ['sms']
+        if (m === 'email') return ['type', 'draw', 'upload']
         return ['type', 'draw', 'upload', 'pz'] // unknown → show all
       }
 
       if (methods.length > 0) {
         // Merge all allowed tabs from all selected methods, deduplicated
-        const allTabs = [...new Set(methods.flatMap(mapMethodToTabs))] as ('type' | 'draw' | 'upload' | 'pz')[]
+        const allTabs = [...new Set(methods.flatMap(mapMethodToTabs))] as ('type' | 'draw' | 'upload' | 'pz' | 'sms')[]
         setAllowedMethods(allTabs)
         setSigningMethod(allTabs[0]) // auto-select first allowed tab
       } else {
@@ -202,6 +203,9 @@ const SignPage: React.FC = () => {
       const signerPhone = data.request?.signer_phone || data.request?.signers?.[0]?.phone
       if (signerPhone) {
         setPhone(signerPhone)
+        setStep('phone')
+      } else if (methods.includes('sms')) {
+        // SMS method always requires phone verification
         setStep('phone')
       } else {
         setStep('document')
@@ -277,6 +281,7 @@ const SignPage: React.FC = () => {
 
   const handleSign = async () => {
     if (signingMethod === 'type' && !signatureName.trim()) { setError('Wpisz imię i nazwisko'); return }
+    // sms: no extra validation needed — OTP already verified
     if (signingMethod === 'draw' && !drawSignatureData) { setError('Narysuj podpis na polu poniżej'); return }
     if (signingMethod === 'upload' && !uploadSignatureData) { setError('Wgraj plik z podpisem'); return }
     setLoading(true); setError('')
@@ -285,13 +290,17 @@ const SignPage: React.FC = () => {
         ? { type: 'draw' as const, dataUrl: drawSignatureData }
         : signingMethod === 'upload'
           ? { type: 'upload' as const, dataUrl: uploadSignatureData }
-          : { type: 'text' as const, value: signatureName }
+          : signingMethod === 'sms'
+            ? { type: 'sms' as const, phone }
+            : { type: 'text' as const, value: signatureName }
       // Resolve actual signing method name for certificate
       const resolvedMethod = signingMethod === 'draw' || signingMethod === 'upload'
         ? 'kaligraficzny'
         : signingMethod === 'pz'
           ? 'pz'
-          : (signData?.request?.signature_method === 'sms' ? 'sms' : 'email')
+          : signingMethod === 'sms'
+            ? 'sms'
+            : (signData?.request?.signature_method === 'sms' ? 'sms' : 'email')
       const res = await efPost('process-signature', { token: token!, signed: true, phone, name: signatureName, signature, signing_method: resolvedMethod })
       if (res.success || res.ok || !res.error) {
         setStep('signed')
@@ -778,7 +787,8 @@ const SignPage: React.FC = () => {
                 { key: 'draw' as const, label: 'Narysuj' },
                 { key: 'upload' as const, label: 'Wgraj' },
                 { key: 'pz' as const, label: 'Profil Zaufany' },
-              ]).filter(m => allowedMethods.includes(m.key)).map(m => (
+                { key: 'sms' as const, label: 'SMS' },
+              ] as const).filter(m => (allowedMethods as string[]).includes(m.key)).map(m => (
                 <button
                   key={m.key}
                   onClick={() => { setSigningMethod(m.key); setError(''); setPzError('') }}
@@ -878,6 +888,26 @@ const SignPage: React.FC = () => {
                       </>
                     )}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* SMS: confirmation after OTP */}
+            {signingMethod === 'sms' && (
+              <div className="mb-3">
+                <div className="border border-green-100 bg-green-50 rounded-xl p-5 text-center space-y-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-green-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 8.25h3m-3 3.75h3m-6 3.75H9m1.5-12H9" />
+                    </svg>
+                    <span className="font-semibold text-green-800 text-sm">Podpis SMS</span>
+                  </div>
+                  <p className="text-sm text-green-700">
+                    Twoja tożsamość została zweryfikowana kodem SMS na numer <strong>{phone}</strong>.
+                  </p>
+                  <p className="text-xs text-green-600">
+                    Kliknij "Podpisz dokument", aby potwierdzić podpisanie elektroniczne.
+                  </p>
                 </div>
               </div>
             )}
