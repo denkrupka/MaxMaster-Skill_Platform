@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -103,22 +104,63 @@ serve(async (req) => {
         .eq("id", sigRequest?.document_id)
         .single();
 
-      // Build document text
+      // Extract plain text from document content
       let docText = doc?.name || "Dokument";
       const content = doc?.content;
       if (content) {
         if (typeof content === "string") {
-          docText = content;
+          try {
+            const parsed = JSON.parse(content);
+            if (parsed?.sections) {
+              docText = parsed.sections.map((s: any) => `${s.title || ""}\n${s.content || ""}`).join("\n\n");
+            } else {
+              docText = content;
+            }
+          } catch { docText = content; }
         } else if (content.sections) {
-          docText = content.sections
-            .map((s: { title?: string; content?: string }) => `${s.title || ""}\n${s.content || ""}`)
-            .join("\n\n");
-        } else {
-          docText = JSON.stringify(content);
+          docText = content.sections.map((s: any) => `${s.title || ""}\n${s.content || ""}`).join("\n\n");
         }
       }
 
-      const docBase64 = btoa(unescape(encodeURIComponent(docText)));
+      // Generate PDF with pdf-lib
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const page = pdfDoc.addPage([595, 842]); // A4
+      const { height } = page.getSize();
+
+      // Draw title
+      page.drawText(doc?.name || "Dokument", {
+        x: 50, y: height - 60, size: 16, font, color: rgb(0, 0, 0),
+      });
+
+      // Draw content (word-wrap at ~90 chars, handle newlines)
+      const lines: string[] = [];
+      for (const paragraph of docText.split('\n')) {
+        const words = paragraph.split(' ');
+        let line = '';
+        for (const word of words) {
+          if ((line + ' ' + word).trim().length > 90) {
+            if (line) lines.push(line);
+            line = word;
+          } else {
+            line = line ? line + ' ' + word : word;
+          }
+        }
+        if (line) lines.push(line);
+        lines.push(''); // paragraph break
+      }
+
+      let y = height - 100;
+      for (const line of lines.slice(0, 60)) {
+        if (y < 50) break;
+        if (line) {
+          page.drawText(line, { x: 50, y, size: 10, font, color: rgb(0, 0, 0) });
+        }
+        y -= 15;
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const docBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
       const successUrl = `${CALLBACK_BASE}?state=${encodeURIComponent(token)}&result=success`;
       const failureUrl = `${CALLBACK_BASE}?state=${encodeURIComponent(token)}&result=failure`;
 
