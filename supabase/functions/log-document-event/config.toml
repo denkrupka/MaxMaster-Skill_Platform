@@ -1,0 +1,2 @@
+[functions.log-document-event]
+verify_jwt = false

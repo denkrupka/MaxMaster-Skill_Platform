@@ -34,7 +34,8 @@ serve(async (req) => {
     }
 
     // eIDAS compliance: IP, UserAgent, content hash
-    const ip_address = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
+    const rawIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
+    const ip_address = rawIp.split(',')[0].trim()
     const user_agent = (req.headers.get('user-agent') || 'unknown').slice(0, 200)
 
     let document_hash: string | null = null
