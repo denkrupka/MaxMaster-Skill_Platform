@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FileText, Plus, Search, Eye, Download, Pencil, Trash2, Archive,
   ChevronLeft, ChevronRight, Check, X, Loader2,
@@ -1080,6 +1081,7 @@ function DocumentDetailsPanel({ doc, companyId, userId, onClose, onToast }: {
 
 export const DMSPage: React.FC = () => {
   const { state } = useAppContext();
+  const navigate = useNavigate();
   const companyId = state.currentUser?.company_id ?? '';
   const userId = state.currentUser?.id ?? '';
 
@@ -1393,7 +1395,7 @@ export const DMSPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedDocuments.map(d => (
-                    <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedDoc(d)}>
+                    <tr key={d.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate(`/construction/dms/${d.id}`)}>
                       <td className="px-4 py-3">
                         <input type="checkbox" className="rounded border-slate-300"
                           checked={selectedIds.has(d.id)}
@@ -1416,7 +1418,7 @@ export const DMSPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell text-slate-400">{fmt(d.created_at)}</td>
                       <td className="px-4 py-3">
-                        <button onClick={() => setViewDocId(d.id)}
+                        <button onClick={(e) => { e.stopPropagation(); navigate(`/construction/dms/${d.id}`); }}
                           aria-label="Podgląd dokumentu" title="Podgląd dokumentu"
                           className="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
                           <Eye className="w-4 h-4" />

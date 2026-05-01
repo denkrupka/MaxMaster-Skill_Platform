@@ -4,12 +4,14 @@ import { corsHeaders } from '../_shared/cors.ts';
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
+const FORMAT_INSTRUCTION = '\n\nOdpowiedz po polsku. Formatuj odpowiedź czytelnie: używaj numeracji (1., 2.), myślników dla punktów, pogrubienia dla nagłówków sekcji. NIE używaj znaków markdown takich jak #, *, ```. Pisz czystym tekstem z numeracją i wcięciami.';
+
 const PROMPTS: Record<string, (content: string, template: string) => string> = {
-  review: (c, t) => `Przeanalizuj ten dokument typu "${t}" pod kątem kompletności, poprawności i potencjalnych problemów. Treść dokumentu:\n${c}\n\nOdpowiedz po polsku. Podaj: 1) Ogólna ocena (1-10), 2) Brakujące elementy, 3) Potencjalne problemy, 4) Rekomendacje.`,
-  risk: (c, t) => `Przeanalizuj ryzyka prawne i finansowe w tym dokumencie typu "${t}":\n${c}\n\nOdpowiedz po polsku. Podaj: 1) Ryzyka prawne, 2) Ryzyka finansowe, 3) Brakujące zabezpieczenia, 4) Rekomendacje zmian.`,
-  summary: (c, t) => `Napisz zwięzłe podsumowanie tego dokumentu typu "${t}":\n${c}\n\nOdpowiedz po polsku. Maksymalnie 5 zdań.`,
-  suggestion: (c, t) => `Zaproponuj ulepszenia tego dokumentu typu "${t}":\n${c}\n\nOdpowiedz po polsku. Podaj konkretne sugestie zmian tekstu.`,
-  clause_check: (c, t) => `Sprawdź klauzule tego dokumentu typu "${t}" pod kątem zgodności z polskim prawem budowlanym:\n${c}\n\nOdpowiedz po polsku. Podaj: 1) Klauzule OK, 2) Klauzule problematyczne, 3) Brakujące klauzule obowiązkowe.`,
+  review: (c, t) => `Przeanalizuj dokument typu "${t}" pod kątem kompletności, poprawności i potencjalnych problemów.\n\nTreść dokumentu:\n${c}${FORMAT_INSTRUCTION}\n\nPodaj:\n1) Ogólna ocena (1-10)\n2) Brakujące elementy\n3) Potencjalne problemy\n4) Rekomendacje`,
+  risk: (c, t) => `Przeanalizuj ryzyka prawne i finansowe w dokumencie typu "${t}":\n\n${c}${FORMAT_INSTRUCTION}\n\nPodaj:\n1) Ryzyka prawne\n2) Ryzyka finansowe\n3) Brakujące zabezpieczenia\n4) Rekomendacje zmian`,
+  summary: (c, t) => `Napisz zwięzłe podsumowanie dokumentu typu "${t}":\n\n${c}${FORMAT_INSTRUCTION}\n\nMaksymalnie 5 zdań.`,
+  suggestion: (c, t) => `Zaproponuj ulepszenia dokumentu typu "${t}":\n\n${c}${FORMAT_INSTRUCTION}\n\nPodaj konkretne sugestie zmian tekstu.`,
+  clause_check: (c, t) => `Sprawdź klauzule dokumentu typu "${t}" pod kątem zgodności z polskim prawem budowlanym:\n\n${c}${FORMAT_INSTRUCTION}\n\nPodaj:\n1) Klauzule OK\n2) Klauzule problematyczne\n3) Brakujące klauzule obowiązkowe`,
 };
 
 Deno.serve(async (req) => {
@@ -40,7 +42,7 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
+        generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
       })
     });
 
