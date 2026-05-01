@@ -134,8 +134,6 @@ const FormularyPage = React.lazy(() => import('./pages/construction/Formulary').
 const DictionariesPage = React.lazy(() => import('./pages/construction/Dictionaries').then(m => ({ default: m.DictionariesPage })));
 const PriceListsPage = React.lazy(() => import('./pages/construction/PriceLists').then(m => ({ default: m.PriceListsPage })));
 const KosztorysEditorPage = React.lazy(() => import('./pages/construction/KosztorysEditor').then(m => ({ default: m.KosztorysEditorPage })));
-const DocumentViewPage = React.lazy(() => import('./pages/construction/DocumentViewPage').then(m => ({ default: m.DocumentViewPage })));
-const DocumentEditorPage = React.lazy(() => import('./pages/construction/DocumentEditorPage').then(m => ({ default: m.DocumentEditorPage })));
 
 // Lazy-loaded heavy pages from other modules
 const SalesCompanies = React.lazy(() => import('./pages/sales/Companies').then(m => ({ default: m.SalesCompanies })));
@@ -470,8 +468,6 @@ export default function App() {
           <Route path="/construction/offers" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="offers"><OffersPage /></ProtectedRoute>} />
           <Route path="/construction/drawings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="drawings"><DrawingsPage /></ProtectedRoute>} />
           <Route path="/construction/dms" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><DMSPage /></ProtectedRoute>} />
-          <Route path="/construction/dms/:id" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<LazyFallback />}><DocumentViewPage /></React.Suspense></ProtectedRoute>} />
-          <Route path="/construction/dms/:id/edit" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><React.Suspense fallback={<LazyFallback />}><DocumentEditorPage /></React.Suspense></ProtectedRoute>} />
           <Route path="/construction/gantt" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="gantt"><GanttPage /></ProtectedRoute>} />
           <Route path="/construction/finance" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="finance"><FinancePage /></ProtectedRoute>} />
           <Route path="/construction/procurement" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="procurement"><ProcurementPage /></ProtectedRoute>} />
